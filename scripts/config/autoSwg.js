@@ -92,6 +92,7 @@
             $('<hr></hr>').appendTo(results);
             self._elCurrentPct = $('<div></div>').appendTo(results);
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
+            self._elMaintenancePct = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elAvgConsumption = $('<div></div>').appendTo(results);
             self._elProjectedFc = $('<div></div>').appendTo(results);
             self._elRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
@@ -143,7 +144,8 @@
                 self._lastResult = result;
                 self._resultsPnl.show();
                 self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
-                self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '%');
+                self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
+                self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
                 self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
                 self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
                 self._elRationale.empty();
