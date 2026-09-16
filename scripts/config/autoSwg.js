@@ -98,7 +98,15 @@
             self._elRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             var resultsBtnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(results);
             self._btnApply = $('<div></div>').appendTo(resultsBtnPnl).actionButton({ text: 'Apply Recommended %', icon: '<i class="fas fa-check"></i>' });
-            self._btnApply.on('click', function (e) { self._confirmApply(); });
+            // Only enabled by a successful Check Now, and disabled again the
+            // moment the confirm dialog is answered either way -- applying
+            // always requires a fresh recommendation, matching the server's
+            // own "pending" requirement on PUT /state/autoSwg/apply.
+            self._btnApply[0].disabled(true);
+            self._btnApply.on('click', function (e) {
+                if (self._btnApply.hasClass('disabled')) return;
+                self._confirmApply();
+            });
         },
         _updateManualTimeFields: function (scheduleId) {
             var self = this;
@@ -140,8 +148,10 @@
         },
         _checkNow: function () {
             var self = this;
+            self._btnApply[0].disabled(true);
             $.postApiService('/state/autoSwg/recommend', {}, 'Checking PoolMath...', function (result) {
                 self._lastResult = result;
+                self._btnApply[0].disabled(false);
                 self._resultsPnl.show();
                 self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
                 self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
@@ -165,6 +175,7 @@
                     text: 'Yes', icon: '<i class="fas fa-check"></i>',
                     click: function () {
                         $.pic.modalDialog.closeDialog(this);
+                        self._btnApply[0].disabled(true);
                         $.putApiService('/state/autoSwg/apply', { poolSetpoint: pct }, 'Applying SWG %...', function (result) {
                             self._elCurrentPct.text('Current SWG %: ' + pct + '%');
                         });
@@ -172,7 +183,10 @@
                 },
                 {
                     text: 'No', icon: '<i class="far fa-window-close"></i>',
-                    click: function () { $.pic.modalDialog.closeDialog(this); }
+                    click: function () {
+                        $.pic.modalDialog.closeDialog(this);
+                        self._btnApply[0].disabled(true);
+                    }
                 }]
             });
         }
