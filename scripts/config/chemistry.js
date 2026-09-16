@@ -289,6 +289,10 @@
                 }
             });
 
+            // AutoSwg: companion panel that recommends (and, on confirmation, applies)
+            // a SWG% from PoolMath logs. Independent of the Chlorinator/ChemController/
+            // ChemDoser panels above -- it does not replace or disable any of them.
+            $('<div></div>').appendTo(el).pnlAutoSwgConfig({});
         }
     });
     $.widget('pic.pnlChemSetpoints', {
