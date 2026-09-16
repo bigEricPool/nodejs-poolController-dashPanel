@@ -415,6 +415,10 @@
                 console.log({ evt: 'chlorinator', data: data });
                 el.find('div.picChemistry').each(function () { this.setChlorinatorData(data); });
             });
+            o.socket.on('autoSwg', function (data) {
+                console.log({ evt: 'autoSwg', data: data });
+                el.find('div.picChemistry').each(function () { this.setAutoSwgData(data); });
+            });
             o.socket.on('body', function (data) {
                 $('div.picBody[data-id=' + data.id + ']').each(function () {
                     this.setEquipmentData(data);

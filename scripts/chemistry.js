@@ -9,6 +9,7 @@
             el[0].setChlorinatorData = function (data) { self.setChlorinatorData(data); };
             el[0].setChemControllerData = function (data) { self.setChemControllerData(data); };
             el[0].setChemDoserData = function (data) { self.setChemDoserData(data); };
+            el[0].setAutoSwgData = function (data) { self.setAutoSwgData(data); };
         },
         setChlorinatorData: function (data) {
             var self = this, o = self.options, el = self.element;
@@ -47,6 +48,7 @@
                 this.stopCountdownSuperChlor();
             });
             el.empty();
+            self._elAutoSwgSummary = undefined;
 
             let div = $('<div class="picCircuitTitle control-panel-title"></div>');
             div.appendTo(el);
@@ -76,7 +78,81 @@
                         $('<div></div>').appendTo(el).chemDoser(data.chemDosers[i]);
                     }
                 }
+                self._renderAutoSwgSummary(data.autoSwg);
             }
+        },
+        // Live updates arrive over the 'autoSwg' socket event (emitted whenever
+        // njsPC's AutoSwg state changes -- e.g. after Check Now or Apply on the
+        // config panel). A full page (re)load gets the last known values instead
+        // via _initChemistry's /state/all payload above.
+        setAutoSwgData: function (data) {
+            var self = this, o = self.options, el = self.element;
+            self._renderAutoSwgSummary(data);
+        },
+        // Small companion block: shows the same running-average FC-consumption
+        // line the AutoSwg config panel's "Check Now" result does, so the
+        // headline number is visible on the dashboard without opening config.
+        // Clicking it jumps to that panel. Only shown once a check has actually
+        // run (avgConsumptionSummary is unset until then) -- nothing to show
+        // for pools that haven't used the feature yet.
+        _renderAutoSwgSummary: function (data) {
+            var self = this, el = self.element;
+            if (!data || !data.avgConsumptionSummary) {
+                if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
+                return;
+            }
+            if (!self._elAutoSwgSummary || self._elAutoSwgSummary.closest('body').length === 0) {
+                self._elAutoSwgSummary = $('<div class="picAutoSwgSummary"></div>')
+                    .css({
+                        cursor: 'pointer', padding: '.4rem .6rem', margin: '.25rem 0',
+                        fontSize: '.85em', color: '#666'
+                    })
+                    .attr('title', 'Click to open the Automatic SWG % check')
+                    .on('click', function () { self._goToAutoSwgCheck(); })
+                    .appendTo(el);
+                $('<i class="fas fa-chevron-right"></i>').css({ marginRight: '.4rem' }).prependTo(self._elAutoSwgSummary);
+                self._elAutoSwgSummary.append($('<span></span>'));
+            }
+            self._elAutoSwgSummary.find('span:last').text(data.avgConsumptionSummary);
+            self._elAutoSwgSummary.show();
+        },
+        // Opens Settings (if not already open), switches to the Chemistry tab,
+        // and expands/scrolls to the AutoSwg panel's "Check Now" section. The
+        // config page loads its tabs asynchronously (from /config/all) and each
+        // tab's contents are built the first time it's selected, so this polls
+        // briefly for each step to appear rather than assuming exact timing.
+        _goToAutoSwgCheck: function () {
+            var deadline = Date.now() + 6000;
+            function poll(test, action) {
+                var found = test();
+                if (found && found.length) { action(found); return; }
+                if (Date.now() > deadline) return;
+                setTimeout(function () { poll(test, action); }, 150);
+            }
+            function selectChemistryTab() {
+                poll(
+                    function () { return $('div.configContainer div.picTabPanel'); },
+                    function (tabs) {
+                        poll(
+                            function () { var t = tabs.find('div.picTab[data-tabid=tabChemistry]'); return t.length ? tabs : null; },
+                            function (tabs) { tabs[0].selectTabById('tabChemistry'); scrollToAutoSwgPanel(); }
+                        );
+                    }
+                );
+            }
+            function scrollToAutoSwgPanel() {
+                poll(
+                    function () { return $('div.cfgAutoSwg div.picAccordian'); },
+                    function (acc) {
+                        if (typeof acc[0].expanded === 'function') acc[0].expanded(true);
+                        acc[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                );
+            }
+            if ($('div.dashOuter').attr('data-panel') !== 'configuration') {
+                $('div.picConfigIcon').trigger('click');
+            }
+            selectChemistryTab();
         }
     });
     $.widget('pic.chlorinator', {
