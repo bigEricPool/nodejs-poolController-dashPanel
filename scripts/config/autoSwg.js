@@ -43,6 +43,16 @@
             }).attr('title', 'Which chlorinator record the recommendation applies to.');
 
             line = $('<div></div>').appendTo(pnl);
+            self._schedPick = $('<div></div>').appendTo(line).pickList({
+                required: true, bindColumn: 0, displayColumn: 1, labelText: 'SWG Schedule', binding: 'scheduleId',
+                columns: [{ binding: 'val', hidden: true, text: 'Id' }, { binding: 'desc', text: 'SWG Schedule' }],
+                items: [], inputAttrs: { style: { width: '14rem' } }
+            }).attr('title', 'The pump is guaranteed to run at least as long as this schedule, so its start/end times are used as the SWG run window instead of the manual times below. Pick "Manual (use times below)" to type the run window in yourself.');
+            el.on('selchanged', 'div.picPickList[data-bind=scheduleId]', function (evt) {
+                self._updateManualTimeFields(evt.newItem && evt.newItem.val);
+            });
+
+            line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).inputField({ required: true, labelText: 'PoolMath Share Code', binding: 'shareCode', inputAttrs: { maxlength: 60, style: { width: '10rem' } } })
                 .attr('title', "e.g. 'tfp-452124', or a full share URL");
             $('<div></div>').appendTo(line).inputField({ labelText: 'Pool/Body Name', binding: 'poolName', inputAttrs: { maxlength: 40, style: { width: '8rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
@@ -54,8 +64,10 @@
                 .attr('title', "SWG's rated chlorine production at 100% duty cycle over the run window below.");
 
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Start', binding: 'swgStartTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } } }).attr('title', "e.g. '07:00' or '7am'");
-            $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Stop', binding: 'swgStopTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } }).attr('title', "e.g. '19:00' or '7pm'");
+            self._elSwgStartTime = $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Start', binding: 'swgStartTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } } })
+                .attr('title', "e.g. '07:00' or '7am'. Ignored while a SWG Schedule above is selected -- that schedule's own start time is used instead.");
+            self._elSwgStopTime = $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Stop', binding: 'swgStopTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', "e.g. '19:00' or '7pm'. Ignored while a SWG Schedule above is selected -- that schedule's own end time is used instead.");
             $('<div></div>').appendTo(line).inputField({ labelText: 'Time Zone', binding: 'timezone', inputAttrs: { maxlength: 40, style: { width: '9rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } }).attr('title', "IANA zone name, e.g. 'America/New_York'");
 
             line = $('<div></div>').appendTo(pnl);
@@ -87,13 +99,38 @@
             self._btnApply = $('<div></div>').appendTo(resultsBtnPnl).actionButton({ text: 'Apply Recommended %', icon: '<i class="fas fa-check"></i>' });
             self._btnApply.on('click', function (e) { self._confirmApply(); });
         },
+        _updateManualTimeFields: function (scheduleId) {
+            var self = this;
+            var usingSchedule = typeof scheduleId !== 'undefined' && scheduleId !== null && scheduleId >= 0;
+            [self._elSwgStartTime, self._elSwgStopTime].forEach(function (el) {
+                if (!el) return;
+                el.css('opacity', usingSchedule ? 0.5 : 1);
+                el.find('input').prop('disabled', usingSchedule);
+            });
+        },
         _loadData: function () {
             var self = this;
             $.getApiService('/config/options/chlorinators', null, function (opts) {
                 self._chlorinators = (opts && opts.chlorinators) || [];
                 var items = self._chlorinators.map(function (c) { return { val: c.id, name: c.name, desc: c.name + ' (#' + c.id + ')' }; });
                 self._chlorPick[0].items(items);
-                $.getApiService('/config/autoSwg', null, function (cfg) { self.dataBind(cfg); });
+                $.getApiService('/config/options/schedules', null, function (sopts) {
+                    var circuits = (sopts && sopts.circuits) || [];
+                    var schedules = (sopts && sopts.schedules) || [];
+                    var schedItems = [{ val: -1, name: 'Manual', desc: 'Manual (use times below)' }];
+                    schedules.forEach(function (s) {
+                        if (s.disabled) return;
+                        var circuit = circuits.find(function (c) { return c.id === s.circuit; }) || { name: 'Circuit ' + s.circuit };
+                        var span = (typeof s.startTime === 'number' ? s.startTime.formatTime('h:mmtt', '--:--') : '--:--') + '-' +
+                            (typeof s.endTime === 'number' ? s.endTime.formatTime('h:mmtt', '--:--') : '--:--');
+                        schedItems.push({ val: s.id, name: circuit.name, desc: circuit.name + ' ' + span + ' (#' + s.id + ')' });
+                    });
+                    self._schedPick[0].items(schedItems);
+                    $.getApiService('/config/autoSwg', null, function (cfg) {
+                        self.dataBind(cfg);
+                        self._updateManualTimeFields(cfg && cfg.scheduleId);
+                    });
+                });
             });
         },
         dataBind: function (obj) {
