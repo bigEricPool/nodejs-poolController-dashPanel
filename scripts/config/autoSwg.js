@@ -178,6 +178,7 @@
                         self._btnApply[0].disabled(true);
                         $.putApiService('/state/autoSwg/apply', { poolSetpoint: pct }, 'Applying SWG %...', function (result) {
                             self._elCurrentPct.text('Current SWG %: ' + pct + '%');
+                            self._remindPoolMathLog(pct);
                         });
                     }
                 },
@@ -188,6 +189,23 @@
                         self._btnApply[0].disabled(true);
                     }
                 }]
+            });
+        },
+        // The whole recommendation is built from PoolMath's own logged FC
+        // readings and SWG run/% entries -- if this change doesn't get logged
+        // there too, the next Check Now has an inaccurate history to work from
+        // (it will look like FC changed with no corresponding SWG entry to
+        // explain it). This is a one-button reminder, not a confirmation --
+        // the setpoint change has already been applied at this point either way.
+        _remindPoolMathLog: function (pct) {
+            $.pic.modalDialog.createConfirm('dlgAutoSwgLogPoolMathReminder', {
+                message: 'The SWG pool setpoint was changed to ' + pct + '%. Remember to log this change in PoolMath -- the recommendation is only as accurate as your PoolMath log, so a missed entry here will throw off future Check Now results.',
+                width: '420px',
+                height: 'auto',
+                title: 'Log This Change in PoolMath',
+                buttons: [
+                    { text: 'Got It', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                ]
             });
         }
     });
