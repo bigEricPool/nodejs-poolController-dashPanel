@@ -195,39 +195,58 @@
             if (details.avgWindowExtended) text += ' (extended back from ' + inputs.windowDays + ' days to include at least 3 FC readings)';
             return text;
         },
-        // Shows the local SWG % change log (applied recommendations and manual
-        // changes, newest first) and offers it for download as CSV or JSON.
+        // Human-readable source of a combined-history entry: PoolMath, or the local
+        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
+        _historySourceLabel: function (e) {
+            if (e.source === 'poolmath') return 'PoolMath';
+            if (e.source === 'local-manual') return 'Local - manual change';
+            var rec = e.record || {};
+            return typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct ? 'Local - applied (overridden)' : 'Local - applied recommendation';
+        },
+        // Shows the SWG % and FC history as a calculation sees it -- FC readings from
+        // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
+        // PoolMath SWG entry within an hour of a local one is left out) -- newest first,
+        // each labeled with its source, and offers it for download as CSV or JSON.
         _showHistory: function () {
             var self = this;
-            $.getApiService('/state/autoSwg/history', null, 'Loading SWG % history...', function (records) {
-                records = Array.isArray(records) ? records.slice() : [];
-                records.sort(function (a, b) { return new Date(b.appliedAt) - new Date(a.appliedAt); });
+            $.getApiService('/state/autoSwg/history/combined', null, 'Loading SWG % and FC history...', function (h) {
+                h = h || {};
+                var entries = Array.isArray(h.entries) ? h.entries.slice() : [];
+                entries.sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
                 var buttons = [];
-                if (records.length > 0) {
-                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(records, 'csv'); } });
-                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(records, 'json'); } });
+                if (entries.length > 0) {
+                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'csv'); } });
+                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'json'); } });
                 }
                 buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
                 var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgHistory', {
-                    width: '760px',
+                    width: '860px',
                     height: 'auto',
-                    title: 'SWG % Change History',
+                    title: 'SWG % and FC History',
                     buttons: buttons
                 });
-                var wrap = $('<div></div>').css({ maxHeight: '24rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
-                if (records.length === 0) {
+                var wrap = $('<div></div>').css({ maxHeight: '26rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                if (h.poolMathError) {
+                    $('<div></div>').css({ padding: '.25rem .25rem .5rem .25rem', color: '#b00' })
+                        .text('PoolMath could not be read (' + h.poolMathError + '), so only the local SWG % log is shown.')
+                        .appendTo(wrap);
+                }
+                if (entries.length === 0) {
                     $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
-                        .text('No SWG % changes have been logged yet. A change is logged when a recommendation is applied or when the SWG % is changed some other way.')
+                        .text('Nothing to show yet. SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way, and FC readings come from PoolMath.')
                         .appendTo(wrap);
                     return;
                 }
-                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' })
-                    .text(records.length + ' change' + (records.length === 1 ? '' : 's') + ', newest first. Times are shown in this browser\'s time zone; history is kept for 18 months.')
-                    .appendTo(wrap);
+                var swgCount = entries.filter(function (e) { return e.type === 'SWG'; }).length;
+                var note = entries.length + ' entries (' + swgCount + ' SWG %, ' + (entries.length - swgCount) + ' FC), newest first. Times are shown in this browser\'s time zone. '
+                    + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
+                    + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
+                    + '. Local history is kept for 18 months.';
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
-                    { text: 'Time', align: 'left' }, { text: 'Change', align: 'left' }, { text: 'SWG %', align: 'right' },
-                    { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'ppm/day', align: 'right' }
+                    { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
+                    { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }
                 ];
                 var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
                 cols.forEach(function (c) {
@@ -235,24 +254,30 @@
                 });
                 var body = $('<tbody></tbody>').appendTo(tbl);
                 var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
-                records.forEach(function (r) {
-                    var label = r.source === 'manual' ? 'Manual change'
-                        : (typeof r.recommendedPct === 'number' && r.recommendedPct !== r.appliedPct ? 'Applied (overridden)' : 'Applied recommendation');
+                entries.forEach(function (e) {
+                    var rec = e.record || {};
                     var row = $('<tr></tr>').appendTo(body);
                     [
-                        [self._fmtDateTime(r.appliedAt), 'left'], [label, 'left'], [blank(r.appliedPct), 'right'],
-                        [blank(r.previousPct), 'right'], [blank(r.recommendedPct), 'right'], [blank(r.ppmPerDay), 'right']
+                        [self._fmtDateTime(e.ts), 'left'],
+                        [e.type === 'FC' ? 'FC reading' : 'SWG %', 'left'],
+                        [e.type === 'FC' ? blank(e.value) + ' ppm' : blank(e.pct) + '%', 'right'],
+                        [self._historySourceLabel(e), 'left'],
+                        [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
+                        [blank(rec.previousPct), 'right'],
+                        [blank(rec.recommendedPct), 'right']
                     ].forEach(function (cell) {
                         $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(row);
                     });
                 });
             });
         },
-        // Downloads `records` as a file. JSON keeps every field of every record (the
-        // full inputs and outputs); CSV is one row per change with the main values
-        // and a few key inputs/outputs flattened into columns, oldest first.
-        _exportHistory: function (records, format) {
-            var ordered = records.slice().reverse();
+        // Downloads `entries` (newest first, as displayed) as a file, oldest first. JSON
+        // keeps every field (including the full inputs and outputs behind local entries);
+        // CSV is one row per entry with the main values and a few key inputs/outputs
+        // flattened into columns.
+        _exportHistory: function (entries, format) {
+            var self = this;
+            var ordered = entries.slice().reverse();
             var d = new Date();
             var pad = function (n) { return (n < 10 ? '0' : '') + n; };
             var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
@@ -262,26 +287,30 @@
                 type = 'application/json';
             }
             else {
+                var out = function (e) { return (e.record || {}).outputs || {}; };
+                var inp = function (e) { return (e.record || {}).inputs || {}; };
                 var cols = [
-                    ['Time (ISO)', function (r) { return r.appliedAt; }],
-                    ['Source', function (r) { return r.source; }],
-                    ['SWG %', function (r) { return r.appliedPct; }],
-                    ['Previous %', function (r) { return r.previousPct; }],
-                    ['Recommended %', function (r) { return r.recommendedPct; }],
-                    ['ppm/day', function (r) { return r.ppmPerDay; }],
-                    ['Run hours', function (r) { return r.hrs; }],
-                    ['Maintenance %', function (r) { return (r.outputs || {}).maintenancePct; }],
-                    ['Avg FC consumption (ppm/day)', function (r) { return (r.outputs || {}).avgConsumptionPpmPerDay; }],
-                    ['Projected FC (ppm)', function (r) { return (r.outputs || {}).projectedCurrentFc; }],
-                    ['Avg window start (ISO)', function (r) { return (r.outputs || {}).avgWindowStart; }],
-                    ['Avg window end (ISO)', function (r) { return (r.outputs || {}).avgWindowEnd; }],
-                    ['Gallons', function (r) { return (r.inputs || {}).gallons; }],
-                    ['SWG lbs/day', function (r) { return (r.inputs || {}).swgLbsPerDay; }],
-                    ['Run start', function (r) { return (r.inputs || {}).swgStartTime; }],
-                    ['Run stop', function (r) { return (r.inputs || {}).swgStopTime; }],
-                    ['Window days', function (r) { return (r.inputs || {}).windowDays; }],
-                    ['Target FC (ppm)', function (r) { return (r.inputs || {}).targetFc; }],
-                    ['Target days', function (r) { return (r.inputs || {}).targetDays; }]
+                    ['Time (ISO)', function (e) { return e.ts; }],
+                    ['Type', function (e) { return e.type; }],
+                    ['Source', function (e) { return self._historySourceLabel(e); }],
+                    ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
+                    ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
+                    ['ppm/day', function (e) { return e.ppmPerDay; }],
+                    ['Run hours', function (e) { return e.hrs; }],
+                    ['Previous %', function (e) { return (e.record || {}).previousPct; }],
+                    ['Recommended %', function (e) { return (e.record || {}).recommendedPct; }],
+                    ['Maintenance %', function (e) { return out(e).maintenancePct; }],
+                    ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
+                    ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
+                    ['Avg window start (ISO)', function (e) { return out(e).avgWindowStart; }],
+                    ['Avg window end (ISO)', function (e) { return out(e).avgWindowEnd; }],
+                    ['Gallons', function (e) { return inp(e).gallons; }],
+                    ['SWG lbs/day', function (e) { return inp(e).swgLbsPerDay; }],
+                    ['Run start', function (e) { return inp(e).swgStartTime; }],
+                    ['Run stop', function (e) { return inp(e).swgStopTime; }],
+                    ['Window days', function (e) { return inp(e).windowDays; }],
+                    ['Target FC (ppm)', function (e) { return inp(e).targetFc; }],
+                    ['Target days', function (e) { return inp(e).targetDays; }]
                 ];
                 var esc = function (v) {
                     if (typeof v === 'undefined' || v === null) return '';
@@ -289,7 +318,7 @@
                     return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
                 };
                 var lines = [cols.map(function (c) { return esc(c[0]); }).join(',')];
-                ordered.forEach(function (r) { lines.push(cols.map(function (c) { return esc(c[1](r)); }).join(',')); });
+                ordered.forEach(function (e) { lines.push(cols.map(function (c) { return esc(c[1](e)); }).join(',')); });
                 text = lines.join('\r\n') + '\r\n';
                 type = 'text/csv';
             }
