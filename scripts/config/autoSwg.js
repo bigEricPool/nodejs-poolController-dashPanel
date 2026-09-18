@@ -61,7 +61,7 @@
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Pool Volume', binding: 'gallons', min: 500, max: 200000, step: 100, units: 'gal', inputAttrs: { style: { width: '5rem' } } });
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'SWG Capacity', binding: 'swgLbsPerDay', min: 0.10, max: 10, step: 0.01, units: 'lbs/day', inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', "SWG's rated chlorine production at 100% duty cycle over the run window below.");
+                .attr('title', "SWG's manufacturer-rated chlorine production per 24-hour day at 100% output (the spec-sheet figure). Only the portion that fits in the run window below is counted as available.");
 
             line = $('<div></div>').appendTo(pnl);
             self._elSwgStartTime = $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Start', binding: 'swgStartTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } } })
@@ -85,6 +85,8 @@
             });
             var btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now', icon: '<i class="fas fa-calculator"></i>' });
             btnCheck.on('click', function (e) { self._checkNow(); });
+            var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
+            btnHistory.on('click', function (e) { self._showHistory(); });
 
             // Results area -- hidden until a check has been run this session.
             var results = $('<div></div>').addClass('picAutoSwgResults').appendTo(pnl).hide();
@@ -94,6 +96,7 @@
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
             self._elMaintenancePct = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elAvgConsumption = $('<div></div>').appendTo(results);
+            self._elAvgWindow = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elProjectedFc = $('<div></div>').appendTo(results);
             self._elRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             var resultsBtnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(results);
@@ -157,17 +160,154 @@
                 self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
                 self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
                 self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
+                self._elAvgWindow.text(self._describeAvgWindow(result));
                 self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
                 self._elRationale.empty();
                 (result.rationale || []).forEach(function (line) { $('<li></li>').appendTo(self._elRationale).text(line); });
             });
+        },
+        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
+        // given and valid, otherwise in this browser's time zone.
+        _fmtDateTime: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', {
+                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        },
+        // The start/end of the running-average window the server actually used, and
+        // whether it had to be extended back to include enough FC readings.
+        _describeAvgWindow: function (result) {
+            var self = this;
+            if (!result || !result.avgWindowStart || !result.avgWindowEnd) return '';
+            var details = result.details || {};
+            var inputs = details.inputs || {};
+            var tz = inputs.timezone;
+            var text = 'Averaging window: ' + self._fmtDateTime(result.avgWindowStart, tz) + ' to ' + self._fmtDateTime(result.avgWindowEnd, tz) + (tz ? ' ' + tz : '');
+            if (details.avgWindowExtended) text += ' (extended back from ' + inputs.windowDays + ' days to include at least 3 FC readings)';
+            return text;
+        },
+        // Shows the local SWG % change log (applied recommendations and manual
+        // changes, newest first) and offers it for download as CSV or JSON.
+        _showHistory: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/history', null, 'Loading SWG % history...', function (records) {
+                records = Array.isArray(records) ? records.slice() : [];
+                records.sort(function (a, b) { return new Date(b.appliedAt) - new Date(a.appliedAt); });
+                var buttons = [];
+                if (records.length > 0) {
+                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(records, 'csv'); } });
+                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(records, 'json'); } });
+                }
+                buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgHistory', {
+                    width: '760px',
+                    height: 'auto',
+                    title: 'SWG % Change History',
+                    buttons: buttons
+                });
+                var wrap = $('<div></div>').css({ maxHeight: '24rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                if (records.length === 0) {
+                    $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
+                        .text('No SWG % changes have been logged yet. A change is logged when a recommendation is applied or when the SWG % is changed some other way.')
+                        .appendTo(wrap);
+                    return;
+                }
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' })
+                    .text(records.length + ' change' + (records.length === 1 ? '' : 's') + ', newest first. Times are shown in this browser\'s time zone; history is kept for 18 months.')
+                    .appendTo(wrap);
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
+                var cols = [
+                    { text: 'Time', align: 'left' }, { text: 'Change', align: 'left' }, { text: 'SWG %', align: 'right' },
+                    { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'ppm/day', align: 'right' }
+                ];
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                cols.forEach(function (c) {
+                    $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
+                });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
+                records.forEach(function (r) {
+                    var label = r.source === 'manual' ? 'Manual change'
+                        : (typeof r.recommendedPct === 'number' && r.recommendedPct !== r.appliedPct ? 'Applied (overridden)' : 'Applied recommendation');
+                    var row = $('<tr></tr>').appendTo(body);
+                    [
+                        [self._fmtDateTime(r.appliedAt), 'left'], [label, 'left'], [blank(r.appliedPct), 'right'],
+                        [blank(r.previousPct), 'right'], [blank(r.recommendedPct), 'right'], [blank(r.ppmPerDay), 'right']
+                    ].forEach(function (cell) {
+                        $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(row);
+                    });
+                });
+            });
+        },
+        // Downloads `records` as a file. JSON keeps every field of every record (the
+        // full inputs and outputs); CSV is one row per change with the main values
+        // and a few key inputs/outputs flattened into columns, oldest first.
+        _exportHistory: function (records, format) {
+            var ordered = records.slice().reverse();
+            var d = new Date();
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
+            var text, type;
+            if (format === 'json') {
+                text = JSON.stringify(ordered, null, 2);
+                type = 'application/json';
+            }
+            else {
+                var cols = [
+                    ['Time (ISO)', function (r) { return r.appliedAt; }],
+                    ['Source', function (r) { return r.source; }],
+                    ['SWG %', function (r) { return r.appliedPct; }],
+                    ['Previous %', function (r) { return r.previousPct; }],
+                    ['Recommended %', function (r) { return r.recommendedPct; }],
+                    ['ppm/day', function (r) { return r.ppmPerDay; }],
+                    ['Run hours', function (r) { return r.hrs; }],
+                    ['Maintenance %', function (r) { return (r.outputs || {}).maintenancePct; }],
+                    ['Avg FC consumption (ppm/day)', function (r) { return (r.outputs || {}).avgConsumptionPpmPerDay; }],
+                    ['Projected FC (ppm)', function (r) { return (r.outputs || {}).projectedCurrentFc; }],
+                    ['Avg window start (ISO)', function (r) { return (r.outputs || {}).avgWindowStart; }],
+                    ['Avg window end (ISO)', function (r) { return (r.outputs || {}).avgWindowEnd; }],
+                    ['Gallons', function (r) { return (r.inputs || {}).gallons; }],
+                    ['SWG lbs/day', function (r) { return (r.inputs || {}).swgLbsPerDay; }],
+                    ['Run start', function (r) { return (r.inputs || {}).swgStartTime; }],
+                    ['Run stop', function (r) { return (r.inputs || {}).swgStopTime; }],
+                    ['Window days', function (r) { return (r.inputs || {}).windowDays; }],
+                    ['Target FC (ppm)', function (r) { return (r.inputs || {}).targetFc; }],
+                    ['Target days', function (r) { return (r.inputs || {}).targetDays; }]
+                ];
+                var esc = function (v) {
+                    if (typeof v === 'undefined' || v === null) return '';
+                    var s = String(v);
+                    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+                };
+                var lines = [cols.map(function (c) { return esc(c[0]); }).join(',')];
+                ordered.forEach(function (r) { lines.push(cols.map(function (c) { return esc(c[1](r)); }).join(',')); });
+                text = lines.join('\r\n') + '\r\n';
+                type = 'text/csv';
+            }
+            var url = window.URL.createObjectURL(new Blob([text], { type: type }));
+            var link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            $(link).remove();
+            setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
         },
         _confirmApply: function () {
             var self = this;
             if (!self._lastResult) return;
             var pct = self._lastResult.recommendedPct;
             $.pic.modalDialog.createConfirm('dlgConfirmApplyAutoSwg', {
-                message: 'Set the SWG pool setpoint to ' + pct + '%? This changes the same setting as the Chlorinator panel above -- you can still edit it manually there at any time afterward.',
+                message: 'Set the SWG pool setpoint to ' + pct + '%? This changes the same setting as the Chlorinator panel above -- you can still edit it manually there at any time afterward. The change and the calculation behind it are logged locally and used by future checks.',
                 width: '420px',
                 height: 'auto',
                 title: 'Confirm Apply SWG %',
@@ -191,18 +331,18 @@
                 }]
             });
         },
-        // The whole recommendation is built from PoolMath's own logged FC
-        // readings and SWG run/% entries -- if this change doesn't get logged
-        // there too, the next Check Now has an inaccurate history to work from
-        // (it will look like FC changed with no corresponding SWG entry to
-        // explain it). This is a one-button reminder, not a confirmation --
+        // The FC readings still come from PoolMath, but SWG % changes made here (or
+        // manually on the Chlorinator panel) are logged locally and take precedence
+        // over PoolMath's own SWG entries, so a missing PoolMath entry no longer
+        // skews future checks. Logging it there is still worthwhile for PoolMath's
+        // own charts and history. This is a one-button note, not a confirmation --
         // the setpoint change has already been applied at this point either way.
         _remindPoolMathLog: function (pct) {
             $.pic.modalDialog.createConfirm('dlgAutoSwgLogPoolMathReminder', {
-                message: 'The SWG pool setpoint was changed to ' + pct + '%. Remember to log this change in PoolMath -- the recommendation is only as accurate as your PoolMath log, so a missed entry here will throw off future Check Now results.',
+                message: 'The SWG pool setpoint was changed to ' + pct + '%. This change is logged locally and will be used by future Check Now results, so logging it in PoolMath is optional. You may still want to log it there to keep your PoolMath history and charts complete.',
                 width: '420px',
                 height: 'auto',
-                title: 'Log This Change in PoolMath',
+                title: 'SWG % Change Logged',
                 buttons: [
                     { text: 'Got It', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
                 ]
