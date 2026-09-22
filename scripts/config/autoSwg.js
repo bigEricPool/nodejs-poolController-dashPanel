@@ -129,12 +129,27 @@
                 $.getApiService('/config/options/schedules', null, function (sopts) {
                     var circuits = (sopts && sopts.circuits) || [];
                     var schedules = (sopts && sopts.schedules) || [];
+                    var timeTypes = (sopts && sopts.scheduleTimeTypes) || [];
+                    // A sunrise/sunset-typed schedule's startTime/endTime minutes are just a
+                    // static fallback (whatever sunrise/sunset happened to be when last saved) --
+                    // showing those numbers here is misleading since the schedule actually runs
+                    // off the real, daily-shifting sunrise/sunset instead. Label those as
+                    // "Sunrise"/"Sunset" rather than a stale clock time.
+                    var timeTypeName = function (val) {
+                        var tt = timeTypes.find(function (t) { return t.val === val; });
+                        return tt ? tt.name : undefined;
+                    };
+                    var formatScheduleTime = function (typeVal, minutes) {
+                        var name = timeTypeName(typeVal);
+                        if (name === 'sunrise') return 'Sunrise';
+                        if (name === 'sunset') return 'Sunset';
+                        return typeof minutes === 'number' ? minutes.formatTime('h:mmtt', '--:--') : '--:--';
+                    };
                     var schedItems = [{ val: -1, name: 'Manual', desc: 'Manual (use times below)' }];
                     schedules.forEach(function (s) {
                         if (s.disabled) return;
                         var circuit = circuits.find(function (c) { return c.id === s.circuit; }) || { name: 'Circuit ' + s.circuit };
-                        var span = (typeof s.startTime === 'number' ? s.startTime.formatTime('h:mmtt', '--:--') : '--:--') + '-' +
-                            (typeof s.endTime === 'number' ? s.endTime.formatTime('h:mmtt', '--:--') : '--:--');
+                        var span = formatScheduleTime(s.startTimeType, s.startTime) + '-' + formatScheduleTime(s.endTimeType, s.endTime);
                         schedItems.push({ val: s.id, name: circuit.name, desc: circuit.name + ' ' + span + ' (#' + s.id + ')' });
                     });
                     self._schedPick[0].items(schedItems);
