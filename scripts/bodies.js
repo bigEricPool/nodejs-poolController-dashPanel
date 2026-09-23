@@ -269,6 +269,7 @@
                     coolSetpoint: parseInt(body.attr('data-coolsetpoint'), 10),
                     hasCooling: makeBool(body.attr('data-hascooling'))
                 };
+                var openPopover = function (solarHeaters) {
                 $.getApiService('/v2/config/body/' + el.attr('data-id') + '/heatModes', null, function (data, status, xhr) {
                     console.log(data);
                     var units = el.parents('div.picBodies:first').attr('data-unitsname');
@@ -311,11 +312,40 @@
                             self.putHeatMode(parseInt(e.newVal, 10));
                             if (settings.hasCooling) syncCoolVis(parseInt(e.newVal, 10));
                         });
+                        // Same setting as Nocturnal Cooling on the heater config page. The Cool Point
+                        // field above only appears once this is on, so reopen this dialog after enabling it.
+                        if (solarHeaters.length > 0) {
+                            $('<div></div>').appendTo(evt.contents())
+                                .checkbox({ labelText: 'Nocturnal Cooling', binding: 'coolingEnabled', value: solarHeaters.some(function (h) { return makeBool(h.coolingEnabled); }) })
+                                .attr('title', 'Check this to enable cooling when the body is on and the solar temperature is less than the water temperature.')
+                                .on('changed', function (e) {
+                                    solarHeaters.forEach(function (h) {
+                                        h.coolingEnabled = e.newVal;
+                                        $.putApiService('/config/heater', { id: h.id, coolingEnabled: e.newVal }, function () { });
+                                    });
+                                });
+                        }
                     });
                     divPopover.popover({ title: body.attr('data-body') + ' Heat Settings', popoverStyle: 'modal', placement: { target: body } });
                     divPopover[0].show(body);
                     // Min/max 65F-104F
                 });
+                };
+                // The nocturnal cooling option is saved through the heater config, which is only
+                // done here for Nixie (njsPC-controlled) solar heaters on this body.
+                var bodyId = parseInt(el.attr('data-id'), 10);
+                if (($('div.dashOuter').attr('data-controllertype') || '').toLowerCase() === 'nixie' && body.attr('data-hassolar') === 'true') {
+                    $.getApiService('/config/options/heaters', null, function (hopts) {
+                        var solarVal = ((hopts && hopts.heaterTypes) || []).filter(function (t) { return t.name === 'solar'; }).map(function (t) { return t.val; })[0];
+                        var solarHeaters = ((hopts && hopts.heaters) || []).filter(function (h) {
+                            var tv = typeof h.type === 'object' && h.type !== null ? h.type.val : h.type;
+                            var hb = typeof h.body === 'object' && h.body !== null ? h.body.val : h.body;
+                            return tv === solarVal && (hb === 32 ? bodyId <= 2 : bodyId === hb + 1);
+                        });
+                        openPopover(solarHeaters);
+                    });
+                }
+                else openPopover([]);
             });
         },
         setEquipmentData: function (data) {
@@ -343,6 +373,7 @@
                 self.disabled(data.stopDelay);
                 el.attr('data-setpoint', data.setPoint);
                 el.attr('data-coolsetpoint', data.coolSetpoint);
+                el.attr('data-hassolar', typeof data.heaterOptions !== 'undefined' && data.heaterOptions.solar > 0);
                 if (typeof data.heaterOptions === 'undefined' || data.heaterOptions.total < 1) {
                     el.find('div.picBodySetpoints').hide();
                     el.find('div.picSetpointText').text('Set Point');
