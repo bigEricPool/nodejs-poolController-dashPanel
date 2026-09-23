@@ -75,7 +75,11 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Target FC', binding: 'targetFc', min: 0, max: 20, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target FC', binding: 'targetDays', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
 
-            var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Step down to maintenance % after the target period', binding: 'stepDownEnabled' })
+                .attr('title', 'After you apply a recommendation that is above the maintenance %, automatically drop the setpoint to the maintenance % once "Days to Target FC" have passed, so FC does not keep climbing past the target. A manual change to the SWG % cancels the pending step-down.');
+
+            var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
                 if (dataBinder.checkRequired(pnl, true)) {
@@ -173,7 +177,8 @@
                 self._resultsPnl.show();
                 self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
                 self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
-                self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
+                self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%' +
+                    (result.stepDownAt ? ' (step down to ' + result.stepDownPct + '% scheduled for ' + new Date(result.stepDownAt).toLocaleString() + ')' : ''));
                 self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
                 self._elAvgWindow.text(self._describeAvgWindow(result));
                 self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
