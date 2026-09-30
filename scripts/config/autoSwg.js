@@ -92,27 +92,32 @@
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
 
-            // Results area -- hidden until a result is available (a fresh Check Now, or the
-            // last one from before, loaded on open -- see _loadData).
+            // Results area -- hidden until there's anything to show: either applied/pending-step
+            // status, or a calculation preview (fresh Check Now, or the last one from before,
+            // loaded on open -- see _loadData). These two are independent of each other --
+            // see _renderResult -- so Cancel can clear the preview alone.
             var results = $('<div></div>').addClass('picAutoSwgResults').appendTo(pnl).hide();
             self._resultsPnl = results;
             $('<hr></hr>').appendTo(results);
+            // Section A: applied status. This persists regardless of whatever calculation
+            // preview is showing below (or isn't), and Cancel never touches it.
+            self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
+            self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
+            // What's actually explaining the % running on the chlorinator right now (saved at
+            // Apply time, or by an automatic step).
+            self._elAppliedRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
+            self._elAppliedRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
+            // Only shown when both sections above and below actually have something to show.
+            self._elResultDivider = $('<hr></hr>').appendTo(results).hide();
+            // Section B: the (possibly unapplied) calculation preview -- entirely cleared by
+            // Cancel, independent of section A above.
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results);
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
-            // The status heading toward the target -- the pending step, if any -- matters
-            // more than the calculation's mechanics below, so it gets its own prominent line.
-            self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
-            self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             self._elMaintenancePct = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elAvgConsumption = $('<div></div>').appendTo(results);
             self._elAvgWindow = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elProjectedFc = $('<div></div>').appendTo(results);
-            // What's actually explaining the % running on the chlorinator right now (saved at
-            // Apply time, or by an automatic step), and -- only if there's a newer, not-yet-
-            // applied Check Now -- a second block for that one, so the two are never confused.
-            self._elAppliedRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
-            self._elAppliedRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
             self._elRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             var resultsBtnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(results);
@@ -134,9 +139,12 @@
             self._btnCancel[0].disabled(true);
             self._btnCancel.on('click', function (e) {
                 if (self._btnCancel.hasClass('disabled')) return;
-                $.putApiService('/state/autoSwg/cancel', {}, function () {
-                    self._setResultButtonsEnabled(false);
-                    self._resultsPnl.hide();
+                // The server clears the calculation fields (not the applied/pending-step ones --
+                // see PUT /state/autoSwg/cancel), so re-rendering its response through the same
+                // path as everything else correctly leaves section A (pending step, last
+                // applied) in place and only clears section B (the calculation preview).
+                $.putApiService('/state/autoSwg/cancel', {}, function (result) {
+                    self._renderResult(result, true);
                 });
             });
         },
@@ -196,7 +204,10 @@
                     // Show whatever was last calculated (and/or applied), if anything, without
                     // requiring a fresh Check Now -- this is persisted server-side already.
                     $.getApiService('/state/autoSwg', null, function (result) {
-                        if (result && result.lastCheckedAt) self._renderResult(result, true);
+                        // Show section A (pending step, last applied) even with no calculation
+                        // to preview at all -- e.g. right after a Cancel, or before the first
+                        // Check Now has ever run on a pool that already has an applied change.
+                        if (result && (result.lastCheckedAt || result.lastAppliedAt || result.stepAt)) self._renderResult(result, true);
                     });
                 });
             });
@@ -212,43 +223,54 @@
                 self._renderResult(result, false);
             });
         },
-        // Renders a result from either a fresh Check Now or the persisted last-known state
-        // (fromSaved -- shown on open, before any Check Now this session). The status heading
-        // toward the target (current/recommended %, pending step, last applied) comes first
-        // and is the most prominent; the calculation's own mechanics (averaging window,
-        // rationale) are secondary and stay in smaller text below.
+        // Renders a result from either a fresh Check Now, the persisted last-known state
+        // (fromSaved -- shown on open, before any Check Now this session), or a Cancel
+        // response. Section A (pending step, last applied, applied rationale) and section B
+        // (the calculation preview) are independent of each other -- Cancel clears only B,
+        // and section A can show on its own with no calculation to preview at all.
         _renderResult: function (result, fromSaved) {
             var self = this;
+            result = result || {};
             self._lastResult = result;
-            self._setResultButtonsEnabled(!fromSaved);
-            self._resultsPnl.show();
-            self._elAsOf.text(fromSaved && result.lastCheckedAt ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
-            self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
-            self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
+            var hasCalc = !!result.lastCheckedAt;
+            self._setResultButtonsEnabled(hasCalc && !fromSaved);
+
+            // Section A: applied status -- the pending step (if any) matters more than the
+            // calculation's mechanics in section B, so it's first and most prominent.
             if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).show();
             else self._elPendingStep.hide();
             if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
             else self._elLastApplied.hide();
-            self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
-            self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
-            self._elAvgWindow.text(self._describeAvgWindow(result));
-            self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
             var hasApplied = result.lastAppliedAt && Array.isArray(result.lastAppliedRationale) && result.lastAppliedRationale.length > 0;
-            // A newer check exists (unapplied) whenever it's later than the last apply, or
-            // there's never been an apply at all.
-            var hasNewerCheck = result.lastCheckedAt && (!result.lastAppliedAt || new Date(result.lastCheckedAt) > new Date(result.lastAppliedAt));
             self._elAppliedRationale.empty();
             if (hasApplied) {
                 self._elAppliedRationaleHeader.text('From the ' + result.lastAppliedPct + '% applied on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' (what\'s actually running now):').show();
                 result.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(self._elAppliedRationale).text(line); });
             }
             else self._elAppliedRationaleHeader.hide();
+            var hasSectionA = !!(result.stepAt || result.lastAppliedAt);
+
+            // Section B: the (possibly unapplied) calculation preview -- absent entirely once
+            // there's no calculation to show (e.g. right after Cancel), regardless of section A.
+            self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
+            self._elCurrentPct.toggle(hasCalc).text('Current SWG %: ' + result.currentPct + '%');
+            self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
+            self._elMaintenancePct.toggle(hasCalc).text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
+            self._elAvgConsumption.toggle(hasCalc).text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
+            self._elAvgWindow.toggle(hasCalc).text(self._describeAvgWindow(result));
+            self._elProjectedFc.toggle(hasCalc).text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
+            // A newer check exists (unapplied) whenever it's later than the last apply, or
+            // there's never been an apply at all.
+            var hasNewerCheck = hasCalc && (!result.lastAppliedAt || new Date(result.lastCheckedAt) > new Date(result.lastAppliedAt));
             self._elRationale.empty();
-            if (hasNewerCheck || !hasApplied) {
+            if (hasCalc && (hasNewerCheck || !hasApplied)) {
                 self._elRationaleHeader.text(hasApplied ? 'From the latest (not yet applied) calculation:' : 'From the last calculation:').show();
                 (result.rationale || []).forEach(function (line) { $('<li></li>').appendTo(self._elRationale).text(line); });
             }
             else self._elRationaleHeader.hide();
+
+            self._elResultDivider.toggle(hasSectionA && hasCalc);
+            self._resultsPnl.toggle(hasSectionA || hasCalc);
         },
         // Concise one-liner for a pending auto-step: direction arrow, target %, time
         // remaining, and the target date/time -- e.g. "↑ to 62% in 2d 6h (Fri 3:15 PM)".
