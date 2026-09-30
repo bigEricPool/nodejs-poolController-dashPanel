@@ -18,7 +18,9 @@
     // appended. lastAppliedTargetFc is whatever targetFc was in effect at the apply that
     // scheduled this step, not necessarily today's config (which may have changed since).
     function describeAutoSwgStep(data, withDate) {
-        var dir = data.stepPct > data.currentPct ? '↑' : '↓';
+        // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
+        // right after an Apply it can still hold the pre-apply value.
+        var dir = data.stepPct > data.lastAppliedPct ? '↑' : '↓';
         var target = new Date(data.stepAt);
         var s = dir + ' to ' + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
         if (typeof data.lastAppliedTargetFc === 'number') s += ' for target FC of ' + data.lastAppliedTargetFc + ' ppm';
@@ -113,15 +115,16 @@
             var self = this, o = self.options, el = self.element;
             self._renderAutoSwgSummary(data);
         },
-        // Small companion block: shows where the SWG % actually stands -- current % and,
-        // if one is pending, the step direction/countdown -- so that status is visible on
-        // the dashboard without opening config. Sourced from the last-known state (page
-        // load, or the live 'autoSwg' socket event after an Apply/step happens elsewhere).
-        // Deliberately shows nothing from an unapplied calculation (recommendedPct,
-        // maintenancePct, projectedCurrentFc, the live rationale) -- that preview belongs
-        // on the calculation screen only, never here, until it's actually been applied.
-        // Only shown once something has actually been applied (lastAppliedAt is unset
-        // until then). Clicking it opens the full status popup.
+        // Small companion block: shows the last applied change and, if one is pending, the
+        // step direction/countdown -- so that status is visible on the dashboard without
+        // opening config. The current SWG % itself isn't repeated here -- that's already
+        // shown live on the Chlorinator widget above. Sourced from the last-known state
+        // (page load, or the live 'autoSwg' socket event after an Apply/step happens
+        // elsewhere). Deliberately shows nothing from an unapplied calculation
+        // (recommendedPct, maintenancePct, projectedCurrentFc, the live rationale) --
+        // that preview belongs on the calculation screen only, never here, until it's
+        // actually been applied. Only shown once something has actually been applied
+        // (lastAppliedAt is unset until then). Clicking it opens the full status popup.
         _renderAutoSwgSummary: function (data) {
             var self = this, el = self.element;
             self._lastAutoSwgData = data;
@@ -141,15 +144,17 @@
                 $('<i class="fas fa-chevron-right"></i>').css({ marginRight: '.4rem' }).prependTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
-            var text = 'SWG ' + data.currentPct + '%';
+            // All of the interpolated values here are numbers/browser-formatted dates, never
+            // user-controllable strings, so building this as HTML (for the bold label) is safe.
+            var text = '<b>Auto SWG %</b> applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
             if (data.stepAt) text += ' · step ' + describeAutoSwgStep(data, false);
-            self._elAutoSwgSummary.find('span:last').text(text);
+            self._elAutoSwgSummary.find('span:last').html(text);
             self._elAutoSwgSummary.show();
         },
-        // Full status -- current %, the pending step (if any) with its target date/time,
-        // the last applied change, and the rationale text behind it. Like the summary
-        // line, this only ever reflects what's actually applied; an unapplied calculation
-        // preview belongs on the calculation screen, not here.
+        // Full status -- the pending step (if any) with its target date/time, the last
+        // applied change, and the rationale text behind it. Like the summary line, this
+        // only ever reflects what's actually applied, and doesn't repeat the current SWG %
+        // shown live on the Chlorinator widget.
         _showAutoSwgPopup: function () {
             var self = this;
             var data = self._lastAutoSwgData || {};
@@ -159,7 +164,6 @@
             ];
             var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: '420px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
-            addLine('Current SWG %: ' + data.currentPct + '%');
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
