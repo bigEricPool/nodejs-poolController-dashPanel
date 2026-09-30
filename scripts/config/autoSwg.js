@@ -272,16 +272,16 @@
             self._elResultDivider.toggle(hasSectionA && hasCalc);
             self._resultsPnl.toggle(hasSectionA || hasCalc);
         },
-        // Concise one-liner for a pending auto-step: direction arrow, target %, time
-        // remaining, and the target date/time -- e.g. "↑ to 62% in 2d 6h (Fri 3:15 PM)".
+        // Concise one-liner for a pending auto-step: direction, target %, time
+        // remaining, and the target date/time -- e.g. "will increase to 62% in 2d 6h (Fri 3:15 PM)".
         _describePendingStep: function (result) {
             var self = this;
             // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
             // right after an Apply (see _confirmApply) it can still hold the pre-apply value.
-            var dir = result.stepPct > result.lastAppliedPct ? '↑' : '↓';
+            var verb = result.stepPct > result.lastAppliedPct ? 'will increase to ' : 'will decrease to ';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
-            var s = dir + ' to ' + result.stepPct + '% in ' + remaining;
+            var s = verb + result.stepPct + '% in ' + remaining;
             // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
             // this step -- not necessarily today's config, which may have changed since.
             if (typeof result.lastAppliedTargetFc === 'number') s += ' for target FC of ' + result.lastAppliedTargetFc + ' ppm';

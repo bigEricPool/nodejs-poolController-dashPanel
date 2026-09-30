@@ -20,9 +20,9 @@
     function describeAutoSwgStep(data, withDate) {
         // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
         // right after an Apply it can still hold the pre-apply value.
-        var dir = data.stepPct > data.lastAppliedPct ? '↑' : '↓';
+        var verb = data.stepPct > data.lastAppliedPct ? 'will increase to ' : 'will decrease to ';
         var target = new Date(data.stepAt);
-        var s = dir + ' to ' + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
+        var s = verb + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
         if (typeof data.lastAppliedTargetFc === 'number') s += ' for target FC of ' + data.lastAppliedTargetFc + ' ppm';
         if (withDate) s += ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
         return s;
@@ -135,14 +135,14 @@
             if (!self._elAutoSwgSummary || self._elAutoSwgSummary.closest('body').length === 0) {
                 self._elAutoSwgSummary = $('<div class="picAutoSwgSummary"></div>')
                     .css({
-                        cursor: 'pointer', padding: '.4rem .6rem', margin: '.25rem 0',
+                        cursor: 'pointer', padding: '.4rem 0', margin: '.25rem 0',
                         fontSize: '.85em', color: '#666'
                     })
                     .attr('title', 'Click for Automatic SWG % status')
                     .on('click', function () { self._showAutoSwgPopup(); })
                     .appendTo(el);
                 // The controller's name -- leftmost and larger than the status text that follows.
-                $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.15em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
+                $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.05em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
                     .text('Auto SWG %').appendTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
