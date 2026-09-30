@@ -238,7 +238,11 @@
             var dir = result.stepPct > result.currentPct ? '↑' : '↓';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
-            return dir + ' to ' + result.stepPct + '% in ' + remaining + ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+            var s = dir + ' to ' + result.stepPct + '% in ' + remaining;
+            // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
+            // this step -- not necessarily today's config, which may have changed since.
+            if (typeof result.lastAppliedTargetFc === 'number') s += ' for target FC of ' + result.lastAppliedTargetFc + ' ppm';
+            return s + ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
         },
         // "2d 6h", "6h 5m", or "due now" -- kept to 2 units for brevity.
         _fmtCountdown: function (ms) {

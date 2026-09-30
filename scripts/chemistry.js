@@ -13,12 +13,15 @@
         if (days === 0) parts.push(mins + 'm');
         return parts.join(' ');
     }
-    // Direction arrow, target %, and time remaining for a pending AutoSwg step --
-    // e.g. "↓ to 45% in 2d 6h", optionally with the target date/time appended.
+    // Direction arrow, target %, time remaining, and the target FC that step is chasing --
+    // e.g. "↓ to 45% in 2d 6h for target FC of 5 ppm", optionally with the target date/time
+    // appended. lastAppliedTargetFc is whatever targetFc was in effect at the apply that
+    // scheduled this step, not necessarily today's config (which may have changed since).
     function describeAutoSwgStep(data, withDate) {
         var dir = data.stepPct > data.currentPct ? '↑' : '↓';
         var target = new Date(data.stepAt);
         var s = dir + ' to ' + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
+        if (typeof data.lastAppliedTargetFc === 'number') s += ' for target FC of ' + data.lastAppliedTargetFc + ' ppm';
         if (withDate) s += ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
         return s;
     }
@@ -136,7 +139,7 @@
                 $('<i class="fas fa-chevron-right"></i>').css({ marginRight: '.4rem' }).prependTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
-            var text = 'SWG ' + data.currentPct + '% → ' + data.recommendedPct + '% recommended';
+            var text = 'SWG ' + data.currentPct + '% → ' + data.recommendedPct + '% recommended (projected FC ' + data.projectedCurrentFc + ' ppm)';
             if (data.stepAt) text += ' · step ' + describeAutoSwgStep(data, false);
             self._elAutoSwgSummary.find('span:last').text(text);
             self._elAutoSwgSummary.show();
