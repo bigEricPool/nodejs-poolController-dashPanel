@@ -76,8 +76,8 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target FC', binding: 'targetDays', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
 
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Step down to maintenance % after the target period', binding: 'stepDownEnabled' })
-                .attr('title', 'After you apply a recommendation that is above the maintenance %, automatically drop the setpoint to the maintenance % once "Days to Target FC" have passed, so FC does not keep climbing past the target. A manual change to the SWG % cancels the pending step-down.');
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Step to maintenance % after the target period', binding: 'autoStepEnabled' })
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the setpoint to the maintenance % (up or down, whichever way it needs to go) once "Days to Target FC" have passed. A manual change to the SWG % cancels the pending step.');
 
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
@@ -178,13 +178,34 @@
                 self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
                 self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
                 self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%' +
-                    (result.stepDownAt ? ' (step down to ' + result.stepDownPct + '% scheduled for ' + new Date(result.stepDownAt).toLocaleString() + ')' : ''));
+                    (result.stepAt ? ' — ' + self._describePendingStep(result) : ''));
                 self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
                 self._elAvgWindow.text(self._describeAvgWindow(result));
                 self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
                 self._elRationale.empty();
                 (result.rationale || []).forEach(function (line) { $('<li></li>').appendTo(self._elRationale).text(line); });
             });
+        },
+        // Concise one-liner for a pending auto-step: direction arrow, target %, time
+        // remaining, and the target date/time -- e.g. "↑ to 62% in 2d 6h (Fri 3:15 PM)".
+        _describePendingStep: function (result) {
+            var self = this;
+            var dir = result.stepPct > result.currentPct ? '↑' : '↓';
+            var target = new Date(result.stepAt);
+            var remaining = self._fmtCountdown(target.getTime() - Date.now());
+            return dir + ' to ' + result.stepPct + '% in ' + remaining + ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+        },
+        // "2d 6h", "6h 5m", or "due now" -- kept to 2 units for brevity.
+        _fmtCountdown: function (ms) {
+            if (ms <= 0) return 'due now';
+            var mins = Math.floor(ms / 60000);
+            var days = Math.floor(mins / 1440); mins -= days * 1440;
+            var hours = Math.floor(mins / 60); mins -= hours * 60;
+            var parts = [];
+            if (days > 0) parts.push(days + 'd');
+            if (days > 0 || hours > 0) parts.push(hours + 'h');
+            if (days === 0) parts.push(mins + 'm');
+            return parts.join(' ');
         },
         // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
         // given and valid, otherwise in this browser's time zone.
