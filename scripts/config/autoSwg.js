@@ -92,16 +92,28 @@
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
 
-            // Results area -- hidden until a check has been run this session.
+            // Results area -- hidden until a result is available (a fresh Check Now, or the
+            // last one from before, loaded on open -- see _loadData).
             var results = $('<div></div>').addClass('picAutoSwgResults').appendTo(pnl).hide();
             self._resultsPnl = results;
             $('<hr></hr>').appendTo(results);
+            self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results);
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
+            // The status heading toward the target -- the pending step, if any -- matters
+            // more than the calculation's mechanics below, so it gets its own prominent line.
+            self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
+            self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             self._elMaintenancePct = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elAvgConsumption = $('<div></div>').appendTo(results);
             self._elAvgWindow = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elProjectedFc = $('<div></div>').appendTo(results);
+            // What's actually explaining the % running on the chlorinator right now (saved at
+            // Apply time, or by an automatic step), and -- only if there's a newer, not-yet-
+            // applied Check Now -- a second block for that one, so the two are never confused.
+            self._elAppliedRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
+            self._elAppliedRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
+            self._elRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
             self._elRationale = $('<ul></ul>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             var resultsBtnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(results);
             self._btnApply = $('<div></div>').appendTo(resultsBtnPnl).actionButton({ text: 'Apply Recommended %', icon: '<i class="fas fa-check"></i>' });
@@ -161,6 +173,11 @@
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
                     });
+                    // Show whatever was last calculated (and/or applied), if anything, without
+                    // requiring a fresh Check Now -- this is persisted server-side already.
+                    $.getApiService('/state/autoSwg', null, function (result) {
+                        if (result && result.lastCheckedAt) self._renderResult(result, true);
+                    });
                 });
             });
         },
@@ -172,19 +189,47 @@
             var self = this;
             self._btnApply[0].disabled(true);
             $.postApiService('/state/autoSwg/recommend', {}, 'Checking PoolMath...', function (result) {
-                self._lastResult = result;
                 self._btnApply[0].disabled(false);
-                self._resultsPnl.show();
-                self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
-                self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
-                self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%' +
-                    (result.stepAt ? ' — ' + self._describePendingStep(result) : ''));
-                self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
-                self._elAvgWindow.text(self._describeAvgWindow(result));
-                self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
-                self._elRationale.empty();
-                (result.rationale || []).forEach(function (line) { $('<li></li>').appendTo(self._elRationale).text(line); });
+                self._renderResult(result, false);
             });
+        },
+        // Renders a result from either a fresh Check Now or the persisted last-known state
+        // (fromSaved -- shown on open, before any Check Now this session). The status heading
+        // toward the target (current/recommended %, pending step, last applied) comes first
+        // and is the most prominent; the calculation's own mechanics (averaging window,
+        // rationale) are secondary and stay in smaller text below.
+        _renderResult: function (result, fromSaved) {
+            var self = this;
+            self._lastResult = result;
+            self._btnApply[0].disabled(!!fromSaved);
+            self._resultsPnl.show();
+            self._elAsOf.text(fromSaved && result.lastCheckedAt ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
+            self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
+            self._elRecommendedPct.text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
+            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).show();
+            else self._elPendingStep.hide();
+            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            else self._elLastApplied.hide();
+            self._elMaintenancePct.text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
+            self._elAvgConsumption.text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
+            self._elAvgWindow.text(self._describeAvgWindow(result));
+            self._elProjectedFc.text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
+            var hasApplied = result.lastAppliedAt && Array.isArray(result.lastAppliedRationale) && result.lastAppliedRationale.length > 0;
+            // A newer check exists (unapplied) whenever it's later than the last apply, or
+            // there's never been an apply at all.
+            var hasNewerCheck = result.lastCheckedAt && (!result.lastAppliedAt || new Date(result.lastCheckedAt) > new Date(result.lastAppliedAt));
+            self._elAppliedRationale.empty();
+            if (hasApplied) {
+                self._elAppliedRationaleHeader.text('From the ' + result.lastAppliedPct + '% applied on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' (what\'s actually running now):').show();
+                result.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(self._elAppliedRationale).text(line); });
+            }
+            else self._elAppliedRationaleHeader.hide();
+            self._elRationale.empty();
+            if (hasNewerCheck || !hasApplied) {
+                self._elRationaleHeader.text(hasApplied ? 'From the latest (not yet applied) calculation:' : 'From the last calculation:').show();
+                (result.rationale || []).forEach(function (line) { $('<li></li>').appendTo(self._elRationale).text(line); });
+            }
+            else self._elRationaleHeader.hide();
         },
         // Concise one-liner for a pending auto-step: direction arrow, target %, time
         // remaining, and the target date/time -- e.g. "↑ to 62% in 2d 6h (Fri 3:15 PM)".

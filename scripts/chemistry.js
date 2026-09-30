@@ -1,6 +1,27 @@
 ﻿
 
 (function ($) {
+    // "2d 6h", "6h 5m", or "due now" -- kept to 2 units for brevity.
+    function fmtAutoSwgCountdown(ms) {
+        if (ms <= 0) return 'due now';
+        var mins = Math.floor(ms / 60000);
+        var days = Math.floor(mins / 1440); mins -= days * 1440;
+        var hours = Math.floor(mins / 60); mins -= hours * 60;
+        var parts = [];
+        if (days > 0) parts.push(days + 'd');
+        if (days > 0 || hours > 0) parts.push(hours + 'h');
+        if (days === 0) parts.push(mins + 'm');
+        return parts.join(' ');
+    }
+    // Direction arrow, target %, and time remaining for a pending AutoSwg step --
+    // e.g. "↓ to 45% in 2d 6h", optionally with the target date/time appended.
+    function describeAutoSwgStep(data, withDate) {
+        var dir = data.stepPct > data.currentPct ? '↑' : '↓';
+        var target = new Date(data.stepAt);
+        var s = dir + ' to ' + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
+        if (withDate) s += ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+        return s;
+    }
     $.widget("pic.chemistry", {
         options: {},
         _create: function () {
@@ -89,15 +110,17 @@
             var self = this, o = self.options, el = self.element;
             self._renderAutoSwgSummary(data);
         },
-        // Small companion block: shows the same running-average FC-consumption
-        // line the AutoSwg config panel's "Check Now" result does, so the
-        // headline number is visible on the dashboard without opening config.
-        // Clicking it jumps to that panel. Only shown once a check has actually
-        // run (avgConsumptionSummary is unset until then) -- nothing to show
-        // for pools that haven't used the feature yet.
+        // Small companion block: shows where the SWG % stands relative to target --
+        // current %, recommended %, and (if one is pending) the step direction/countdown
+        // -- so that status is visible on the dashboard without opening config or running
+        // a fresh check. Sourced from the last-known state (page load, or the live
+        // 'autoSwg' socket event after a Check Now/Apply/step happens elsewhere), never
+        // requires a calculation to display. Clicking it opens the full status popup.
+        // Only shown once a check has actually run (lastCheckedAt is unset until then).
         _renderAutoSwgSummary: function (data) {
             var self = this, el = self.element;
-            if (!data || !data.avgConsumptionSummary) {
+            self._lastAutoSwgData = data;
+            if (!data || !data.lastCheckedAt) {
                 if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
                 return;
             }
@@ -107,14 +130,50 @@
                         cursor: 'pointer', padding: '.4rem .6rem', margin: '.25rem 0',
                         fontSize: '.85em', color: '#666'
                     })
-                    .attr('title', 'Click to open the Automatic SWG % check')
-                    .on('click', function () { self._goToAutoSwgCheck(); })
+                    .attr('title', 'Click for Automatic SWG % status')
+                    .on('click', function () { self._showAutoSwgPopup(); })
                     .appendTo(el);
                 $('<i class="fas fa-chevron-right"></i>').css({ marginRight: '.4rem' }).prependTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
-            self._elAutoSwgSummary.find('span:last').text(data.avgConsumptionSummary);
+            var text = 'SWG ' + data.currentPct + '% → ' + data.recommendedPct + '% recommended';
+            if (data.stepAt) text += ' · step ' + describeAutoSwgStep(data, false);
+            self._elAutoSwgSummary.find('span:last').text(text);
             self._elAutoSwgSummary.show();
+        },
+        // Full status, from the same last-known state the summary line uses -- current/
+        // recommended/maintenance %, the pending step (if any) with its target date/time,
+        // the last applied change, and the rationale text from the last calculation. This
+        // is the "heading to target" status; the averaging-window mechanics are secondary
+        // here and pushed to the bottom in smaller text.
+        _showAutoSwgPopup: function () {
+            var self = this;
+            var data = self._lastAutoSwgData || {};
+            var buttons = [
+                { text: 'Open Settings', icon: '<i class="fas fa-cog"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._goToAutoSwgCheck(); } },
+                { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+            ];
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: '420px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });
+            var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
+            addLine('Current SWG %: ' + data.currentPct + '%');
+            addLine('Recommended SWG %: ' + data.recommendedPct + '% (to reach target FC on schedule)', { fontWeight: 'bold' });
+            if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
+            if (typeof data.maintenancePct === 'number') addLine('Steady-state maintenance would only need: ' + data.maintenancePct + '%', { fontSize: '.85em', color: '#666' });
+            addLine('Projected current FC: ' + data.projectedCurrentFc + ' ppm');
+            if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
+            var hasApplied = data.lastAppliedAt && Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length > 0;
+            var hasNewerCheck = data.lastCheckedAt && (!data.lastAppliedAt || new Date(data.lastCheckedAt) > new Date(data.lastAppliedAt));
+            if (hasApplied) {
+                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' (what\'s actually running now):').appendTo(dlg);
+                var appliedUl = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(dlg);
+                data.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(appliedUl).text(line); });
+            }
+            if ((hasNewerCheck || !hasApplied) && Array.isArray(data.rationale) && data.rationale.length) {
+                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text(hasApplied ? 'From the latest (not yet applied) calculation:' : 'From the last calculation:').appendTo(dlg);
+                var ul = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(dlg);
+                data.rationale.forEach(function (line) { $('<li></li>').appendTo(ul).text(line); });
+            }
+            if (data.lastCheckedAt) addLine('As of last check: ' + new Date(data.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.75em', color: '#999', marginTop: '.4rem' });
         },
         // Opens Settings (if not already open), switches to the Chemistry tab,
         // and expands/scrolls to the AutoSwg panel's "Check Now" section. The
