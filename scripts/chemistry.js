@@ -147,7 +147,7 @@
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
             var text = 'applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-            if (data.stepAt) text += ' · step ' + describeAutoSwgStep(data, false);
+            if (data.stepAt) text += ' · pending step ' + describeAutoSwgStep(data, false);
             self._elAutoSwgSummary.find('span:last').html(text);
             self._elAutoSwgSummary.show();
         },
