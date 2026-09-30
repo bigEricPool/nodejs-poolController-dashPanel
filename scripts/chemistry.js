@@ -20,7 +20,7 @@
     function describeAutoSwgStep(data, withDate) {
         // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
         // right after an Apply it can still hold the pre-apply value.
-        var verb = data.stepPct > data.lastAppliedPct ? 'will increase to ' : 'will decrease to ';
+        var verb = data.stepPct > data.lastAppliedPct ? 'will increase SWG setting to ' : 'will decrease SWG setting to ';
         var target = new Date(data.stepAt);
         var s = verb + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
         if (typeof data.lastAppliedTargetFc === 'number') s += ' for target FC of ' + data.lastAppliedTargetFc + ' ppm';

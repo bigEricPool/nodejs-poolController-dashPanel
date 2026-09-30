@@ -273,12 +273,12 @@
             self._resultsPnl.toggle(hasSectionA || hasCalc);
         },
         // Concise one-liner for a pending auto-step: direction, target %, time
-        // remaining, and the target date/time -- e.g. "will increase to 62% in 2d 6h (Fri 3:15 PM)".
+        // remaining, and the target date/time -- e.g. "will increase SWG setting to 62% in 2d 6h (Fri 3:15 PM)".
         _describePendingStep: function (result) {
             var self = this;
             // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
             // right after an Apply (see _confirmApply) it can still hold the pre-apply value.
-            var verb = result.stepPct > result.lastAppliedPct ? 'will increase to ' : 'will decrease to ';
+            var verb = result.stepPct > result.lastAppliedPct ? 'will increase SWG setting to ' : 'will decrease SWG setting to ';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
             var s = verb + result.stepPct + '% in ' + remaining;
