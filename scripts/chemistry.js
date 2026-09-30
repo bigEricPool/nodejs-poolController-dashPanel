@@ -113,17 +113,19 @@
             var self = this, o = self.options, el = self.element;
             self._renderAutoSwgSummary(data);
         },
-        // Small companion block: shows where the SWG % stands relative to target --
-        // current %, recommended %, and (if one is pending) the step direction/countdown
-        // -- so that status is visible on the dashboard without opening config or running
-        // a fresh check. Sourced from the last-known state (page load, or the live
-        // 'autoSwg' socket event after a Check Now/Apply/step happens elsewhere), never
-        // requires a calculation to display. Clicking it opens the full status popup.
-        // Only shown once a check has actually run (lastCheckedAt is unset until then).
+        // Small companion block: shows where the SWG % actually stands -- current % and,
+        // if one is pending, the step direction/countdown -- so that status is visible on
+        // the dashboard without opening config. Sourced from the last-known state (page
+        // load, or the live 'autoSwg' socket event after an Apply/step happens elsewhere).
+        // Deliberately shows nothing from an unapplied calculation (recommendedPct,
+        // maintenancePct, projectedCurrentFc, the live rationale) -- that preview belongs
+        // on the calculation screen only, never here, until it's actually been applied.
+        // Only shown once something has actually been applied (lastAppliedAt is unset
+        // until then). Clicking it opens the full status popup.
         _renderAutoSwgSummary: function (data) {
             var self = this, el = self.element;
             self._lastAutoSwgData = data;
-            if (!data || !data.lastCheckedAt) {
+            if (!data || !data.lastAppliedAt) {
                 if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
                 return;
             }
@@ -139,16 +141,15 @@
                 $('<i class="fas fa-chevron-right"></i>').css({ marginRight: '.4rem' }).prependTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
-            var text = 'SWG ' + data.currentPct + '% → ' + data.recommendedPct + '% recommended (projected FC ' + data.projectedCurrentFc + ' ppm)';
+            var text = 'SWG ' + data.currentPct + '%';
             if (data.stepAt) text += ' · step ' + describeAutoSwgStep(data, false);
             self._elAutoSwgSummary.find('span:last').text(text);
             self._elAutoSwgSummary.show();
         },
-        // Full status, from the same last-known state the summary line uses -- current/
-        // recommended/maintenance %, the pending step (if any) with its target date/time,
-        // the last applied change, and the rationale text from the last calculation. This
-        // is the "heading to target" status; the averaging-window mechanics are secondary
-        // here and pushed to the bottom in smaller text.
+        // Full status -- current %, the pending step (if any) with its target date/time,
+        // the last applied change, and the rationale text behind it. Like the summary
+        // line, this only ever reflects what's actually applied; an unapplied calculation
+        // preview belongs on the calculation screen, not here.
         _showAutoSwgPopup: function () {
             var self = this;
             var data = self._lastAutoSwgData || {};
@@ -159,24 +160,13 @@
             var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: '420px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
             addLine('Current SWG %: ' + data.currentPct + '%');
-            addLine('Recommended SWG %: ' + data.recommendedPct + '% (to reach target FC on schedule)', { fontWeight: 'bold' });
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
-            if (typeof data.maintenancePct === 'number') addLine('Steady-state maintenance would only need: ' + data.maintenancePct + '%', { fontSize: '.85em', color: '#666' });
-            addLine('Projected current FC: ' + data.projectedCurrentFc + ' ppm');
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
-            var hasApplied = data.lastAppliedAt && Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length > 0;
-            var hasNewerCheck = data.lastCheckedAt && (!data.lastAppliedAt || new Date(data.lastCheckedAt) > new Date(data.lastAppliedAt));
-            if (hasApplied) {
-                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' (what\'s actually running now):').appendTo(dlg);
+            if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
+                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(dlg);
                 var appliedUl = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(dlg);
                 data.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(appliedUl).text(line); });
             }
-            if ((hasNewerCheck || !hasApplied) && Array.isArray(data.rationale) && data.rationale.length) {
-                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text(hasApplied ? 'From the latest (not yet applied) calculation:' : 'From the last calculation:').appendTo(dlg);
-                var ul = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(dlg);
-                data.rationale.forEach(function (line) { $('<li></li>').appendTo(ul).text(line); });
-            }
-            if (data.lastCheckedAt) addLine('As of last check: ' + new Date(data.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.75em', color: '#999', marginTop: '.4rem' });
         },
         // Opens Settings (if not already open), switches to the Chemistry tab,
         // and expands/scrolls to the AutoSwg panel's "Check Now" section. The

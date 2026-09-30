@@ -126,6 +126,26 @@
                 if (self._btnApply.hasClass('disabled')) return;
                 self._confirmApply();
             });
+            // Dismisses this Check Now result without applying it (enabled/disabled in lockstep
+            // with Apply -- there's nothing to cancel once it's already been applied or dismissed).
+            // This is about discarding an unapplied calculation, not a pending automatic step --
+            // changing a pending step is done by applying a new calculation, not cancelling it.
+            self._btnCancel = $('<div></div>').appendTo(resultsBtnPnl).actionButton({ text: 'Cancel', icon: '<i class="fas fa-ban"></i>' });
+            self._btnCancel[0].disabled(true);
+            self._btnCancel.on('click', function (e) {
+                if (self._btnCancel.hasClass('disabled')) return;
+                $.putApiService('/state/autoSwg/cancel', {}, function () {
+                    self._setResultButtonsEnabled(false);
+                    self._resultsPnl.hide();
+                });
+            });
+        },
+        // Keeps Apply and Cancel enabled/disabled together -- both only make sense while
+        // there's a fresh, unapplied calculation to act on.
+        _setResultButtonsEnabled: function (enabled) {
+            var self = this;
+            self._btnApply[0].disabled(!enabled);
+            self._btnCancel[0].disabled(!enabled);
         },
         _updateManualTimeFields: function (scheduleId) {
             var self = this;
@@ -187,9 +207,8 @@
         },
         _checkNow: function () {
             var self = this;
-            self._btnApply[0].disabled(true);
+            self._setResultButtonsEnabled(false);
             $.postApiService('/state/autoSwg/recommend', {}, 'Checking PoolMath...', function (result) {
-                self._btnApply[0].disabled(false);
                 self._renderResult(result, false);
             });
         },
@@ -201,7 +220,7 @@
         _renderResult: function (result, fromSaved) {
             var self = this;
             self._lastResult = result;
-            self._btnApply[0].disabled(!!fromSaved);
+            self._setResultButtonsEnabled(!fromSaved);
             self._resultsPnl.show();
             self._elAsOf.text(fromSaved && result.lastCheckedAt ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
             self._elCurrentPct.text('Current SWG %: ' + result.currentPct + '%');
@@ -434,9 +453,9 @@
                     text: 'Yes', icon: '<i class="fas fa-check"></i>',
                     click: function () {
                         $.pic.modalDialog.closeDialog(this);
-                        self._btnApply[0].disabled(true);
+                        self._setResultButtonsEnabled(false);
                         $.putApiService('/state/autoSwg/apply', { poolSetpoint: pct }, 'Applying SWG %...', function (result) {
-                            self._elCurrentPct.text('Current SWG %: ' + pct + '%');
+                            self._renderResult(result.autoSwg, true);
                             self._remindPoolMathLog(pct);
                         });
                     }
@@ -445,7 +464,7 @@
                     text: 'No', icon: '<i class="far fa-window-close"></i>',
                     click: function () {
                         $.pic.modalDialog.closeDialog(this);
-                        self._btnApply[0].disabled(true);
+                        self._setResultButtonsEnabled(false);
                     }
                 }]
             });
