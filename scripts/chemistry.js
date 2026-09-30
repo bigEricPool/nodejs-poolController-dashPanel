@@ -141,12 +141,12 @@
                     .attr('title', 'Click for Automatic SWG % status')
                     .on('click', function () { self._showAutoSwgPopup(); })
                     .appendTo(el);
-                $('<i class="fas fa-chevron-right"></i>').css({ marginRight: '.4rem' }).prependTo(self._elAutoSwgSummary);
+                // The controller's name -- leftmost and larger than the status text that follows.
+                $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.15em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
+                    .text('Auto SWG %').appendTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
             }
-            // All of the interpolated values here are numbers/browser-formatted dates, never
-            // user-controllable strings, so building this as HTML (for the bold label) is safe.
-            var text = '<b>Auto SWG %</b> applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+            var text = 'applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
             if (data.stepAt) text += ' · step ' + describeAutoSwgStep(data, false);
             self._elAutoSwgSummary.find('span:last').html(text);
             self._elAutoSwgSummary.show();
