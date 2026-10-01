@@ -296,6 +296,52 @@
             var self = this, o = self.options, el = self.element;
             $.putApiService('config/chlorinator', { id: parseInt(el.attr('data-id'), 10), superChlorHours: o.superChlorHoursTarget, poolSetpoint: o.poolSetpointTarget, spaSetpoint: o.spaSetpointTarget }, function () { });
         },
+        // Debounces a Pool/Spa Setpoint edit same as before, but routes it through
+        // _confirmManualSwgChange rather than straight to putChlorValues, so a pending AutoSwg
+        // step gets a chance to warn before it's cancelled out from under the user.
+        _scheduleChlorValuesSave: function (data) {
+            var self = this, o = self.options;
+            if (typeof o.putChlorValuesTimer !== 'undefined' && o.putChlorValuesTimer) {
+                clearTimeout(o.putChlorValuesTimer);
+                o.putChlorValuesTimer = null;
+            }
+            o.putChlorValuesTimer = setTimeout(function () { self._confirmManualSwgChange(data); }, 1500);
+        },
+        // A manual Pool/Spa Setpoint change cancels any pending AutoSwg step (see
+        // ChlorinatorState.onPoolSetpointChanged in njsPC) -- warn before actually submitting so
+        // the user isn't surprised the pending step just disappeared, and let them back out.
+        // `data` is the chlorinator state fetched when this popover opened, used to revert the
+        // spinners to their pre-edit values on Cancel.
+        _confirmManualSwgChange: function (data) {
+            var self = this, o = self.options, el = self.element;
+            $.getApiService('/state/autoSwg', null, function (result) {
+                if (result && result.stepAt) {
+                    $.pic.modalDialog.createConfirm('dlgConfirmManualSwgOverride', {
+                        message: 'AutoSwg has a pending step (' + describeAutoSwgStep(result, true) + '). Changing the SWG % now will cancel it. Continue?',
+                        width: '420px', height: 'auto', title: 'Cancel Pending AutoSwg Step?',
+                        buttons: [
+                            {
+                                text: 'Continue', icon: '<i class="fas fa-check"></i>',
+                                click: function () { $.pic.modalDialog.closeDialog(this); self.putChlorValues(); }
+                            },
+                            {
+                                text: 'Cancel', icon: '<i class="far fa-window-close"></i>',
+                                click: function () {
+                                    $.pic.modalDialog.closeDialog(this);
+                                    o.poolSetpointTarget = data.poolSetpoint;
+                                    o.spaSetpointTarget = data.spaSetpoint;
+                                    let poolSpinner = el.find('div.picValueSpinner[data-bind="poolSetpoint"]')[0];
+                                    let spaSpinner = el.find('div.picValueSpinner[data-bind="spaSetpoint"]')[0];
+                                    if (poolSpinner) poolSpinner.val(data.poolSetpoint);
+                                    if (spaSpinner) spaSpinner.val(data.spaSetpoint);
+                                }
+                            }
+                        ]
+                    });
+                }
+                else self.putChlorValues();
+            });
+        },
         putSuperChlorinate: function (bSet) {
             var self = this, o = self.options, el = self.element;
             if (!bSet) el.find('label.picSuperChlor').text('Cancelling...');
@@ -329,11 +375,7 @@
                                 labelAttrs: { style: { width: '7rem' } }
                             }).on('change', function (e) {
                                 o.poolSetpointTarget = e.value;
-                                if (typeof o.putChlorValuesTimer !== 'undefined') {
-                                    clearTimeout(o.putChlorValuesTimer);
-                                    o.putChlorValuesTimer = null;
-                                }
-                                o.putChlorValuesTimer = setTimeout(function () { self.putChlorValues() }, 1500);
+                                self._scheduleChlorValuesSave(data);
                             });
                             if (data.lockSetpoints) { $('div.picValueSpinner[data-bind="poolSetpoint"]').addClass('disabled'); }
                         }
@@ -351,11 +393,7 @@
                                 labelAttrs: { style: { width: '7rem' } }
                             }).on('change', function (e) {
                                 o.spaSetpointTarget = e.value;
-                                if (typeof o.putChlorValuesTimer !== 'undefined') {
-                                    clearTimeout(o.putChlorValuesTimer);
-                                    o.putChlorValuesTimer = null;
-                                }
-                                o.putChlorValuesTimer = setTimeout(function () { self.putChlorValues() }, 1500);
+                                self._scheduleChlorValuesSave(data);
                             });
                             if (data.lockSetpoints) { $('div.picValueSpinner[data-bind="spaSetpoint"]').addClass('disabled'); }
                         }

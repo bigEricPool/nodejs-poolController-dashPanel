@@ -1093,12 +1093,7 @@
                 var p = $(e.target).parents('div.picAccordian-contents:first');
                 var v = dataBinder.fromElement(p);
                 if (isIntelliCenter && typeof v.name === 'string') v.name = v.name.substring(0, 15);
-                if (dataBinder.checkRequired(p, true)) {
-                    $.putApiService('/config/chlorinator', v, 'Saving Chlorinator...', function (c, status, xhr) {
-                        console.log(c);
-                        self.dataBind(c);
-                    });
-                }
+                if (dataBinder.checkRequired(p, true)) self._confirmAndSaveChlorinator(v);
             });
             var btnDelete = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Delete Chlorinator', icon: '<i class="fas fa-trash"></i>' });
             btnDelete.on('click', function (e) {
@@ -1129,6 +1124,40 @@
             });
 
         },
+        // Actually performs the save.
+        _saveChlorinator: function (v) {
+            var self = this;
+            $.putApiService('/config/chlorinator', v, 'Saving Chlorinator...', function (c, status, xhr) {
+                console.log(c);
+                self.dataBind(c);
+            });
+        },
+        // If the Pool/Spa Setpoint being saved differs from what's currently in effect, and
+        // AutoSwg has a pending step queued, saving cancels it (see
+        // ChlorinatorState.onPoolSetpointChanged in njsPC) -- warn before actually submitting,
+        // mirroring the same guard on the dashboard's quick-setpoint popover.
+        _confirmAndSaveChlorinator: function (v) {
+            var self = this;
+            var orig = self._data || {};
+            var changedSetpoint = (typeof v.poolSetpoint !== 'undefined' && Number(v.poolSetpoint) !== Number(orig.poolSetpoint))
+                || (typeof v.spaSetpoint !== 'undefined' && Number(v.spaSetpoint) !== Number(orig.spaSetpoint));
+            if (!changedSetpoint) { self._saveChlorinator(v); return; }
+            $.getApiService('/state/autoSwg', null, function (result) {
+                if (result && result.stepAt) {
+                    $.pic.modalDialog.createConfirm('dlgConfirmManualSwgOverrideCfg', {
+                        message: 'AutoSwg has a pending step to change the SWG % to ' + result.stepPct + '% on '
+                            + new Date(result.stepAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                            + '. Changing the SWG % now will cancel it. Continue?',
+                        width: '420px', height: 'auto', title: 'Cancel Pending AutoSwg Step?',
+                        buttons: [
+                            { text: 'Continue', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._saveChlorinator(v); } },
+                            { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                        ]
+                    });
+                }
+                else self._saveChlorinator(v);
+            });
+        },
         dataBind: function (obj) {
             var self = this, o = self.options, el = self.element;
             var acc = el.find('div.picAccordian:first');
@@ -1148,6 +1177,7 @@
                 obj.portId = 0; // Force the port id to be the OCP.
             }
             dataBinder.bind(el, obj);
+            self._data = obj;
         }
     });
     $.widget('pic.pnlChemControllerConfig', {
