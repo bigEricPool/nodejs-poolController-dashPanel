@@ -171,6 +171,12 @@
                 var appliedUl = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(dlg);
                 data.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(appliedUl).text(line); });
             }
+            // The "Refresh & Adjust to Target" recalculation only lives on the calculation
+            // screen (previews never show here on the dashboard) -- point there when it's
+            // actually actionable, i.e. while a glide-to-target is still in flight.
+            if (data.lastAppliedTargetDate) {
+                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem', fontStyle: 'italic' }).text('Open Settings to refresh with the latest PoolMath data.').appendTo(dlg);
+            }
         },
         // Opens Settings (if not already open), switches to the Chemistry tab,
         // and expands/scrolls to the AutoSwg panel's "Check Now" section. The
