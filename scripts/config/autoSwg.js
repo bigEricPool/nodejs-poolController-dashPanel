@@ -125,14 +125,15 @@
                     $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) { self.dataBind(c); });
                 }
             });
-            var btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now', icon: '<i class="fas fa-calculator"></i>' });
+            var btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now: New Target', icon: '<i class="fas fa-calculator"></i>' })
+                .attr('title', 'Runs a fresh calculation using today\'s date and the Target FC / Days to Target FC configured above -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
             btnCheck.on('click', function (e) { self._checkNow(); });
             // Only meaningful while a glide-to-target from a previous apply is still in
             // flight (lastAppliedTargetDate set) -- re-aims at that SAME original target
             // FC/date with fresh PoolMath data, instead of restarting the countdown the
             // way Check Now would. Hidden otherwise (see _renderResult).
-            self._btnRefine = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh & Adjust to Target', icon: '<i class="fas fa-rotate"></i>' })
-                .attr('title', 'Recalculates using the latest PoolMath data, but keeps aiming at the same target FC and target date/time as the last apply -- use this to correct a glide already in progress rather than restarting its countdown.')
+            self._btnRefine = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh: Adjust %', icon: '<i class="fas fa-rotate"></i>' })
+                .attr('title', 'Re-fetches your PoolMath data and recalculates the SWG % needed to reach the SAME target FC by the SAME target date/time as your last apply -- does not change the target or restart the countdown. Use this to correct a glide already in progress with fresher data.')
                 .hide();
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
