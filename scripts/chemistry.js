@@ -145,11 +145,24 @@
                 $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.05em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
                     .text('Auto SWG %').appendTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
+                // Fully-automatic mode applies changes with no human review -- flag it loudly
+                // here if the most recent one moved the % by more than the configured warning
+                // threshold, since the dashboard summary is the one place most likely to be
+                // seen without deliberately going looking for it.
+                self._elAutoSwgWarning = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#c0392b',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
             }
             var text = 'applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
             if (data.stepAt) text += ' · pending step ' + describeAutoSwgStep(data, false);
             self._elAutoSwgSummary.find('span:last').html(text);
             self._elAutoSwgSummary.show();
+            if (data.lastAutoApplyLargeChange) {
+                self._elAutoSwgWarning.text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed to ' + data.lastAppliedPct + '% with no manual review -- tap to review.')
+                    .off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            }
+            else self._elAutoSwgWarning.hide();
         },
         // Full status -- the pending step (if any) with its target date/time, the last
         // applied change, and the rationale text behind it. Like the summary line, this
@@ -164,6 +177,10 @@
             ];
             var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: '420px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
+            if (data.lastAutoApplyLargeChange) {
+                addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved to ' + data.lastAppliedPct + '% with no manual review.',
+                    { fontWeight: 'bold', color: '#fff', background: '#c0392b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {

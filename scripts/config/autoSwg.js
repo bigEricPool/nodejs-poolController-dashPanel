@@ -79,6 +79,18 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Step to maintenance % after the target period', binding: 'autoStepEnabled' })
                 .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the setpoint to the maintenance % (up or down, whichever way it needs to go) once "Days to Target FC" have passed. A manual change to the SWG % cancels the pending step.');
 
+            line = $('<div></div>').appendTo(pnl);
+            var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Enable fully automatic mode', binding: 'autoApplyEnabled' })
+                .attr('title', 'Periodically re-checks PoolMath and applies the result with NO manual review. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
+            cbAutoApply.on('change', function (e) {
+                self._updateAutoCheckField(cbAutoApply.find('input[type=checkbox]').is(':checked'));
+            });
+            line = $('<div></div>').appendTo(pnl);
+            self._elAutoCheckHours = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Automatic Check Frequency', binding: 'autoCheckHours', min: 1, max: 168, step: 1, units: 'hours' })
+                .attr('title', 'How often to automatically re-check PoolMath and apply the result while fully automatic mode is enabled. Only meaningful -- and only shown -- while that\'s checked.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Warning Threshold', binding: 'autoApplyWarnThresholdPct', min: 1, max: 100, step: 1, units: 'pts', labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'If an automatic apply moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect.');
+
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
@@ -172,6 +184,12 @@
                 el.find('input').prop('disabled', usingSchedule);
             });
         },
+        // Automatic Check Frequency only means anything while fully automatic mode is
+        // enabled -- hide it entirely otherwise rather than just disabling it.
+        _updateAutoCheckField: function (autoApplyEnabled) {
+            var self = this;
+            if (self._elAutoCheckHours) self._elAutoCheckHours.toggle(!!autoApplyEnabled);
+        },
         _loadData: function () {
             var self = this;
             $.getApiService('/config/options/chlorinators', null, function (opts) {
@@ -208,6 +226,7 @@
                     $.getApiService('/config/autoSwg', null, function (cfg) {
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
+                        self._updateAutoCheckField(cfg && cfg.autoApplyEnabled);
                     });
                     // Show whatever was last calculated (and/or applied), if anything, without
                     // requiring a fresh Check Now -- this is persisted server-side already.
