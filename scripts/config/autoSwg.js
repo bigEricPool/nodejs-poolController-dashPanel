@@ -89,6 +89,14 @@
             });
             var btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now', icon: '<i class="fas fa-calculator"></i>' });
             btnCheck.on('click', function (e) { self._checkNow(); });
+            // Only meaningful while a glide-to-target from a previous apply is still in
+            // flight (lastAppliedTargetDate set) -- re-aims at that SAME original target
+            // FC/date with fresh PoolMath data, instead of restarting the countdown the
+            // way Check Now would. Hidden otherwise (see _renderResult).
+            self._btnRefine = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh & Adjust to Target', icon: '<i class="fas fa-rotate"></i>' })
+                .attr('title', 'Recalculates using the latest PoolMath data, but keeps aiming at the same target FC and target date/time as the last apply -- use this to correct a glide already in progress rather than restarting its countdown.')
+                .hide();
+            self._btnRefine.on('click', function (e) { self._refineToTarget(); });
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
 
@@ -223,6 +231,13 @@
                 self._renderResult(result, false);
             });
         },
+        _refineToTarget: function () {
+            var self = this;
+            self._setResultButtonsEnabled(false);
+            $.postApiService('/state/autoSwg/refine', {}, 'Refreshing PoolMath data...', function (result) {
+                self._renderResult(result, false);
+            });
+        },
         // Renders a result from either a fresh Check Now, the persisted last-known state
         // (fromSaved -- shown on open, before any Check Now this session), or a Cancel
         // response. Section A (pending step, last applied, applied rationale) and section B
@@ -234,6 +249,7 @@
             self._lastResult = result;
             var hasCalc = !!result.lastCheckedAt;
             self._setResultButtonsEnabled(hasCalc && !fromSaved);
+            self._btnRefine.toggle(!!result.lastAppliedTargetDate);
 
             // Section A: applied status -- the pending step (if any) matters more than the
             // calculation's mechanics in section B, so it's first and most prominent.
