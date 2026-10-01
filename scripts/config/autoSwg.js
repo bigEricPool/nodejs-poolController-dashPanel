@@ -94,7 +94,25 @@
                 .attr('title', 'Periodically re-checks PoolMath on its own, every "Check Every" hours, instead of only when you click Check Now/Refresh & Adjust. Requires Auto-Apply Recommendations above -- a periodic check with nobody reviewing it would otherwise just overwrite whatever you\'re looking at on this screen.');
             self._cbAutoCheck = cbAutoCheck;
             cbAutoCheck.on('change', function (e) {
-                self._updateAutoCheckHoursField(cbAutoCheck.find('input[type=checkbox]').is(':checked'));
+                var checked = cbAutoCheck.find('input[type=checkbox]').is(':checked');
+                if (!checked) { self._updateAutoCheckHoursField(false); return; }
+                // Turning this on means njsPC will check PoolMath and apply changes to the
+                // chlorinator on its own, indefinitely, with no further confirmation -- make
+                // sure that's deliberate before letting it stick.
+                $.pic.modalDialog.createConfirm('dlgConfirmAutoCheck', {
+                    message: 'It is critical that you continue to monitor your dashPanel if you enable this. Once on, njsPC will periodically re-check PoolMath and apply changes to your SWG % entirely on its own, with no further confirmation. Continue?',
+                    width: '420px', height: 'auto', title: 'Enable Automatic Checking?',
+                    buttons: [
+                        {
+                            text: 'Continue', icon: '<i class="fas fa-check"></i>',
+                            click: function () { $.pic.modalDialog.closeDialog(this); self._updateAutoCheckHoursField(true); }
+                        },
+                        {
+                            text: 'Cancel', icon: '<i class="far fa-window-close"></i>',
+                            click: function () { $.pic.modalDialog.closeDialog(this); cbAutoCheck[0].val(false); self._updateAutoCheckHoursField(false); }
+                        }
+                    ]
+                });
             });
             self._elAutoCheckHours = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Every', binding: 'autoCheckHours', min: 1, max: 168, step: 1, units: 'hours', labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How often to automatically re-check PoolMath and apply the result.');
