@@ -80,16 +80,24 @@
                 .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the setpoint to the maintenance % (up or down, whichever way it needs to go) once "Days to Target FC" have passed. A manual change to the SWG % cancels the pending step.');
 
             line = $('<div></div>').appendTo(pnl);
-            var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Enable fully automatic mode', binding: 'autoApplyEnabled' })
-                .attr('title', 'Periodically re-checks PoolMath and applies the result with NO manual review. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
-            cbAutoApply.on('change', function (e) {
-                self._updateAutoCheckField(cbAutoApply.find('input[type=checkbox]').is(':checked'));
-            });
-            line = $('<div></div>').appendTo(pnl);
-            self._elAutoCheckHours = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Automatic Check Frequency', binding: 'autoCheckHours', min: 1, max: 168, step: 1, units: 'hours' })
-                .attr('title', 'How often to automatically re-check PoolMath and apply the result while fully automatic mode is enabled. Only meaningful -- and only shown -- while that\'s checked.');
+            var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Auto-Apply Recommendations', binding: 'autoApplyEnabled' })
+                .attr('title', 'Applies a recommendation with NO manual review whenever one is produced -- from a manual Check Now/Refresh & Adjust click, or (if also enabled below) the periodic automatic check. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Warning Threshold', binding: 'autoApplyWarnThresholdPct', min: 1, max: 100, step: 1, units: 'pts', labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'If an automatic apply moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect.');
+                .attr('title', 'If an auto-applied change moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect.');
+            cbAutoApply.on('change', function (e) {
+                self._updateAutoApplyFields(cbAutoApply.find('input[type=checkbox]').is(':checked'));
+            });
+
+            line = $('<div></div>').appendTo(pnl);
+            self._elAutoCheckRow = line;
+            var cbAutoCheck = $('<div></div>').appendTo(line).checkbox({ labelText: 'Also check PoolMath automatically', binding: 'autoCheckEnabled' })
+                .attr('title', 'Periodically re-checks PoolMath on its own, every "Check Every" hours, instead of only when you click Check Now/Refresh & Adjust. Requires Auto-Apply Recommendations above -- a periodic check with nobody reviewing it would otherwise just overwrite whatever you\'re looking at on this screen.');
+            self._cbAutoCheck = cbAutoCheck;
+            cbAutoCheck.on('change', function (e) {
+                self._updateAutoCheckHoursField(cbAutoCheck.find('input[type=checkbox]').is(':checked'));
+            });
+            self._elAutoCheckHours = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Every', binding: 'autoCheckHours', min: 1, max: 168, step: 1, units: 'hours', labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'How often to automatically re-check PoolMath and apply the result.');
 
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
@@ -184,11 +192,20 @@
                 el.find('input').prop('disabled', usingSchedule);
             });
         },
-        // Automatic Check Frequency only means anything while fully automatic mode is
-        // enabled -- hide it entirely otherwise rather than just disabling it.
-        _updateAutoCheckField: function (autoApplyEnabled) {
+        // "Also check PoolMath automatically" (and its own "Check Every" hours field) only
+        // means anything while Auto-Apply Recommendations is on -- hide the whole row
+        // otherwise rather than just disabling it.
+        _updateAutoApplyFields: function (autoApplyEnabled) {
             var self = this;
-            if (self._elAutoCheckHours) self._elAutoCheckHours.toggle(!!autoApplyEnabled);
+            if (self._elAutoCheckRow) self._elAutoCheckRow.toggle(!!autoApplyEnabled);
+            var autoCheckChecked = !!(self._cbAutoCheck && self._cbAutoCheck.find('input[type=checkbox]').is(':checked'));
+            self._updateAutoCheckHoursField(autoApplyEnabled && autoCheckChecked);
+        },
+        // "Check Every" only means anything while "Also check PoolMath automatically" is
+        // checked (which itself requires Auto-Apply Recommendations -- see above).
+        _updateAutoCheckHoursField: function (shown) {
+            var self = this;
+            if (self._elAutoCheckHours) self._elAutoCheckHours.toggle(!!shown);
         },
         _loadData: function () {
             var self = this;
@@ -226,7 +243,7 @@
                     $.getApiService('/config/autoSwg', null, function (cfg) {
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
-                        self._updateAutoCheckField(cfg && cfg.autoApplyEnabled);
+                        self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
                     });
                     // Show whatever was last calculated (and/or applied), if anything, without
                     // requiring a fresh Check Now -- this is persisted server-side already.
