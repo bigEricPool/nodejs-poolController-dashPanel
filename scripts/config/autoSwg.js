@@ -193,6 +193,10 @@
                     self._renderResult(result, true);
                 });
             });
+            // Shown instead of enabled Apply/Cancel buttons when Auto-Apply Recommendations
+            // already applied this result as part of the same request -- otherwise the two
+            // (visibly present, just disabled) buttons give no indication anything happened.
+            self._elAutoApplied = $('<div></div>').appendTo(resultsBtnPnl).css({ fontWeight: 'bold', color: '#2a7', padding: '.4rem 0' }).hide();
         },
         // Keeps Apply and Cancel enabled/disabled together -- both only make sense while
         // there's a fresh, unapplied calculation to act on.
@@ -302,8 +306,20 @@
             result = result || {};
             self._lastResult = result;
             var hasCalc = !!result.lastCheckedAt;
-            self._setResultButtonsEnabled(hasCalc && !fromSaved);
+            // With Auto-Apply Recommendations on, a fresh Check Now/Refresh & Adjust may
+            // already be applied (pending false) by the time this result comes back --
+            // Apply/Cancel have nothing left to do in that case, so only enable them while
+            // something's actually still awaiting a decision.
+            self._setResultButtonsEnabled(hasCalc && !fromSaved && !!result.pending);
             self._btnRefine.toggle(!!result.lastAppliedTargetDate);
+            // A fresh (non-saved) result that's already not pending can only mean Auto-Apply
+            // Recommendations just applied it as part of this very request -- state plainly
+            // what happened rather than leaving Apply/Cancel sitting there (just disabled)
+            // with no explanation for why.
+            if (!fromSaved && hasCalc && !result.pending) {
+                self._elAutoApplied.text('✓ Automatically applied ' + result.lastAppliedPct + '% (Auto-Apply Recommendations is on).').show();
+            }
+            else self._elAutoApplied.hide();
 
             // Section A: applied status -- the pending step (if any) matters more than the
             // calculation's mechanics in section B, so it's first and most prominent.
