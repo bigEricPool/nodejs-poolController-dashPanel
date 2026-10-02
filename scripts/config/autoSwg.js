@@ -86,7 +86,7 @@
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Anomaly Tolerance', binding: 'fcAnomalyTolerancePpm', min: 0, max: 10, step: 0.5, units: 'ppm (0 = off)', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off.");
+                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
 
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
@@ -186,6 +186,9 @@
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
+            var btnAccuracy = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>' })
+                .attr('title', 'Checks the algorithm against reality: for each recent FC reading, re-runs the calculation as of just before it (with only the data logged by then) and compares the projected FC with what you measured. Also shows how close FC was to each target at its deadline.');
+            btnAccuracy.on('click', function (e) { self._showProjectionAccuracy(); });
 
             // Results area -- hidden until there's anything to show: either applied/pending-step
             // status, or a calculation preview (fresh Check Now, or the last one from before,
@@ -569,6 +572,70 @@
             if (e.source === 'local-manual') return 'Local - manual change';
             var rec = e.record || {};
             return typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct ? 'Local - applied (overridden)' : 'Local - applied recommendation';
+        },
+        // How well the algorithm's projected FC has matched the readings actually measured, plus how
+        // close FC was to each target at its deadline (GET /state/autoSwg/projectionAccuracy).
+        _showProjectionAccuracy: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/projectionAccuracy', null, 'Checking projections against your FC readings...', function (h) {
+                h = h || {};
+                var rows = Array.isArray(h.rows) ? h.rows.slice() : [];
+                var targets = Array.isArray(h.targets) ? h.targets.slice() : [];
+                var sm = h.summary || {};
+                var buttons = [];
+                if (rows.length > 0) buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportProjectionAccuracy(rows); } });
+                buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgAccuracy', { width: '860px', height: 'auto', title: 'Projection Accuracy', buttons: buttons });
+                var wrap = $('<div></div>').css({ maxHeight: '28rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                var note = function (text, style) { return $('<div></div>').css($.extend({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }, style || {})).text(text).appendTo(wrap); };
+                var n2 = function (v, d) { return typeof v === 'number' ? v.toFixed(d) : '--'; };
+                var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
+                if (rows.length === 0) {
+                    note('Nothing to score yet: no pair of FC readings (between 0.1 and 14 days apart) with enough earlier data in the PoolMath page.', { fontStyle: 'italic', padding: '.5rem' });
+                    return;
+                }
+                note('Projected FC is what the algorithm said FC would be just before each reading, using only the data logged before it and today\'s settings; error is projected minus measured, so a positive error means it projected too high. '
+                    + 'It reads the PoolMath share page, so it covers what that page lists, and it uses today\'s run window and sunrise/sunset for past days.');
+                var sumBox = $('<div></div>').css({ padding: '.4rem .6rem', margin: '0 0 .6rem 0', background: 'rgba(128,128,128,.12)', borderRadius: '.25rem', fontSize: '.9em' }).appendTo(wrap);
+                $('<div></div>').css({ fontWeight: 'bold' }).text(sm.count + ' readings scored' + (h.skipped ? ' (' + h.skipped + ' skipped: long gaps or too little earlier data)' : '')).appendTo(sumBox);
+                $('<div></div>').text('Mean absolute error ' + n2(sm.meanAbsError, 2) + ' ppm  ·  RMSE ' + n2(sm.rmse, 2) + ' ppm  ·  bias ' + signed(sm.bias) + ' ppm  ·  within 1 ppm: ' + (sm.within1 || 0) + '%  ·  within 2 ppm: ' + (sm.within2 || 0) + '%').appendTo(sumBox);
+                $('<div></div>').css({ color: '#666' }).text('By time since the previous reading: ' + (sm.byGap || []).filter(function (g) { return g.count > 0; }).map(function (g) { return g.label + ' ' + n2(g.meanAbsError, 2) + ' ppm (' + g.count + ')'; }).join('  ·  ')).appendTo(sumBox);
+                var makeTable = function (cols, data, cell) {
+                    var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.6rem' }).appendTo(wrap);
+                    var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                    cols.forEach(function (c) { $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
+                    var body = $('<tbody></tbody>').appendTo(tbl);
+                    data.forEach(function (d) {
+                        var tr = $('<tr></tr>').appendTo(body);
+                        cell(d).forEach(function (v, i) { $('<td></td>').text(v).css({ textAlign: cols[i].align, padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr); });
+                    });
+                };
+                makeTable([{ text: 'Reading', align: 'left' }, { text: 'Days since previous', align: 'right' }, { text: 'Projected', align: 'right' }, { text: 'Measured', align: 'right' }, { text: 'Error', align: 'right' }, { text: 'Burn used (ppm/day)', align: 'right' }],
+                    rows.slice().reverse(), function (r) { return [self._fmtDateTime(r.ts), n2(r.days, 1), n2(r.projected, 2) + ' ppm', n2(r.measured, 2) + ' ppm', signed(r.error), n2(r.avgConsumptionPpmPerDay, 2)]; });
+                if (targets.length > 0) {
+                    $('<div></div>').css({ fontWeight: 'bold', padding: '.2rem 0 .3rem .25rem' }).text('Targets: FC measured nearest each deadline').appendTo(wrap);
+                    makeTable([{ text: 'Applied', align: 'left' }, { text: 'Target', align: 'right' }, { text: 'Deadline', align: 'left' }, { text: 'Nearest reading', align: 'left' }, { text: 'Difference', align: 'right' }],
+                        targets.slice().reverse(), function (t) {
+                            var nearest = !t.passed ? 'deadline not reached yet' : (t.nearest ? n2(t.nearest.value, 2) + ' ppm, ' + Math.abs(t.nearest.offsetHours) + ' h ' + (t.nearest.offsetHours < 0 ? 'before' : 'after') : 'no reading within 3 days');
+                            return [self._fmtDateTime(t.appliedAt), n2(t.targetFc, 1) + ' ppm', self._fmtDateTime(t.targetDate), nearest, t.nearest ? signed(t.difference) + ' ppm' : ''];
+                        });
+                }
+            });
+        },
+        // Downloads the scored readings as CSV, oldest first.
+        _exportProjectionAccuracy: function (rows) {
+            var d = new Date();
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            var lines = ['Reading (ISO),Previous reading (ISO),Days between,Projected FC (ppm),Measured FC (ppm),Error (ppm),Burn used (ppm/day)'];
+            rows.forEach(function (r) { lines.push([r.ts, r.previousTs, r.days, r.projected, r.measured, r.error, r.avgConsumptionPpmPerDay].join(',')); });
+            var url = window.URL.createObjectURL(new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv' }));
+            var link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'autoSwgProjectionAccuracy-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv');
+            document.body.appendChild(link);
+            link.click();
+            $(link).remove();
+            setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
         },
         // Shows the SWG % and FC history as a calculation sees it -- FC readings from
         // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
