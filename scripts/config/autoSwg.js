@@ -73,11 +73,21 @@
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Averaging Window', binding: 'windowDays', min: 3, max: 60, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Target FC', binding: 'targetFc', min: 0, max: 20, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target FC', binding: 'targetDays', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
+
+            // Which window applies depends on which side of Target FC the projected FC is on
+            // when a calculation runs -- the above-target one is listed first, above the
+            // below-target one. Same label width so the two spinners line up.
+            var daysLabel = { style: { width: '14rem' } };
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC above target)', binding: 'targetDaysAbove', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'How many days to take bringing FC down to Target FC when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC below target)', binding: 'targetDaysBelow', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'How many days to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner.');
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Step to maintenance % after the target period', binding: 'autoStepEnabled' })
-                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the setpoint to the maintenance % (up or down, whichever way it needs to go) once "Days to Target FC" have passed. A manual change to the SWG % cancels the pending step.');
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the setpoint to the maintenance % (up or down, whichever way it needs to go) once the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. A manual change to the SWG % cancels the pending step.');
 
             line = $('<div></div>').appendTo(pnl);
             var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Auto-Apply Recommendations', binding: 'autoApplyEnabled' })
@@ -126,7 +136,7 @@
                 }
             });
             var btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now: New Target', icon: '<i class="fas fa-calculator"></i>' })
-                .attr('title', 'Runs a fresh calculation using today\'s date and the Target FC / Days to Target FC configured above -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
+                .attr('title', 'Runs a fresh calculation using today\'s date, the Target FC configured above, and whichever Days to Target applies (above or below target, depending on where the projected FC is) -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
             btnCheck.on('click', function (e) { self._checkNow(); });
             // Only meaningful while a glide-to-target from a previous apply is still in
             // flight (lastAppliedTargetDate set) -- re-aims at that SAME original target
@@ -312,7 +322,9 @@
             // Apply/Cancel have nothing left to do in that case, so only enable them while
             // something's actually still awaiting a decision.
             self._setResultButtonsEnabled(hasCalc && !fromSaved && !!result.pending);
-            self._btnRefine.toggle(!!result.lastAppliedTargetDate);
+            // Only while the deadline is still ahead -- once it's passed there's nothing left
+            // to re-aim at (the server refuses too), so offer Check Now alone.
+            self._btnRefine.toggle(!!result.lastAppliedTargetDate && new Date(result.lastAppliedTargetDate).getTime() > Date.now());
             // A fresh (non-saved) result that's already not pending can only mean Auto-Apply
             // Recommendations just applied it as part of this very request -- state plainly
             // what happened rather than leaving Apply/Cancel sitting there (just disabled)

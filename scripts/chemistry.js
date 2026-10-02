@@ -191,7 +191,7 @@
             // The "Refresh & Adjust to Target" recalculation only lives on the calculation
             // screen (previews never show here on the dashboard) -- point there when it's
             // actually actionable, i.e. while a glide-to-target is still in flight.
-            if (data.lastAppliedTargetDate) {
+            if (data.lastAppliedTargetDate && new Date(data.lastAppliedTargetDate).getTime() > Date.now()) {
                 $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem', fontStyle: 'italic' }).text('Open Settings to refresh with the latest PoolMath data.').appendTo(dlg);
             }
         },
