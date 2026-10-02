@@ -185,13 +185,20 @@
 
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
+            // Enabled only while the form differs from what is saved (see _updateSaveButton); until the settings
+            // have loaded there is nothing to compare, so it stays disabled.
+            self._btnSave = btnSave;
+            btnSave[0].disabled(true);
+            self._watchForChanges();
             btnSave.on('click', function (e) {
+                if (btnSave.hasClass('disabled')) return;
                 if (dataBinder.checkRequired(pnl, true)) {
                     var v = dataBinder.fromElement(pnl);
                     $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) {
                         self.dataBind(c);
                         self._updateTuningBadge();
                         self._updateActionButtons(c && c.autoApplyEnabled);
+                        self._markSaved();
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
                         $.getApiService('/state/autoSwg', null, function (result) {
@@ -365,6 +372,66 @@
             var self = this;
             Object.keys(settings || {}).forEach(function (k) { self._setBound(k, settings[k]); });
             self._updateTuningBadge();
+            self._markSaved(Object.keys(settings || {}));
+        },
+        // Dirty check for Save Settings. The baseline is the form as bound from the server (read back through the
+        // same binder, so formatting differences can't look like edits); Save is enabled only while the form
+        // differs from it.
+        _formValues: function () {
+            var self = this, v = {};
+            try { v = dataBinder.fromElement(self._pnl) || {}; } catch (e) { }
+            return v;
+        },
+        // Absent, null and '' are the same ("not set"); numbers compare as numbers ("21" equals 21).
+        _normValue: function (x) {
+            if (typeof x === 'undefined' || x === null || x === '') return '';
+            if (typeof x === 'boolean') return x ? 'true' : 'false';
+            var n = Number(x);
+            return (typeof x === 'number' || (typeof x === 'string' && x.trim() !== '' && !isNaN(n))) ? String(n) : String(x);
+        },
+        // Records the form as saved: all of it, or (after a report saved just some settings straight to the server)
+        // only those keys, so other unsaved edits stay unsaved.
+        _markSaved: function (keys) {
+            var self = this;
+            var now = self._formValues();
+            if (!self._savedValues || !keys) self._savedValues = $.extend({}, now);
+            else keys.forEach(function (k) { self._savedValues[k] = now[k]; });
+            self._updateSaveButton();
+        },
+        _isDirty: function () {
+            var self = this;
+            if (!self._savedValues) return false;
+            var now = self._formValues(), seen = {}, dirty = false;
+            Object.keys(self._savedValues).concat(Object.keys(now)).forEach(function (k) {
+                if (seen[k]) return;
+                seen[k] = true;
+                if (self._normValue(self._savedValues[k]) !== self._normValue(now[k])) dirty = true;
+            });
+            return dirty;
+        },
+        _updateSaveButton: function () {
+            var self = this;
+            if (!self._btnSave) return;
+            var enable = !!self._savedValues && self._isDirty();
+            if (self._btnSave.hasClass('disabled') === enable) {
+                self._btnSave[0].disabled(!enable);
+                self._btnSave.attr('title', enable ? 'Saves the changes you have made to these settings.' : 'No unsaved changes.');
+            }
+        },
+        // The widgets raise their own events (change, selection) and some only the usual browser ones, so listen for
+        // all of them on the panel, and re-check on a slow timer too in case one is missed. The timer stops when the
+        // panel leaves the page.
+        _watchForChanges: function () {
+            var self = this, timer = null;
+            var later = function () {
+                if (timer) return;
+                timer = setTimeout(function () { timer = null; self._updateSaveButton(); }, 0);
+            };
+            self._pnl.on('change input keyup click selchanged selected', later);
+            var poll = setInterval(function () {
+                if (!self._pnl || !$.contains(document.documentElement, self._pnl[0])) { clearInterval(poll); return; }
+                self._updateSaveButton();
+            }, 1000);
         },
         // Sets a bound settings field by name (the same way the form loads it).
         _setBound: function (name, value) {
@@ -454,6 +521,7 @@
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
                         self._updateTuningBadge();
                         self._updateActionButtons(cfg && cfg.autoApplyEnabled);
+                        self._markSaved();
                     });
                     // Show whatever was last calculated (and/or applied), if anything, without
                     // requiring a fresh Check Now -- this is persisted server-side already.
