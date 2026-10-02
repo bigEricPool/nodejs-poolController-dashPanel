@@ -221,6 +221,9 @@
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
+            var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
+                .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
+            btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
             var btnAccuracy = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>' })
                 .attr('title', 'Checks the algorithm against reality: for each recent FC reading, re-runs the calculation as of just before it (with only the data logged by then) and compares the projected FC with what you measured. Also shows how close FC was to each target at its deadline.');
             btnAccuracy.on('click', function (e) { self._showProjectionAccuracy(); });
@@ -652,6 +655,47 @@
             if (e.source === 'local-manual') return 'Local - manual change';
             var rec = e.record || {};
             return typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct ? 'Local - applied (overridden)' : 'Local - applied recommendation';
+        },
+        // A short guide to tuning: what the two reports are for, the order to use them in, and how to check the result.
+        _showTuningHelp: function () {
+            var self = this;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgTuningHelp', { width: '640px', height: 'auto', title: 'How to Tune AutoSwg',
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+            var wrap = $('<div></div>').css({ maxHeight: '30rem', overflowY: 'auto', padding: '.25rem .5rem', fontSize: '.9em', lineHeight: '1.35' }).appendTo(dlg);
+            var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
+            var head = function (text) { return $('<div></div>').css({ fontWeight: 'bold', padding: '.5rem 0 .1rem 0' }).text(text).appendTo(wrap); };
+            var list = function (items) {
+                var ul = $('<ul></ul>').css({ margin: '.1rem 0 .3rem 0', paddingLeft: '1.2rem' }).appendTo(wrap);
+                items.forEach(function (t) { $('<li></li>').appendTo(ul).text(t); });
+            };
+            para('The defaults suit most pools. Tuning starts to pay off once you have about 30 FC readings, and it is worth doing again when conditions change. Both reports are under Tuning options.');
+            head('1. Projection Accuracy: where you stand');
+            list([
+                'Readings scored: aim for 30 or more; with fewer, everything is rough.',
+                'Mean absolute error: 1.2 to 1.6 ppm is normal, because an FC test is only good to about a ppm.',
+                'The "FC unchanged" baseline: the algorithm should beat it. If it is worse, the weighting and taper are the fix.',
+                'By time since the previous reading: errors usually jump past about 5 days, which is why the taper exists and why testing more often helps.'
+            ]);
+            head('2. What-If Sweep: what would have done better');
+            list([
+                'A row is "better" or "worse" only when its 90% range excludes zero. "No clear difference" is a normal answer.',
+                'Differences under about 0.1 ppm are too small to tell apart.',
+                'Try the averaging window first (usually the biggest effect), then the projection weighting and taper. Leave daylight weighting, the chlorine credit and the anomaly tolerance alone unless clearly better.'
+            ]);
+            head('3. Apply one improvement at a time');
+            para('Press Apply on a "better" row, or on the accuracy suggestion. It saves just those settings and takes effect the next time you Check or Refresh. Changing several at once hides which one helped.');
+            head('4. Check it on new readings');
+            list([
+                'A setting chosen from a report is tuned on the same readings it scores, so its improvement is flattering. The honest test is readings after the change.',
+                'The accuracy report adds a "Since you changed the tuning settings" line for that. Trust it from about 10 new readings.',
+                'If it is no better than the "unchanged" baseline after about 15, use Reset Tuning to Defaults and Save.'
+            ]);
+            head('5. How often');
+            para('After the first few weeks, then when conditions change: a new season, a cell swap, a change in how often you test, or a CYA change. Not after every reading, because re-tuning on noise makes things worse.');
+            head('Keep the data healthy');
+            para('The reports are only as good as the PoolMath log: log SWG % changes promptly, log liquid chlorine as "Liquid Chlorine", and correct a mistyped reading. The anomaly note and the SWG rating warning point at the usual problems.');
+            para('What they do not measure: whether the recommended % kept FC near your target. The target tracking table in Projection Accuracy covers that as your applies reach their deadlines.', { color: '#666', fontSize: '.9em' });
+            para('Full guide: tools/autoswg-check/README.md in the njsPC fork, which also has a script that runs the same reports on any pool\'s PoolMath history.', { color: '#666', fontSize: '.9em' });
         },
         // How well the algorithm's projected FC has matched the readings actually measured, plus how
         // close FC was to each target at its deadline (GET /state/autoSwg/projectionAccuracy).
