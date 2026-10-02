@@ -20,6 +20,12 @@
         if (!data || !data.lastAppliedTargetWarning || !data.lastAppliedTargetDate) return '';
         return new Date(data.lastAppliedTargetDate).getTime() > Date.now() ? data.lastAppliedTargetWarning : '';
     }
+    // The informational counterpart: FC is so far above target that consumption alone (SWG
+    // at 0%) won't bring it down by the deadline. Same window as the warning above.
+    function autoSwgTargetInfo(data) {
+        if (!data || !data.lastAppliedTargetInfo || !data.lastAppliedTargetDate) return '';
+        return new Date(data.lastAppliedTargetDate).getTime() > Date.now() ? data.lastAppliedTargetInfo : '';
+    }
     // Direction arrow, target %, time remaining, and the target FC that step is chasing --
     // e.g. "↓ to 45% in 2d 6h for target FC of 5 ppm", optionally with the target date/time
     // appended. lastAppliedTargetFc is whatever targetFc was in effect at the apply that
@@ -166,6 +172,12 @@
                     fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#d35400',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // Informational (not a warning): FC is high enough that even 0% SWG won't reach
+                // the target by the deadline.
+                self._elAutoSwgTargetInfo = $('<div></div>').css({
+                    fontSize: '1em', color: '#fff', background: '#2a6fa8',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
             }
             var text = 'applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
             if (data.stepAt) text += ' · pending step ' + describeAutoSwgStep(data, false);
@@ -179,6 +191,9 @@
             var targetWarning = autoSwgTargetWarning(data);
             if (targetWarning) self._elAutoSwgTargetWarning.text('⚠ ' + targetWarning).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetWarning.hide();
+            var targetInfo = autoSwgTargetInfo(data);
+            if (targetInfo) self._elAutoSwgTargetInfo.text('ℹ ' + targetInfo).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgTargetInfo.hide();
         },
         // Full status -- the pending step (if any) with its target date/time, the last
         // applied change, and the rationale text behind it. Like the summary line, this
@@ -206,6 +221,8 @@
             if (data.lastAppliedStaleFcNote) {
                 addLine('ℹ ' + data.lastAppliedStaleFcNote, { color: '#5a4300', background: '#ffe9a8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
+            var targetInfo = autoSwgTargetInfo(data);
+            if (targetInfo) addLine('ℹ ' + targetInfo, { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {

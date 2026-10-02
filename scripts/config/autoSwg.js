@@ -190,6 +190,12 @@
                 fontWeight: 'bold', color: '#fff', background: '#d35400',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            // FC is so far above target that consumption alone won't bring it down by the
+            // deadline -- informational (blue), the % is simply at its floor.
+            self._elTargetInfo = $('<div></div>').appendTo(results).css({
+                color: '#fff', background: '#2a6fa8',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
             // The newest FC reading is several days old, so the projection is mostly
             // extrapolation -- a caution, not an error.
             self._elStaleFcNote = $('<div></div>').appendTo(results).css({
@@ -421,6 +427,8 @@
             // there's no calculation to show (e.g. right after Cancel), regardless of section A.
             if (hasCalc && result.targetWarning) self._elTargetWarning.text('⚠ ' + result.targetWarning).show();
             else self._elTargetWarning.hide();
+            if (hasCalc && result.targetInfo) self._elTargetInfo.text('ℹ ' + result.targetInfo).show();
+            else self._elTargetInfo.hide();
             if (hasCalc && result.staleFcNote) self._elStaleFcNote.text('ℹ ' + result.staleFcNote).show();
             else self._elStaleFcNote.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
