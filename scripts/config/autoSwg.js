@@ -91,17 +91,23 @@
 
             line = $('<div></div>').appendTo(pnl);
             var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Auto-Apply Recommendations', binding: 'autoApplyEnabled' })
-                .attr('title', 'Applies a recommendation with NO manual review whenever one is produced -- from a manual Check Now/Refresh & Adjust click, or (if also enabled below) the periodic automatic check. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
+                .attr('title', 'Applies a recommendation with NO manual review whenever one is produced -- from the Refresh and Apply button (which replaces Check Now and Refresh while this is saved as on), or (if also enabled below) the periodic automatic check. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Warning Threshold', binding: 'autoApplyWarnThresholdPct', min: 1, max: 100, step: 1, units: 'pts', labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'If an auto-applied change moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect.');
             cbAutoApply.on('change', function (e) {
                 self._updateAutoApplyFields(cbAutoApply.find('input[type=checkbox]').is(':checked'));
             });
 
+            // Only used by Refresh and Apply and the periodic check, i.e. only while Auto-Apply is on.
+            line = $('<div></div>').appendTo(pnl);
+            self._elNewTargetRow = line;
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Threshold', binding: 'newTargetThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'Used by Refresh and Apply (and the periodic check). If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target -- a new deadline in the Days to Target window that applies, like Check Now. If it is within this many ppm, it just refreshes the SWG % against the existing target and deadline.');
+
             line = $('<div></div>').appendTo(pnl);
             self._elAutoCheckRow = line;
             var cbAutoCheck = $('<div></div>').appendTo(line).checkbox({ labelText: 'Also check PoolMath automatically', binding: 'autoCheckEnabled' })
-                .attr('title', 'Periodically re-checks PoolMath on its own, every "Check Every" hours, instead of only when you click Check Now/Refresh & Adjust. Requires Auto-Apply Recommendations above -- a periodic check with nobody reviewing it would otherwise just overwrite whatever you\'re looking at on this screen.');
+                .attr('title', 'Periodically re-checks PoolMath on its own, every "Check Every" hours, instead of only when you click Refresh and Apply. Requires Auto-Apply Recommendations above -- a periodic check with nobody reviewing it would otherwise just overwrite whatever you\'re looking at on this screen.');
             self._cbAutoCheck = cbAutoCheck;
             cbAutoCheck.on('change', function (e) {
                 var checked = cbAutoCheck.find('input[type=checkbox]').is(':checked');
@@ -132,12 +138,22 @@
             btnSave.on('click', function (e) {
                 if (dataBinder.checkRequired(pnl, true)) {
                     var v = dataBinder.fromElement(pnl);
-                    $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) { self.dataBind(c); });
+                    $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) {
+                        self.dataBind(c);
+                        self._updateActionButtons(c && c.autoApplyEnabled);
+                    });
                 }
             });
-            var btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now: New Target', icon: '<i class="fas fa-calculator"></i>' })
+            // While Auto-Apply is saved as on, Check Now and Refresh give way to the single
+            // Refresh and Apply button, which makes that choice itself (see
+            // _updateActionButtons); with it off, the two stay as separate, reviewed actions.
+            self._btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now: New Target', icon: '<i class="fas fa-calculator"></i>' })
                 .attr('title', 'Runs a fresh calculation using today\'s date, the Target FC configured above, and whichever Days to Target applies (above or below target, depending on where the projected FC is) -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
-            btnCheck.on('click', function (e) { self._checkNow(); });
+            self._btnCheck.on('click', function (e) { self._checkNow(); });
+            self._btnRefreshApply = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh and Apply', icon: '<i class="fas fa-rotate"></i>' })
+                .attr('title', 'Re-fetches your PoolMath data and applies the result immediately, with no review. If the projected FC is within the New Target Threshold of Target FC, it just re-works the SWG % against your existing target and deadline. If it is further above or below Target FC than that, it starts a new target -- a new deadline in the Days to Target window that applies, like Check Now.')
+                .hide();
+            self._btnRefreshApply.on('click', function (e) { self._refreshAndApply(); });
             // Only meaningful while a glide-to-target from a previous apply is still in
             // flight (lastAppliedTargetDate set) -- re-aims at that SAME original target
             // FC/date with fresh PoolMath data, instead of restarting the countdown the
@@ -230,9 +246,28 @@
         // otherwise rather than just disabling it.
         _updateAutoApplyFields: function (autoApplyEnabled) {
             var self = this;
+            if (self._elNewTargetRow) self._elNewTargetRow.toggle(!!autoApplyEnabled);
             if (self._elAutoCheckRow) self._elAutoCheckRow.toggle(!!autoApplyEnabled);
             var autoCheckChecked = !!(self._cbAutoCheck && self._cbAutoCheck.find('input[type=checkbox]').is(':checked'));
             self._updateAutoCheckHoursField(autoApplyEnabled && autoCheckChecked);
+        },
+        // Which action buttons to offer follows the SAVED Auto-Apply setting (the server acts on
+        // what's saved, not on a checkbox that hasn't been saved yet): off keeps Check Now and
+        // Refresh as two reviewed actions; on replaces them with the single Refresh and Apply.
+        _updateActionButtons: function (autoApplySaved) {
+            var self = this;
+            self._autoApplySaved = !!autoApplySaved;
+            self._btnCheck.toggle(!self._autoApplySaved);
+            self._btnRefreshApply.toggle(self._autoApplySaved);
+            self._updateRefineButton(self._lastResult);
+        },
+        // Refresh: Adjust % only while Auto-Apply is off AND the last apply's deadline is
+        // still ahead -- once it has passed there's nothing left to re-aim at (the server
+        // refuses too), so Check Now alone is offered.
+        _updateRefineButton: function (result) {
+            var self = this;
+            var inFlight = !!(result && result.lastAppliedTargetDate && new Date(result.lastAppliedTargetDate).getTime() > Date.now());
+            self._btnRefine.toggle(!self._autoApplySaved && inFlight);
         },
         // "Check Every" only means anything while "Also check PoolMath automatically" is
         // checked (which itself requires Auto-Apply Recommendations -- see above).
@@ -277,6 +312,7 @@
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
+                        self._updateActionButtons(cfg && cfg.autoApplyEnabled);
                     });
                     // Show whatever was last calculated (and/or applied), if anything, without
                     // requiring a fresh Check Now -- this is persisted server-side already.
@@ -297,6 +333,13 @@
             var self = this;
             self._setResultButtonsEnabled(false);
             $.postApiService('/state/autoSwg/recommend', {}, 'Checking PoolMath...', function (result) {
+                self._renderResult(result, false);
+            });
+        },
+        _refreshAndApply: function () {
+            var self = this;
+            self._setResultButtonsEnabled(false);
+            $.postApiService('/state/autoSwg/refreshAndApply', {}, 'Refreshing PoolMath data...', function (result) {
                 self._renderResult(result, false);
             });
         },
@@ -322,9 +365,7 @@
             // Apply/Cancel have nothing left to do in that case, so only enable them while
             // something's actually still awaiting a decision.
             self._setResultButtonsEnabled(hasCalc && !fromSaved && !!result.pending);
-            // Only while the deadline is still ahead -- once it's passed there's nothing left
-            // to re-aim at (the server refuses too), so offer Check Now alone.
-            self._btnRefine.toggle(!!result.lastAppliedTargetDate && new Date(result.lastAppliedTargetDate).getTime() > Date.now());
+            self._updateRefineButton(result);
             // A fresh (non-saved) result that's already not pending can only mean Auto-Apply
             // Recommendations just applied it as part of this very request -- state plainly
             // what happened rather than leaving Apply/Cancel sitting there (just disabled)
