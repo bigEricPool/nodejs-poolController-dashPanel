@@ -190,6 +190,12 @@
                 fontWeight: 'bold', color: '#fff', background: '#d35400',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            // The newest FC reading is several days old, so the projection is mostly
+            // extrapolation -- a caution, not an error.
+            self._elStaleFcNote = $('<div></div>').appendTo(results).css({
+                color: '#5a4300', background: '#ffe9a8',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results);
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
@@ -230,6 +236,8 @@
             // already applied this result as part of the same request -- otherwise the two
             // (visibly present, just disabled) buttons give no indication anything happened.
             self._elAutoApplied = $('<div></div>').appendTo(resultsBtnPnl).css({ fontWeight: 'bold', color: '#2a7', padding: '.4rem 0' }).hide();
+            // Shown after a Refresh found no new FC reading in PoolMath (nothing was changed).
+            self._elSkipNote = $('<div></div>').appendTo(resultsBtnPnl).css({ fontWeight: 'bold', color: '#2a6fa8', padding: '.4rem 0' }).hide();
         },
         // Keeps Apply and Cancel enabled/disabled together -- both only make sense while
         // there's a fresh, unapplied calculation to act on.
@@ -346,15 +354,27 @@
             var self = this;
             self._setResultButtonsEnabled(false);
             $.postApiService('/state/autoSwg/refreshAndApply', {}, 'Refreshing PoolMath data...', function (result) {
-                self._renderResult(result, false);
+                self._renderRefreshResult(result);
             });
         },
         _refineToTarget: function () {
             var self = this;
             self._setResultButtonsEnabled(false);
             $.postApiService('/state/autoSwg/refine', {}, 'Refreshing PoolMath data...', function (result) {
-                self._renderResult(result, false);
+                self._renderRefreshResult(result);
             });
+        },
+        // A Refresh with no new FC reading in PoolMath changes nothing on the server, so show
+        // what's already there (as saved, so Apply/Cancel reflect any earlier unapplied
+        // calculation rather than a fresh one) plus the reason nothing happened.
+        _renderRefreshResult: function (result) {
+            var self = this;
+            if (result && result.skipped) {
+                self._renderResult(result, true);
+                self._elSkipNote.text('ℹ ' + result.skipped).show();
+                return;
+            }
+            self._renderResult(result, false);
         },
         // Renders a result from either a fresh Check Now, the persisted last-known state
         // (fromSaved -- shown on open, before any Check Now this session), or a Cancel
@@ -380,6 +400,7 @@
                 self._elAutoApplied.text('✓ Automatically applied ' + result.lastAppliedPct + '% (Auto-Apply Recommendations is on).').show();
             }
             else self._elAutoApplied.hide();
+            self._elSkipNote.hide();
 
             // Section A: applied status -- the pending step (if any) matters more than the
             // calculation's mechanics in section B, so it's first and most prominent.
@@ -400,6 +421,8 @@
             // there's no calculation to show (e.g. right after Cancel), regardless of section A.
             if (hasCalc && result.targetWarning) self._elTargetWarning.text('⚠ ' + result.targetWarning).show();
             else self._elTargetWarning.hide();
+            if (hasCalc && result.staleFcNote) self._elStaleFcNote.text('ℹ ' + result.staleFcNote).show();
+            else self._elStaleFcNote.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
             self._elCurrentPct.toggle(hasCalc).text('Current SWG %: ' + result.currentPct + '%');
             self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');

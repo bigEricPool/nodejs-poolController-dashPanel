@@ -201,6 +201,11 @@
             if (targetWarning) {
                 addLine('⚠ ' + targetWarning, { fontWeight: 'bold', color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
+            // Only in this popup, not as a dashboard banner -- it's a caution about how reliable
+            // the last apply's projection was, not something that needs attention.
+            if (data.lastAppliedStaleFcNote) {
+                addLine('ℹ ' + data.lastAppliedStaleFcNote, { color: '#5a4300', background: '#ffe9a8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
