@@ -362,6 +362,13 @@
             });
             self._elTuningToggle.find('.picAutoSwgTuningBadge').text(n > 0 ? '(' + n + ' changed from the defaults)' : '');
         },
+        // After a report saves settings straight to the server, show them in the Settings form too. Otherwise the
+        // form keeps the old values, looks as if nothing changed, and a later Save would quietly put them back.
+        _applySettingsToForm: function (settings) {
+            var self = this;
+            Object.keys(settings || {}).forEach(function (k) { self._setBound(k, settings[k]); });
+            self._updateTuningBadge();
+        },
         // Sets a bound settings field by name (the same way the form loads it).
         _setBound: function (name, value) {
             var self = this;
@@ -752,8 +759,10 @@
                         wbtn.on('click', function () {
                             if (wbtn.hasClass('disabled')) return;
                             wbtn[0].disabled(true);
-                            $.putApiService('/config/autoSwg', { projectionDamping: wt.suggested.weight, projectionTaperStartDays: wt.suggested.taperStart, projectionTaperEndDays: wt.suggested.taperEnd }, 'Saving the projection weighting...', function () {
-                                wmsg.text('Saved ' + describe(wt.suggested) + '. It applies the next time you Check or Refresh; reopen Settings and open Tuning options to see it there.').show();
+                            var chosen = { projectionDamping: wt.suggested.weight, projectionTaperStartDays: wt.suggested.taperStart, projectionTaperEndDays: wt.suggested.taperEnd };
+                            $.putApiService('/config/autoSwg', chosen, 'Saving the projection weighting...', function () {
+                                self._applySettingsToForm(chosen);
+                                wmsg.text('Saved ' + describe(wt.suggested) + '. It applies the next time you Check or Refresh, and the Settings form (under Tuning options) now shows it.').show();
                             });
                         });
                     }
@@ -824,7 +833,8 @@
                             if (abtn.hasClass('disabled')) return;
                             abtn[0].disabled(true);
                             $.putApiService('/config/autoSwg', v.settings, 'Saving the settings...', function () {
-                                appliedNote.text('Saved: ' + v.label + '. It applies the next time you Check or Refresh; reopen Settings (Tuning options) to see the values.').show();
+                                self._applySettingsToForm(v.settings);
+                                appliedNote.text('Saved: ' + v.label + '. It applies the next time you Check or Refresh, and the Settings form (under Tuning options) now shows the values.').show();
                             });
                         });
                     }
