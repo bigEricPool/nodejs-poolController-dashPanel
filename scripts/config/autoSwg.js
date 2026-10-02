@@ -139,7 +139,7 @@
             // form, so Save and loading work as for every other setting.
             self._tuningOpen = false;
             try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
-            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionDamping: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8 };
+            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8 };
             self._elTuningToggle = $('<div></div>').appendTo(pnl)
                 .css({ cursor: 'pointer', margin: '.6rem 0 .2rem 0', userSelect: 'none', fontWeight: 'bold' })
                 .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
@@ -171,7 +171,7 @@
                 .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
 
             line = $('<div></div>').appendTo(self._elTuning);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionDamping', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionWeight', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
                 .attr('title', "When projecting the current FC from your last reading, how much of the modelled change since then (SWG output minus consumption) to apply. FC usually moves less between tests than the model expects -- weather alone swings consumption by a ppm a day -- so a value below 1 often predicts better. 1 applies all of it, 0 starts from the last reading unchanged. Liquid chlorine you logged is always added in full. The Projection Accuracy report suggests a value from your own readings (and can apply it). A change takes effect the next time you Check or Refresh.");
 
             line = $('<div></div>').appendTo(self._elTuning);
@@ -698,11 +698,11 @@
                 var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
                 var n2 = function (v, d) { return typeof v === 'number' ? v.toFixed(d) : '--'; };
                 var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
-                var names = { windowDays: 'Averaging Window', projectionDamping: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance' };
+                var names = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance' };
                 var fmt = function (k, v) {
                     if (typeof v === 'boolean') return v ? 'on' : 'off';
                     if (k === 'windowDays' || k === 'projectionTaperStartDays' || k === 'projectionTaperEndDays') return v + (k === 'projectionTaperEndDays' && v === 0 ? ' (no taper)' : ' days');
-                    if (k === 'projectionDamping') return Math.round(v * 100) + '%';
+                    if (k === 'projectionWeight') return Math.round(v * 100) + '%';
                     if (k === 'fcAnomalyTolerancePpm') return v + ' ppm';
                     return String(v);
                 };
@@ -757,7 +757,7 @@
                     $('<div></div>').css({ fontWeight: 'bold', padding: '.6rem 0 .15rem 0' }).text('Previous tunes').appendTo(prevBox);
                     recs.forEach(function (r) {
                         var st2 = r.settings || {};
-                        var set = 'window ' + st2.windowDays + ' d, weighting ' + Math.round((st2.projectionDamping === undefined ? 1 : st2.projectionDamping) * 100) + '%' + (st2.projectionTaperEndDays > 0 ? ', taper ' + st2.projectionTaperStartDays + ' to ' + st2.projectionTaperEndDays + ' d' : ', no taper');
+                        var set = 'window ' + st2.windowDays + ' d, weighting ' + Math.round((st2.projectionWeight !== undefined ? st2.projectionWeight : (st2.projectionDamping !== undefined ? st2.projectionDamping : 1)) * 100) + '%' + (st2.projectionTaperEndDays > 0 ? ', taper ' + st2.projectionTaperStartDays + ' to ' + st2.projectionTaperEndDays + ' d' : ', no taper');
                         var outcome = r.status === 'good' ? 'settings looked good'
                             : r.status === 'insufficient' ? 'too few readings to tune on'
                             : 'recommended ' + (r.recommendation ? r.recommendation.label + ' (expected ' + n2(r.recommendation.expectedMae, 2) + ' ppm)' : '') + (r.applied ? ', applied ' + new Date(r.applied.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ', not applied');
@@ -873,7 +873,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                         wbtn.on('click', function () {
                             if (wbtn.hasClass('disabled')) return;
                             wbtn[0].disabled(true);
-                            var chosen = { projectionDamping: wt.suggested.weight, projectionTaperStartDays: wt.suggested.taperStart, projectionTaperEndDays: wt.suggested.taperEnd };
+                            var chosen = { projectionWeight: wt.suggested.weight, projectionTaperStartDays: wt.suggested.taperStart, projectionTaperEndDays: wt.suggested.taperEnd };
                             $.putApiService('/config/autoSwg', chosen, 'Saving the projection weighting...', function () {
                                 self._applySettingsToForm(chosen);
                                 wmsg.text('Saved ' + describe(wt.suggested) + '. It applies the next time you Check or Refresh, and the Settings form (under Tuning options) now shows it.').show();
