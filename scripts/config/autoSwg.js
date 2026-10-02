@@ -139,7 +139,7 @@
             // form, so Save and loading work as for every other setting.
             self._tuningOpen = false;
             try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
-            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionDamping: 1, projectionTaperStartDays: 3, projectionTaperEndDays: 0 };
+            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionDamping: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8 };
             self._elTuningToggle = $('<div></div>').appendTo(pnl)
                 .css({ cursor: 'pointer', margin: '.6rem 0 .2rem 0', userSelect: 'none', fontWeight: 'bold' })
                 .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
@@ -708,6 +708,9 @@
                 };
                 var box = function (bg, color) { return $('<div></div>').css({ background: bg, color: color, padding: '.5rem .7rem', borderRadius: '.25rem', margin: '.3rem 0' }).appendTo(wrap); };
                 // where we stand
+                if (t.widened) {
+                    para('The last year holds too few FC readings to tune on, so Tune looked back through your whole history.', { color: '#2a6fa8' });
+                }
                 if (typeof t.meanAbsError === 'number') {
                     var base = typeof t.unchangedMae === 'number' ? ' The "FC unchanged" baseline is ' + n2(t.unchangedMae, 2) + ' ppm, so the algorithm is ' + Math.abs(Math.round(t.skill * 100)) + '% ' + (t.skill > 0 ? 'better' : 'worse') + ' than that.' : '';
                     para('Your saved settings score a mean error of ' + n2(t.meanAbsError, 2) + ' ppm over ' + t.readings + ' FC readings' + (t.history && t.history.from ? ' (history from ' + new Date(t.history.from).toLocaleDateString([], { dateStyle: 'medium' }) + ')' : '') + '.' + base, { color: '#666' });
