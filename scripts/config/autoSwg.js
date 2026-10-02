@@ -725,8 +725,8 @@
                     note('Nothing to score yet: no pair of FC readings (between 0.1 and 14 days apart) with enough earlier data in the PoolMath page.', { fontStyle: 'italic', padding: '.5rem' });
                     return;
                 }
-                note('Projected FC is what the algorithm said FC would be just before each reading, using only the data logged before it and today\'s settings; error is projected minus measured, so a positive error means it projected too high. '
-                    + 'It reads the PoolMath share page, so it covers what that page lists, and it uses today\'s run window and sunrise/sunset for past days.');
+note('Projected FC is what the algorithm said FC would be just before each reading, using only the data logged before it and today\'s settings; error is projected minus measured, so a positive error means it projected too high. '
+                    + 'It uses the PoolMath share page plus the local archive of earlier history' + (h.history ? ' (' + h.history.readings + ' FC readings from ' + new Date(h.history.from).toLocaleDateString([], { dateStyle: 'medium' }) + (h.history.archived ? ', ' + h.history.archived + ' of them archived' : '; the archive has not been pulled yet, so this is the page alone') + ')' : '') + ', and it uses today\'s run window and sunrise/sunset for past days.');
                 var sumBox = $('<div></div>').css({ padding: '.4rem .6rem', margin: '0 0 .6rem 0', background: 'rgba(128,128,128,.12)', borderRadius: '.25rem', fontSize: '.9em' }).appendTo(wrap);
                 $('<div></div>').css({ fontWeight: 'bold' }).text(sm.count + ' readings scored' + (h.skipped ? ' (' + h.skipped + ' skipped: long gaps or too little earlier data)' : '')).appendTo(sumBox);
                 $('<div></div>').text('Mean absolute error ' + n2(sm.meanAbsError, 2) + ' ppm  ·  RMSE ' + n2(sm.rmse, 2) + ' ppm  ·  bias ' + signed(sm.bias) + ' ppm  ·  within 1 ppm: ' + (sm.within1 || 0) + '%  ·  within 2 ppm: ' + (sm.within2 || 0) + '%').appendTo(sumBox);
