@@ -71,31 +71,7 @@
             $('<div></div>').appendTo(line).inputField({ labelText: 'Time Zone', binding: 'timezone', inputAttrs: { maxlength: 40, style: { width: '9rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } }).attr('title', "IANA zone name, e.g. 'America/New_York'");
 
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Averaging Window', binding: 'windowDays', min: 3, max: 60, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Target FC', binding: 'targetFc', min: 0, max: 20, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
-
-            // How much of a day's chlorine loss to treat as daytime (sunlight) when weighting the
-            // partial day since an FC reading; 0 lets the server estimate it from the day length.
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Daytime Share of FC Loss', binding: 'daytimeLossSharePct', min: 0, max: 100, step: 5, units: '% (0 = auto)', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', "What percentage of a day's chlorine consumption happens in daylight (sunlight/UV drives most of it). Used to weight the part of a day between FC readings -- e.g. a reading taken in the morning and checked in the evening has lost more than the clock fraction of a day. 0 estimates it from today's sunrise-to-sunset length with a parabolic model (about 56% in winter, 67% in the fall/spring, 78% in summer); enter a value to override. Needs the controller's location (for sunrise/sunset) to be set, otherwise time is counted by the clock.");
-
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Credit liquid chlorine additions logged in PoolMath', binding: 'creditChlorineAdditions' })
-                .attr('title', "A liquid chlorine addition logged in PoolMath between two FC readings raises the second reading without the SWG having done it. With this on, each addition is credited as FC added (strength x amount / pool volume, using Gallons above) when working out consumption and projecting the current FC; with it off, the rise is counted as SWG output and consumption is understated. Other chlorine products aren't recognized yet.");
-
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Anomaly Tolerance', binding: 'fcAnomalyTolerancePpm', min: 0, max: 10, step: 0.5, units: 'ppm (0 = off)', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
-
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionDamping', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
-                .attr('title', "When projecting the current FC from your last reading, how much of the modelled change since then (SWG output minus consumption) to apply. FC usually moves less between tests than the model expects -- weather alone swings consumption by a ppm a day -- so a value below 1 often predicts better. 1 applies all of it, 0 starts from the last reading unchanged. Liquid chlorine you logged is always added in full. The Projection Accuracy report suggests a value from your own readings (and can apply it). A change takes effect the next time you Check or Refresh.");
-
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Taper Weighting After', binding: 'projectionTaperStartDays', min: 0, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Down to Zero At', binding: 'projectionTaperEndDays', min: 0, max: 60, step: 1, units: 'days (0 = no taper)', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', "The longer it has been since your last FC test, the less the modelled change (SWG output minus consumption) should be trusted. With these set, the Projection Weighting applies in full until the last reading is 'Taper Weighting After' days old, then falls in a straight line to zero at 'Down to Zero At' days, when the projection is simply your last measured FC plus any chlorine you logged. On the readings tested so far the model helped for gaps under about 5 days and hurt beyond, so something like 3 and 8 days works well. 0 for 'Down to Zero At' turns the taper off.");
 
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
@@ -158,6 +134,59 @@
             self._elAutoCheckStart = $('<div></div>').appendTo(line).inputField({ labelText: 'Starting At', binding: 'autoCheckStartTime', inputAttrs: { maxlength: 8, placeholder: 'any time', style: { width: '4.5rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', "Optional time of day (e.g. '06:00' or '6am', in the Time Zone above) to pin the automatic checks to. Checks then run every \"Check Every\" hours counting from that time, and start over at it each day -- e.g. 06:00 every 12 hours checks at 6am and 6pm -- so restarts and settings saves don't shift them. Leave blank to count the interval from when njsPC starts, settings are saved, or the last check finishes. Only applies to intervals under 24 hours.");
 
+            // ---- Tuning options: model settings that rarely change once tuned (the Projection Accuracy and
+            // What-If Sweep reports suggest values), kept out of the way unless wanted. The fields stay in the
+            // form, so Save and loading work as for every other setting.
+            self._tuningOpen = false;
+            try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
+            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionDamping: 1, projectionTaperStartDays: 3, projectionTaperEndDays: 0 };
+            self._elTuningToggle = $('<div></div>').appendTo(pnl)
+                .css({ cursor: 'pointer', margin: '.6rem 0 .2rem 0', userSelect: 'none', fontWeight: 'bold' })
+                .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
+                .append($('<span></span>').text('Tuning options'))
+                .append($('<span></span>').addClass('picAutoSwgTuningBadge').css({ marginLeft: '.6rem', fontWeight: 'normal', fontSize: '.85em', color: '#b36b00' }))
+                .attr('title', 'Averaging window, daylight and chlorine-credit handling, anomaly tolerance and the projection weighting and taper. The defaults suit most pools; the Projection Accuracy and What-If Sweep reports suggest values for yours.')
+                .on('click', function () {
+                    self._tuningOpen = !self._tuningOpen;
+                    try { window.localStorage.setItem('autoSwgTuningOpen', self._tuningOpen ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+                    self._applyTuningState();
+                });
+            self._elTuning = $('<div></div>').appendTo(pnl).css({ padding: '.2rem 0 .2rem 1rem', borderLeft: '2px solid rgba(128,128,128,.3)' }).hide();
+            // keep the badge current as the fields are edited
+            self._elTuning.on('change keyup mouseup click', function () { setTimeout(function () { self._updateTuningBadge(); }, 60); });
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Averaging Window', binding: 'windowDays', min: 3, max: 60, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
+            // How much of a day's chlorine loss to treat as daytime (sunlight) when weighting the
+            // partial day since an FC reading; 0 lets the server estimate it from the day length.
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Daytime Share of FC Loss', binding: 'daytimeLossSharePct', min: 0, max: 100, step: 5, units: '% (0 = auto)', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', "What percentage of a day's chlorine consumption happens in daylight (sunlight/UV drives most of it). Used to weight the part of a day between FC readings -- e.g. a reading taken in the morning and checked in the evening has lost more than the clock fraction of a day. 0 estimates it from today's sunrise-to-sunset length with a parabolic model (about 56% in winter, 67% in the fall/spring, 78% in summer); enter a value to override. Needs the controller's location (for sunrise/sunset) to be set, otherwise time is counted by the clock.");
+
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Credit liquid chlorine additions logged in PoolMath', binding: 'creditChlorineAdditions' })
+                .attr('title', "A liquid chlorine addition logged in PoolMath between two FC readings raises the second reading without the SWG having done it. With this on, each addition is credited as FC added (strength x amount / pool volume, using Gallons above) when working out consumption and projecting the current FC; with it off, the rise is counted as SWG output and consumption is understated. Other chlorine products aren't recognized yet.");
+
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Anomaly Tolerance', binding: 'fcAnomalyTolerancePpm', min: 0, max: 10, step: 0.5, units: 'ppm (0 = off)', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
+
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionDamping', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
+                .attr('title', "When projecting the current FC from your last reading, how much of the modelled change since then (SWG output minus consumption) to apply. FC usually moves less between tests than the model expects -- weather alone swings consumption by a ppm a day -- so a value below 1 often predicts better. 1 applies all of it, 0 starts from the last reading unchanged. Liquid chlorine you logged is always added in full. The Projection Accuracy report suggests a value from your own readings (and can apply it). A change takes effect the next time you Check or Refresh.");
+
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Taper Weighting After', binding: 'projectionTaperStartDays', min: 0, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Down to Zero At', binding: 'projectionTaperEndDays', min: 0, max: 60, step: 1, units: 'days (0 = no taper)', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', "The longer it has been since your last FC test, the less the modelled change (SWG output minus consumption) should be trusted. With these set, the Projection Weighting applies in full until the last reading is 'Taper Weighting After' days old, then falls in a straight line to zero at 'Down to Zero At' days, when the projection is simply your last measured FC plus any chlorine you logged. On the readings tested so far the model helped for gaps under about 5 days and hurt beyond, so something like 3 and 8 days works well. 0 for 'Down to Zero At' turns the taper off.");
+
+            var btnResetTuning = $('<div></div>').appendTo(self._elTuning).actionButton({ text: 'Reset Tuning to Defaults', icon: '<i class="fas fa-undo"></i>' })
+                .attr('title', 'Puts every tuning option back to its default in this form -- Save Settings to keep it.');
+            btnResetTuning.on('click', function () {
+                Object.keys(self._tuningDefaults).forEach(function (k) { self._setBound(k, self._tuningDefaults[k]); });
+                self._updateTuningBadge();
+            });
+            self._applyTuningState();
+
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
@@ -165,6 +194,7 @@
                     var v = dataBinder.fromElement(pnl);
                     $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) {
                         self.dataBind(c);
+                        self._updateTuningBadge();
                         self._updateActionButtons(c && c.autoApplyEnabled);
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
@@ -305,6 +335,33 @@
             self._btnApply[0].disabled(!enabled);
             self._btnCancel[0].disabled(!enabled);
         },
+        // Tuning options: shown or hidden, with a note of how many differ from the defaults so a hidden
+        // non-default setting isn't forgotten.
+        _applyTuningState: function () {
+            var self = this;
+            if (!self._elTuningToggle) return;
+            var open = !!self._tuningOpen;
+            self._elTuningToggle.find('i').removeClass('fa-chevron-right fa-chevron-down').addClass(open ? 'fa-chevron-down' : 'fa-chevron-right');
+            self._elTuning.toggle(open);
+            self._updateTuningBadge();
+        },
+        _updateTuningBadge: function () {
+            var self = this;
+            if (!self._elTuningToggle || !self._pnl) return;
+            var v = {};
+            try { v = dataBinder.fromElement(self._pnl) || {}; } catch (e) { return; }
+            var n = 0, d = self._tuningDefaults || {};
+            Object.keys(d).forEach(function (k) {
+                if (typeof v[k] === 'undefined' || v[k] === null || v[k] === '') return;
+                if (Number(v[k]) !== Number(d[k])) n++;
+            });
+            self._elTuningToggle.find('.picAutoSwgTuningBadge').text(n > 0 ? '(' + n + ' changed from the defaults)' : '');
+        },
+        // Sets a bound settings field by name (the same way the form loads it).
+        _setBound: function (name, value) {
+            var self = this;
+            self._pnl.find('div[data-bind="' + name + '"]').each(function () { if (typeof this.val === 'function') this.val(value); });
+        },
         _updateManualTimeFields: function (scheduleId) {
             var self = this;
             var usingSchedule = typeof scheduleId !== 'undefined' && scheduleId !== null && scheduleId >= 0;
@@ -386,6 +443,7 @@
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
+                        self._updateTuningBadge();
                         self._updateActionButtons(cfg && cfg.autoApplyEnabled);
                     });
                     // Show whatever was last calculated (and/or applied), if anything, without
@@ -640,7 +698,7 @@
                             if (wbtn.hasClass('disabled')) return;
                             wbtn[0].disabled(true);
                             $.putApiService('/config/autoSwg', { projectionDamping: wt.suggested.weight, projectionTaperStartDays: wt.suggested.taperStart, projectionTaperEndDays: wt.suggested.taperEnd }, 'Saving the projection weighting...', function () {
-                                wmsg.text('Saved ' + describe(wt.suggested) + '. It applies the next time you Check or Refresh; reopen Settings to see it there.').show();
+                                wmsg.text('Saved ' + describe(wt.suggested) + '. It applies the next time you Check or Refresh; reopen Settings and open Tuning options to see it there.').show();
                             });
                         });
                     }
@@ -686,9 +744,10 @@
                 var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
                 note('Each row re-scores the same ' + h.count + ' FC readings (' + (h.skipped || 0) + ' skipped) under different settings: the projected FC just before each reading, compared with what was measured. '
                     + '"Change" is how much the mean absolute error moves versus your current settings (negative is better) with a 90% range; a setting is called better or worse only when that range excludes zero. '
-                    + 'Differences under about 0.1 ppm are too small to tell apart with this many readings. Nothing here changes your settings.');
+                    + 'Differences under about 0.1 ppm are too small to tell apart with this many readings. Nothing changes unless you press Apply on a row that is clearly better.');
+                var appliedNote = $('<div></div>').css({ color: '#2a7', fontWeight: 'bold', padding: '0 0 .4rem .25rem' }).hide().appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.6rem' }).appendTo(wrap);
-                var cols = [{ t: 'Settings', a: 'left' }, { t: 'Mean abs error (ppm)', a: 'right' }, { t: 'RMSE', a: 'right' }, { t: 'Bias', a: 'right' }, { t: 'Change vs current (90% range)', a: 'right' }, { t: 'Verdict', a: 'left' }];
+                var cols = [{ t: 'Settings', a: 'left' }, { t: 'Mean abs error (ppm)', a: 'right' }, { t: 'RMSE', a: 'right' }, { t: 'Bias', a: 'right' }, { t: 'Change vs current (90% range)', a: 'right' }, { t: 'Verdict', a: 'left' }, { t: '', a: 'left' }];
                 var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
                 cols.forEach(function (c) { $('<th></th>').text(c.t).css({ textAlign: c.a, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
                 var body = $('<tbody></tbody>').appendTo(tbl);
@@ -701,6 +760,19 @@
                         var td = $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr);
                         if (i === 5 && v.verdict !== 'current') td.css({ color: color, fontWeight: v.verdict === 'no clear difference' ? 'normal' : 'bold' });
                     });
+                    // A clear improvement that maps to settings can be applied from here.
+                    var applyTd = $('<td></td>').css({ padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr);
+                    if (v.verdict === 'better' && v.settings && Object.keys(v.settings).length > 0) {
+                        var abtn = $('<div></div>').appendTo(applyTd).actionButton({ text: 'Apply', icon: '<i class="fas fa-check"></i>' })
+                            .attr('title', 'Save these settings: ' + Object.keys(v.settings).map(function (k) { return k + ' = ' + v.settings[k]; }).join(', '));
+                        abtn.on('click', function () {
+                            if (abtn.hasClass('disabled')) return;
+                            abtn[0].disabled(true);
+                            $.putApiService('/config/autoSwg', v.settings, 'Saving the settings...', function () {
+                                appliedNote.text('Saved: ' + v.label + '. It applies the next time you Check or Refresh; reopen Settings (Tuning options) to see the values.').show();
+                            });
+                        });
+                    }
                 });
             });
         },
