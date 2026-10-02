@@ -80,6 +80,10 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Daytime Share of FC Loss', binding: 'daytimeLossSharePct', min: 0, max: 100, step: 5, units: '% (0 = auto)', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', "What percentage of a day's chlorine consumption happens in daylight (sunlight/UV drives most of it). Used to weight the part of a day between FC readings -- e.g. a reading taken in the morning and checked in the evening has lost more than the clock fraction of a day. 0 estimates it from today's sunrise-to-sunset length with a parabolic model (about 56% in winter, 67% in the fall/spring, 78% in summer); enter a value to override. Needs the controller's location (for sunrise/sunset) to be set, otherwise time is counted by the clock.");
 
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Credit liquid chlorine additions logged in PoolMath', binding: 'creditChlorineAdditions' })
+                .attr('title', "A liquid chlorine addition logged in PoolMath between two FC readings raises the second reading without the SWG having done it. With this on, each addition is credited as FC added (strength x amount / pool volume, using Gallons above) when working out consumption and projecting the current FC; with it off, the rise is counted as SWG output and consumption is understated. Other chlorine products aren't recognized yet.");
+
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
             // below-target one. Same label width so the two spinners line up.
