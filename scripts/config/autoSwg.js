@@ -782,6 +782,12 @@
                 items.forEach(function (t) { $('<li></li>').appendTo(ul).text(t); });
             };
             para('AutoSwg works from your PoolMath log. For it to work at all, log your FC tests and every change to the SWG % in the PoolMath app, and turn on sharing for the pool (enter its share code in Settings). More frequent FC tests and promptly logged SWG changes give better results.');
+            head('Getting started: go in stages');
+            list([
+                'First, run in manual mode for a while: use Check Now, read each recommendation and apply it yourself.',
+                'Then turn on Auto-Apply Recommendations for a while and tune with your real history (the Tune button below). Auto-Apply changes the SWG % with no review, so watch the dashboard warnings.',
+                'Only then turn on "Also check PoolMath automatically", which re-checks on its own every "Check Every" hours.'
+            ]);
             para('The defaults suit most pools. Tuning starts to pay off once you have about 30 FC readings, and it is worth doing again when conditions change.');
             head('The quick way: press Tune');
             list([
