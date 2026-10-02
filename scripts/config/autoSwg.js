@@ -88,6 +88,10 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Anomaly Tolerance', binding: 'fcAnomalyTolerancePpm', min: 0, max: 10, step: 0.5, units: 'ppm (0 = off)', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
 
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionDamping', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
+                .attr('title', "When projecting the current FC from your last reading, how much of the modelled change since then (SWG output minus consumption) to apply. FC usually moves less between tests than the model expects -- weather alone swings consumption by a ppm a day -- so a value below 1 often predicts better. 1 applies all of it, 0 starts from the last reading unchanged. Liquid chlorine you logged is always added in full. The Projection Accuracy report suggests a value from your own readings (and can apply it). A change takes effect the next time you Check or Refresh.");
+
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
             // below-target one. Same label width so the two spinners line up.
@@ -611,6 +615,29 @@
                 $('<div></div>').css({ fontWeight: 'bold' }).text(sm.count + ' readings scored' + (h.skipped ? ' (' + h.skipped + ' skipped: long gaps or too little earlier data)' : '')).appendTo(sumBox);
                 $('<div></div>').text('Mean absolute error ' + n2(sm.meanAbsError, 2) + ' ppm  ·  RMSE ' + n2(sm.rmse, 2) + ' ppm  ·  bias ' + signed(sm.bias) + ' ppm  ·  within 1 ppm: ' + (sm.within1 || 0) + '%  ·  within 2 ppm: ' + (sm.within2 || 0) + '%').appendTo(sumBox);
                 $('<div></div>').css({ color: '#666' }).text('By time since the previous reading: ' + (sm.byGap || []).filter(function (g) { return g.count > 0; }).map(function (g) { return g.label + ' ' + n2(g.meanAbsError, 2) + ' ppm (' + g.count + ')'; }).join('  ·  ')).appendTo(sumBox);
+                // The no-model baseline gives the error some context, and the suggested projection weighting
+                // can be applied straight from here.
+                if (typeof sm.unchangedMae === 'number') {
+                    $('<div></div>').css({ marginTop: '.3rem' }).text('Baseline "FC unchanged since the last reading": ' + n2(sm.unchangedMae, 2) + ' ppm. The algorithm is ' + Math.abs(Math.round(sm.skill * 100)) + '% ' + (sm.skill > 0 ? 'better' : 'worse') + ' than that.').appendTo(sumBox);
+                }
+                var wt = sm.weighting || {};
+                if (typeof wt.suggested === 'number') {
+                    var pctOf = function (v) { return Math.round(v * 100) + '%'; };
+                    var wbox = $('<div></div>').css({ marginTop: '.3rem' }).appendTo(sumBox);
+                    $('<div></div>').text('Projection weighting (how much of the modelled FC change since the last reading to trust): currently ' + pctOf(wt.current) + ' (' + n2(wt.maeCurrent, 2) + ' ppm). '
+                        + 'On these readings the best would have been ' + pctOf(wt.best) + ' (' + n2(wt.maeBest, 2) + ' ppm); suggested ' + pctOf(wt.suggested) + ' (' + n2(wt.maeSuggested, 2) + ' ppm), pulled toward the middle because ' + sm.count + ' readings is a small sample.').appendTo(wbox);
+                    if (Math.abs(wt.suggested - wt.current) >= 0.05) {
+                        var wmsg = $('<div></div>').css({ color: '#2a7', marginTop: '.2rem' }).hide().appendTo(wbox);
+                        var wbtn = $('<div></div>').appendTo(wbox).actionButton({ text: 'Apply ' + pctOf(wt.suggested), icon: '<i class="fas fa-check"></i>' });
+                        wbtn.on('click', function () {
+                            if (wbtn.hasClass('disabled')) return;
+                            wbtn[0].disabled(true);
+                            $.putApiService('/config/autoSwg', { projectionDamping: wt.suggested }, 'Saving the projection weighting...', function () {
+                                wmsg.text('Saved ' + pctOf(wt.suggested) + '. It applies the next time you Check or Refresh; reopen Settings to see it there.').show();
+                            });
+                        });
+                    }
+                }
                 var makeTable = function (cols, data, cell) {
                     var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.6rem' }).appendTo(wrap);
                     var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
