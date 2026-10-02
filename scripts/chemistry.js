@@ -145,6 +145,7 @@
             // running (so its next due time is visible even before the first apply).
             if (!data || (!data.lastAppliedAt && !data.nextAutoCheckAt)) {
                 if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
+                if (self._elAutoSwgDetailsToggle) { self._elAutoSwgDetailsToggle.hide(); self._elAutoSwgDetails.hide(); }
                 return;
             }
             if (!self._elAutoSwgSummary || self._elAutoSwgSummary.closest('body').length === 0) {
@@ -186,6 +187,19 @@
                     fontSize: '1em', color: '#fff', background: '#2a6fa8',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // The calculation details (the reasoning behind what was applied) expand and collapse,
+                // collapsed by default; what was applied, the pending step and every warning/info message
+                // above stay visible either way.
+                self._autoSwgDetailsOpen = false;
+                self._elAutoSwgDetailsToggle = $('<div class="picAutoSwgDetailsToggle"></div>')
+                    .css({ cursor: 'pointer', fontSize: '.85em', color: '#666', marginTop: '.3rem', userSelect: 'none' })
+                    .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
+                    .append($('<span></span>').text('Calculation details'))
+                    .attr('title', 'Show or hide the reasoning behind the last applied SWG %')
+                    .on('click', function () { self._autoSwgDetailsOpen = !self._autoSwgDetailsOpen; self._applyAutoSwgDetailsState(); })
+                    .hide().appendTo(self._elAutoSwgSummary.parent());
+                self._elAutoSwgDetails = $('<div></div>').css({ fontSize: '.8em', color: '#666', padding: '.15rem 0 .15rem 1rem' })
+                    .hide().appendTo(self._elAutoSwgSummary.parent());
             }
             var parts = [];
             if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
@@ -207,6 +221,25 @@
             var targetInfo = autoSwgTargetInfo(data);
             if (targetInfo) self._elAutoSwgTargetInfo.text('ℹ ' + targetInfo).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetInfo.hide();
+            // Calculation details: the rationale behind what was applied (never an unapplied preview).
+            var rationale = Array.isArray(data.lastAppliedRationale) ? data.lastAppliedRationale : [];
+            self._elAutoSwgDetails.empty();
+            self._autoSwgHasDetails = !!(data.lastAppliedAt && rationale.length > 0);
+            if (self._autoSwgHasDetails) {
+                $('<div></div>').text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(self._elAutoSwgDetails);
+                var detailsUl = $('<ul></ul>').css({ margin: '.15rem 0' }).appendTo(self._elAutoSwgDetails);
+                rationale.forEach(function (line) { $('<li></li>').appendTo(detailsUl).text(line); });
+            }
+            self._applyAutoSwgDetailsState();
+        },
+        // Shows the calculation details only while expanded (and there are details to show).
+        _applyAutoSwgDetailsState: function () {
+            var self = this;
+            if (!self._elAutoSwgDetailsToggle) return;
+            var has = !!self._autoSwgHasDetails, open = !!self._autoSwgDetailsOpen;
+            self._elAutoSwgDetailsToggle.toggle(has);
+            self._elAutoSwgDetailsToggle.find('i').removeClass('fa-chevron-right fa-chevron-down').addClass(open ? 'fa-chevron-down' : 'fa-chevron-right');
+            self._elAutoSwgDetails.toggle(has && open);
         },
         // Full status -- the pending step (if any) with its target date/time, the last
         // applied change, and the rationale text behind it. Like the summary line, this
