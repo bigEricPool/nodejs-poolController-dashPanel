@@ -536,6 +536,20 @@
             if (details.avgWindowExtended) text += ' (extended back from ' + inputs.windowDays + ' days to include at least 3 FC readings)';
             return text;
         },
+        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
+        _historyTypeLabel: function (e) {
+            if (e.type === 'FC') return 'FC reading';
+            if (e.type === 'CYA') return 'CYA change';
+            if (e.type === 'CL') return 'Liquid chlorine';
+            return 'SWG %';
+        },
+        _historyValueLabel: function (e) {
+            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
+            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
+            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
+            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
+            return n(e.pct, 2) + '%';
+        },
         // Human-readable source of a combined-history entry: PoolMath, or the local
         // log (an applied recommendation, an applied-but-overridden one, or a manual change).
         _historySourceLabel: function (e) {
@@ -578,12 +592,13 @@
                         .appendTo(wrap);
                     return;
                 }
-                var swgCount = entries.filter(function (e) { return e.type === 'SWG'; }).length;
-                var note = entries.length + ' entries (' + swgCount + ' SWG %, ' + (entries.length - swgCount) + ' FC), newest first. Times are shown in this browser\'s time zone. '
+                var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
+                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes), newest first. Times are shown in this browser\'s time zone. '
                     + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
-                    + '(the page refreshes the archive for the period it covers). The local SWG % log is kept for 18 months.';
+                    + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
+                    + 'The local SWG % log is kept for 18 months.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
@@ -601,8 +616,8 @@
                     var row = $('<tr></tr>').appendTo(body);
                     [
                         [self._fmtDateTime(e.ts), 'left'],
-                        [e.type === 'FC' ? 'FC reading' : 'SWG %', 'left'],
-                        [e.type === 'FC' ? blank(e.value) + ' ppm' : blank(e.pct) + '%', 'right'],
+                        [self._historyTypeLabel(e), 'left'],
+                        [self._historyValueLabel(e), 'right'],
                         [self._historySourceLabel(e), 'left'],
                         [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
                         [blank(rec.previousPct), 'right'],
@@ -637,6 +652,11 @@
                     ['Source', function (e) { return self._historySourceLabel(e); }],
                     ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
                     ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
+                    ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
+                    ['Previous CYA (ppm)', function (e) { return e.type === 'CYA' ? e.previous : undefined; }],
+                    ['Liquid chlorine strength (%)', function (e) { return e.type === 'CL' ? e.percent : undefined; }],
+                    ['Liquid chlorine volume (mL)', function (e) { return e.type === 'CL' ? e.ml : undefined; }],
+                    ['Liquid chlorine adds (ppm FC)', function (e) { return e.type === 'CL' ? e.ppm : undefined; }],
                     ['ppm/day', function (e) { return e.ppmPerDay; }],
                     ['Run hours', function (e) { return e.hrs; }],
                     ['Previous %', function (e) { return (e.record || {}).previousPct; }],
