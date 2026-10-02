@@ -174,6 +174,12 @@
                     fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#d35400',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // FC readings that don't add up (an unlogged chlorine addition or a wrong reading): the
+                // calculation left those intervals out until PoolMath is corrected.
+                self._elAutoSwgAnomaly = $('<div></div>').css({
+                    fontSize: '1em', color: '#fff', background: '#d35400',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
                 // Informational (not a warning): FC is high enough that even 0% SWG won't reach
                 // the target by the deadline.
                 self._elAutoSwgTargetInfo = $('<div></div>').css({
@@ -196,6 +202,8 @@
             var targetWarning = autoSwgTargetWarning(data);
             if (targetWarning) self._elAutoSwgTargetWarning.text('⚠ ' + targetWarning).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetWarning.hide();
+            if (data.lastAppliedFcAnomalyNote) self._elAutoSwgAnomaly.text('⚠ Check PoolMath: an FC reading or chlorine addition may be missing -- tap for details.').off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgAnomaly.hide();
             var targetInfo = autoSwgTargetInfo(data);
             if (targetInfo) self._elAutoSwgTargetInfo.text('ℹ ' + targetInfo).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetInfo.hide();
@@ -223,6 +231,9 @@
             }
             // Only in this popup, not as a dashboard banner -- it's a caution about how reliable
             // the last apply's projection was, not something that needs attention.
+            if (data.lastAppliedFcAnomalyNote) {
+                addLine('⚠ ' + data.lastAppliedFcAnomalyNote, { color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
             if (data.lastAppliedStaleFcNote) {
                 addLine('ℹ ' + data.lastAppliedStaleFcNote, { color: '#5a4300', background: '#ffe9a8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }

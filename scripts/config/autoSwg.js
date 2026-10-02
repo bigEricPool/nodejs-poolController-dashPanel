@@ -84,6 +84,10 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Credit liquid chlorine additions logged in PoolMath', binding: 'creditChlorineAdditions' })
                 .attr('title', "A liquid chlorine addition logged in PoolMath between two FC readings raises the second reading without the SWG having done it. With this on, each addition is credited as FC added (strength x amount / pool volume, using Gallons above) when working out consumption and projecting the current FC; with it off, the rise is counted as SWG output and consumption is understated. Other chlorine products aren't recognized yet.");
 
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Anomaly Tolerance', binding: 'fcAnomalyTolerancePpm', min: 0, max: 10, step: 0.5, units: 'ppm (0 = off)', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off.");
+
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
             // below-target one. Same label width so the two spinners line up.
@@ -216,6 +220,12 @@
             // deadline -- informational (blue), the % is simply at its floor.
             self._elTargetInfo = $('<div></div>').appendTo(results).css({
                 color: '#fff', background: '#2a6fa8',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
+            // FC rose more than the SWG and logged chlorine can explain, so those intervals were left out
+            // of the average -- log the chlorine in PoolMath or fix the reading there.
+            self._elFcAnomaly = $('<div></div>').appendTo(results).css({
+                color: '#fff', background: '#d35400',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
             // The newest FC reading is several days old, so the projection is mostly
@@ -458,6 +468,8 @@
             else self._elTargetWarning.hide();
             if (hasCalc && result.targetInfo) self._elTargetInfo.text('ℹ ' + result.targetInfo).show();
             else self._elTargetInfo.hide();
+            if (hasCalc && result.fcAnomalyNote) self._elFcAnomaly.text('⚠ ' + result.fcAnomalyNote).show();
+            else self._elFcAnomaly.hide();
             if (hasCalc && result.staleFcNote) self._elStaleFcNote.text('ℹ ' + result.staleFcNote).show();
             else self._elStaleFcNote.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
