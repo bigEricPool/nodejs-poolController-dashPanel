@@ -221,15 +221,12 @@
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
+            var btnTune = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Tune', icon: '<i class="fas fa-sliders"></i>' })
+                .attr('title', 'Checks your saved settings against your FC history and recommends one change, or tells you your settings look good. The detailed Projection Accuracy and What-If Sweep reports open from there.');
+            btnTune.on('click', function (e) { self._showTune(); });
             var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
                 .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
             btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
-            var btnAccuracy = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>' })
-                .attr('title', 'Checks the algorithm against reality: for each recent FC reading, re-runs the calculation as of just before it (with only the data logged by then) and compares the projected FC with what you measured. Also shows how close FC was to each target at its deadline.');
-            btnAccuracy.on('click', function (e) { self._showProjectionAccuracy(); });
-            var btnWhatIf = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>' })
-                .attr('title', 'Re-scores the projections under other settings -- averaging windows, daylight weighting off, the chlorine credit toggled, other anomaly tolerances -- on the same FC readings as your current settings, and shows which would have predicted better. Takes a few seconds.');
-            btnWhatIf.on('click', function (e) { self._showWhatIf(); });
             var btnResetTuning = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Reset Tuning to Defaults', icon: '<i class="fas fa-undo"></i>' })
                 .attr('title', 'Puts every tuning option back to its default in this form -- Save Settings to keep it.');
             btnResetTuning.on('click', function () {
@@ -663,6 +660,73 @@
             var rec = e.record || {};
             return typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct ? 'Local - applied (overridden)' : 'Local - applied recommendation';
         },
+        // Tune: the two reports boiled down to one recommendation (GET /state/autoSwg/tune). The detailed reports
+        // are one click away from here.
+        _showTune: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/tune', null, 'Checking your settings against your FC history (this takes a few seconds)...', function (t) {
+                t = t || {};
+                var buttons = [
+                    { text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showProjectionAccuracy(); } },
+                    { text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showWhatIf(); } },
+                    { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                ];
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgTune', { width: '640px', height: 'auto', title: 'Tune AutoSwg', buttons: buttons });
+                var wrap = $('<div></div>').css({ maxHeight: '30rem', overflowY: 'auto', padding: '.25rem .5rem', fontSize: '.9em', lineHeight: '1.35' }).appendTo(dlg);
+                var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
+                var n2 = function (v, d) { return typeof v === 'number' ? v.toFixed(d) : '--'; };
+                var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
+                var names = { windowDays: 'Averaging Window', projectionDamping: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance' };
+                var fmt = function (k, v) {
+                    if (typeof v === 'boolean') return v ? 'on' : 'off';
+                    if (k === 'windowDays' || k === 'projectionTaperStartDays' || k === 'projectionTaperEndDays') return v + (k === 'projectionTaperEndDays' && v === 0 ? ' (no taper)' : ' days');
+                    if (k === 'projectionDamping') return Math.round(v * 100) + '%';
+                    if (k === 'fcAnomalyTolerancePpm') return v + ' ppm';
+                    return String(v);
+                };
+                var box = function (bg, color) { return $('<div></div>').css({ background: bg, color: color, padding: '.5rem .7rem', borderRadius: '.25rem', margin: '.3rem 0' }).appendTo(wrap); };
+                // where we stand
+                if (typeof t.meanAbsError === 'number') {
+                    var base = typeof t.unchangedMae === 'number' ? ' The "FC unchanged" baseline is ' + n2(t.unchangedMae, 2) + ' ppm, so the algorithm is ' + Math.abs(Math.round(t.skill * 100)) + '% ' + (t.skill > 0 ? 'better' : 'worse') + ' than that.' : '';
+                    para('Your saved settings score a mean error of ' + n2(t.meanAbsError, 2) + ' ppm over ' + t.readings + ' FC readings' + (t.history && t.history.from ? ' (history from ' + new Date(t.history.from).toLocaleDateString([], { dateStyle: 'medium' }) + ')' : '') + '.' + base, { color: '#666' });
+                }
+                if (t.status === 'insufficient') {
+                    var b0 = box('#ffe9a8', '#5a4300');
+                    b0.append($('<div></div>').css({ fontWeight: 'bold' }).text('Not enough readings to tune on yet'));
+                    b0.append($('<div></div>').text('Only ' + (t.readings || 0) + ' FC readings could be scored under every setting; about 30 is a good number. Keep logging FC and SWG % in PoolMath and try again later.'));
+                }
+                else if (t.status === 'good') {
+                    var b1 = box('#2a7', '#fff');
+                    b1.append($('<div></div>').css({ fontWeight: 'bold' }).text('Your settings look good'));
+                    b1.append($('<div></div>').text('Nothing tested is clearly better than what you have, so there is nothing to change. Check again after a season change, a cell swap, or a change in how often you test.'));
+                }
+                else if (t.status === 'recommend' && t.recommendation) {
+                    var r = t.recommendation;
+                    var b2 = box('#2a6fa8', '#fff');
+                    b2.append($('<div></div>').css({ fontWeight: 'bold' }).text('Recommended change: ' + r.label));
+                    b2.append($('<div></div>').text(Object.keys(r.settings).map(function (k) { return (names[k] || k) + ' = ' + fmt(k, r.settings[k]); }).join('  ·  ')));
+                    b2.append($('<div></div>').text('Expected mean error ' + n2(r.currentMae, 2) + ' to ' + n2(r.expectedMae, 2) + ' ppm (change ' + signed(r.change) + ', 90% range [' + signed(r.low) + ', ' + signed(r.high) + ']).'));
+                    var next = r.kind === 'window'
+                        ? 'Apply it, then press Tune once more: the window interacts with the weighting and taper, so those are judged after it. After that, stop.'
+                        : 'Apply it and you are done for now. Wait for about 10 new FC readings, then check the "Since you changed" line in Projection Accuracy.';
+                    para(next, { color: '#666' });
+                    var done = $('<div></div>').css({ color: '#2a7', fontWeight: 'bold', padding: '.2rem 0' }).hide().appendTo(wrap);
+                    var btn = $('<div></div>').appendTo(wrap).actionButton({ text: 'Apply', icon: '<i class="fas fa-check"></i>' });
+                    btn.on('click', function () {
+                        if (btn.hasClass('disabled')) return;
+                        btn[0].disabled(true);
+                        $.putApiService('/config/autoSwg', r.settings, 'Saving the settings...', function () {
+                            self._applySettingsToForm(r.settings);
+                            done.text('Saved. ' + (r.kind === 'window' ? 'Press Tune once more to see whether a weighting or taper is still worthwhile, then stop.' : 'You are done for now. Check "Since you changed" in Projection Accuracy after about 10 new readings.')).show();
+                        });
+                    });
+                }
+                if (t.sinceChange && t.sinceChange.count < 10) {
+                    para('Note: you changed the tuning settings with only ' + t.sinceChange.count + ' new reading' + (t.sinceChange.count === 1 ? '' : 's') + ' since. Changing them again now fits the same history twice, so any improvement may not be real; waiting for about 10 new readings is better.', { color: '#b36b00' });
+                }
+                para('Tune uses your saved settings: if you just changed them in the form, press Save Settings first. Gains are an estimate until about 10 new readings confirm them.', { color: '#666', fontSize: '.85em' });
+            });
+        },
         // A short guide to tuning: what the two reports are for, the order to use them in, and how to check the result.
         _showTuningHelp: function () {
             var self = this;
@@ -675,7 +739,15 @@
                 var ul = $('<ul></ul>').css({ margin: '.1rem 0 .3rem 0', paddingLeft: '1.2rem' }).appendTo(wrap);
                 items.forEach(function (t) { $('<li></li>').appendTo(ul).text(t); });
             };
-            para('The defaults suit most pools. Tuning starts to pay off once you have about 30 FC readings, and it is worth doing again when conditions change. Both reports are under Tuning options.');
+            para('The defaults suit most pools. Tuning starts to pay off once you have about 30 FC readings, and it is worth doing again when conditions change.');
+            head('The quick way: press Tune');
+            list([
+                'Tune checks your saved settings against your FC history and gives ONE recommendation, or says your settings look good.',
+                'Apply it. If it was a window change, press Tune once more (the window interacts with the weighting and taper), then stop.',
+                'Then leave it alone for about 10 new FC readings and check the "Since you changed" line in Projection Accuracy.',
+                'Do not tune in a loop: each pass is scored on the same history, so it makes the numbers look better without the real accuracy improving.'
+            ]);
+            para('The rest of this guide explains the two detailed reports behind Tune, which you can open from the Tune dialog.', { color: '#666' });
             head('1. Projection Accuracy: where you stand');
             list([
                 'Readings scored: aim for 30 or more; with fewer, everything is rough.',
