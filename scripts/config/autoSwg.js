@@ -746,6 +746,23 @@
                 if (st.manualChangeSinceTune) {
                     para('You changed the tuning settings by hand since your last Tune, so tuning again can be worthwhile.', { color: '#2a6fa8' });
                 }
+                // The recent Tune runs (the newest is the one just shown), so results can be compared over time.
+                var prevBox = $('<div></div>').appendTo(wrap);
+                $.getApiService('/state/autoSwg/tune/history', null, function (h) {
+                    var recs = (Array.isArray(h) ? h : []).slice(1, 6);
+                    if (recs.length === 0) return;
+                    $('<div></div>').css({ fontWeight: 'bold', padding: '.6rem 0 .15rem 0' }).text('Previous tunes').appendTo(prevBox);
+                    recs.forEach(function (r) {
+                        var st2 = r.settings || {};
+                        var set = 'window ' + st2.windowDays + ' d, weighting ' + Math.round((st2.projectionDamping === undefined ? 1 : st2.projectionDamping) * 100) + '%' + (st2.projectionTaperEndDays > 0 ? ', taper ' + st2.projectionTaperStartDays + ' to ' + st2.projectionTaperEndDays + ' d' : ', no taper');
+                        var outcome = r.status === 'good' ? 'settings looked good'
+                            : r.status === 'insufficient' ? 'too few readings to tune on'
+                            : 'recommended ' + (r.recommendation ? r.recommendation.label + ' (expected ' + n2(r.recommendation.expectedMae, 2) + ' ppm)' : '') + (r.applied ? ', applied ' + new Date(r.applied.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ', not applied');
+                        $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '.1rem 0' })
+                            .text(new Date(r.ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' · ' + set + ' · ' + r.readings + ' readings, error ' + n2(r.meanAbsError, 2) + ' ppm' + (typeof r.unchangedMae === 'number' ? ' (baseline ' + n2(r.unchangedMae, 2) + ')' : '') + ' · ' + outcome)
+                            .appendTo(prevBox);
+                    });
+                });
                 para('Tune uses your saved settings: if you just changed them in the form, press Save Settings first. Gains are an estimate until about 10 new readings confirm them.', { color: '#666', fontSize: '.85em' });
             });
         },
