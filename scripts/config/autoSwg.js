@@ -403,7 +403,7 @@
             // what happened rather than leaving Apply/Cancel sitting there (just disabled)
             // with no explanation for why.
             if (!fromSaved && hasCalc && !result.pending) {
-                self._elAutoApplied.text('✓ Automatically applied ' + result.lastAppliedPct + '% (Auto-Apply Recommendations is on).').show();
+                self._elAutoApplied.text('✓ Automatically applied ' + result.lastAppliedPct + '% (Auto-Apply Recommendations is on).' + (result.targetInfo ? ' Note: ' + result.targetInfo : '')).show();
             }
             else self._elAutoApplied.hide();
             self._elSkipNote.hide();
@@ -647,8 +647,11 @@
             var self = this;
             if (!self._lastResult) return;
             var pct = self._lastResult.recommendedPct;
+            // When FC is too far above target to burn down by the original deadline, the
+            // calculation moved the target date out -- say so before it's applied.
+            var infoNote = self._lastResult.targetInfo ? ' Note: ' + self._lastResult.targetInfo : '';
             $.pic.modalDialog.createConfirm('dlgConfirmApplyAutoSwg', {
-                message: 'Set the SWG pool setpoint to ' + pct + '%? This changes the same setting as the Chlorinator panel above -- you can still edit it manually there at any time afterward. The change and the calculation behind it are logged locally and used by future checks.',
+                message: 'Set the SWG pool setpoint to ' + pct + '%?' + infoNote + ' This changes the same setting as the Chlorinator panel above -- you can still edit it manually there at any time afterward. The change and the calculation behind it are logged locally and used by future checks.',
                 width: '420px',
                 height: 'auto',
                 title: 'Confirm Apply SWG %',
