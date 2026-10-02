@@ -745,7 +745,21 @@
             if (e.source === 'poolmath') return 'PoolMath';
             if (e.source === 'local-manual') return 'Local - manual change';
             var rec = e.record || {};
-            return typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct ? 'Local - applied (overridden)' : 'Local - applied recommendation';
+            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
+            // What caused it (records written before this was kept have no trigger and keep the plain label).
+            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
+            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
+            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
+        },
+        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
+        // new one, or started one and moved it out to when consumption alone reaches the target.
+        _historyTargetLabel: function (e) {
+            var rec = e.record || {};
+            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
+            var d = this._fmtDateTime(rec.targetDate);
+            if (rec.targetOutcome === 'kept') return 'Kept ' + d;
+            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
+            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was;
         },
         // Pressing Tune: if it was run recently and too few FC readings have come in since to tell whether its change
         // helped, ask first (with a Cancel). If the tuning settings were changed by hand since the last Tune, tuning again
@@ -1110,7 +1124,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
                     { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
-                    { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }
+                    { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
                 ];
                 var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
                 cols.forEach(function (c) {
@@ -1128,7 +1142,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                         [self._historySourceLabel(e), 'left'],
                         [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
                         [blank(rec.previousPct), 'right'],
-                        [blank(rec.recommendedPct), 'right']
+                        [blank(rec.recommendedPct), 'right'],
+                        [self._historyTargetLabel(e), 'left']
                     ].forEach(function (cell) {
                         $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(row);
                     });
@@ -1168,6 +1183,9 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     ['Run hours', function (e) { return e.hrs; }],
                     ['Previous %', function (e) { return (e.record || {}).previousPct; }],
                     ['Recommended %', function (e) { return (e.record || {}).recommendedPct; }],
+                    ['Target outcome', function (e) { return (e.record || {}).targetOutcome; }],
+                    ['Target date (ISO)', function (e) { return (e.record || {}).targetDate; }],
+                    ['Previous target date (ISO)', function (e) { return (e.record || {}).previousTargetDate; }],
                     ['Maintenance %', function (e) { return out(e).maintenancePct; }],
                     ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
                     ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
