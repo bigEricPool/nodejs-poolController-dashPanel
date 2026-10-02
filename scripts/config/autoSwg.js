@@ -739,7 +739,7 @@
                             + (typeof sc.unchangedMae === 'number' ? ' (the "unchanged" baseline over the same readings: ' + n2(sc.unchangedMae, 2) + ' ppm)' : '') + '. These are readings the settings were not tuned on, so this is the honest measure.').appendTo(sumBox);
                 }
                 var wt = sm.weighting || {};
-                if (typeof wt.suggested === 'number') {
+                if (wt.suggested && typeof wt.suggested.weight === 'number') {   // an object since the gap taper: { weight, taperStart, taperEnd }
                     var pctOf = function (v) { return Math.round(v * 100) + '%'; };
                     var wbox = $('<div></div>').css({ marginTop: '.3rem' }).appendTo(sumBox);
                     var describe = function (c) { return pctOf(c.weight) + (c.taperEnd > 0 ? ', tapering to zero from ' + c.taperStart + ' to ' + c.taperEnd + ' days' : ', no taper'); };
