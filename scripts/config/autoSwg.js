@@ -145,7 +145,7 @@
                 .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
                 .append($('<span></span>').text('Tuning options'))
                 .append($('<span></span>').addClass('picAutoSwgTuningBadge').css({ marginLeft: '.6rem', fontWeight: 'normal', fontSize: '.85em', color: '#b36b00' }))
-                .attr('title', 'Averaging window, daylight and chlorine-credit handling, anomaly tolerance and the projection weighting and taper. The defaults suit most pools; the Projection Accuracy and What-If Sweep reports suggest values for yours.')
+                .attr('title', 'Averaging window, daylight and chlorine-credit handling, anomaly tolerance and the projection weighting and taper. The defaults suit most pools; the Projection Accuracy and What-If Sweep reports, opened from the buttons in this section, suggest values for yours.')
                 .on('click', function () {
                     self._tuningOpen = !self._tuningOpen;
                     try { window.localStorage.setItem('autoSwgTuningOpen', self._tuningOpen ? '1' : '0'); } catch (e) { /* storage unavailable */ }
@@ -179,12 +179,8 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Down to Zero At', binding: 'projectionTaperEndDays', min: 0, max: 60, step: 1, units: 'days (0 = no taper)', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', "The longer it has been since your last FC test, the less the modelled change (SWG output minus consumption) should be trusted. With these set, the Projection Weighting applies in full until the last reading is 'Taper Weighting After' days old, then falls in a straight line to zero at 'Down to Zero At' days, when the projection is simply your last measured FC plus any chlorine you logged. On the readings tested so far the model helped for gaps under about 5 days and hurt beyond, so something like 3 and 8 days works well. 0 for 'Down to Zero At' turns the taper off.");
 
-            var btnResetTuning = $('<div></div>').appendTo(self._elTuning).actionButton({ text: 'Reset Tuning to Defaults', icon: '<i class="fas fa-undo"></i>' })
-                .attr('title', 'Puts every tuning option back to its default in this form -- Save Settings to keep it.');
-            btnResetTuning.on('click', function () {
-                Object.keys(self._tuningDefaults).forEach(function (k) { self._setBound(k, self._tuningDefaults[k]); });
-                self._updateTuningBadge();
-            });
+            // Tools for tuning (the accuracy report and what-if sweep) and the reset live in this row.
+            self._elTuningBtns = $('<div class="picBtnPanel btn-panel"></div>').appendTo(self._elTuning);
             self._applyTuningState();
 
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
@@ -225,12 +221,18 @@
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
             var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
             btnHistory.on('click', function (e) { self._showHistory(); });
-            var btnAccuracy = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>' })
+            var btnAccuracy = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>' })
                 .attr('title', 'Checks the algorithm against reality: for each recent FC reading, re-runs the calculation as of just before it (with only the data logged by then) and compares the projected FC with what you measured. Also shows how close FC was to each target at its deadline.');
             btnAccuracy.on('click', function (e) { self._showProjectionAccuracy(); });
-            var btnWhatIf = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>' })
+            var btnWhatIf = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>' })
                 .attr('title', 'Re-scores the projections under other settings -- averaging windows, daylight weighting off, the chlorine credit toggled, other anomaly tolerances -- on the same FC readings as your current settings, and shows which would have predicted better. Takes a few seconds.');
             btnWhatIf.on('click', function (e) { self._showWhatIf(); });
+            var btnResetTuning = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Reset Tuning to Defaults', icon: '<i class="fas fa-undo"></i>' })
+                .attr('title', 'Puts every tuning option back to its default in this form -- Save Settings to keep it.');
+            btnResetTuning.on('click', function () {
+                Object.keys(self._tuningDefaults).forEach(function (k) { self._setBound(k, self._tuningDefaults[k]); });
+                self._updateTuningBadge();
+            });
 
             // Results area -- hidden until there's anything to show: either applied/pending-step
             // status, or a calculation preview (fresh Check Now, or the last one from before,
@@ -682,6 +684,15 @@
                 // can be applied straight from here.
                 if (typeof sm.unchangedMae === 'number') {
                     $('<div></div>').css({ marginTop: '.3rem' }).text('Baseline "FC unchanged since the last reading": ' + n2(sm.unchangedMae, 2) + ' ppm. The algorithm is ' + Math.abs(Math.round(sm.skill * 100)) + '% ' + (sm.skill > 0 ? 'better' : 'worse') + ' than that.').appendTo(sumBox);
+                }
+                // How the current tuning is doing on readings it wasn't tuned on: only those since it last changed.
+                if (sm.sinceChange) {
+                    var sc = sm.sinceChange;
+                    var scWhen = new Date(sc.since).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+                    $('<div></div>').css({ marginTop: '.3rem', fontWeight: 'bold' }).text(sc.count === 0
+                        ? 'Since you changed the tuning settings (' + scWhen + '): no new readings yet.'
+                        : 'Since you changed the tuning settings (' + scWhen + '): ' + sc.count + ' new reading' + (sc.count === 1 ? '' : 's') + ', mean error ' + n2(sc.meanAbsError, 2) + ' ppm'
+                            + (typeof sc.unchangedMae === 'number' ? ' (the "unchanged" baseline over the same readings: ' + n2(sc.unchangedMae, 2) + ' ppm)' : '') + '. These are readings the settings were not tuned on, so this is the honest measure.').appendTo(sumBox);
                 }
                 var wt = sm.weighting || {};
                 if (typeof wt.suggested === 'number') {
