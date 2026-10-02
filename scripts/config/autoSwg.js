@@ -189,6 +189,9 @@
             var btnAccuracy = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>' })
                 .attr('title', 'Checks the algorithm against reality: for each recent FC reading, re-runs the calculation as of just before it (with only the data logged by then) and compares the projected FC with what you measured. Also shows how close FC was to each target at its deadline.');
             btnAccuracy.on('click', function (e) { self._showProjectionAccuracy(); });
+            var btnWhatIf = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>' })
+                .attr('title', 'Re-scores the projections under other settings -- averaging windows, daylight weighting off, the chlorine credit toggled, other anomaly tolerances -- on the same FC readings as your current settings, and shows which would have predicted better. Takes a few seconds.');
+            btnWhatIf.on('click', function (e) { self._showWhatIf(); });
 
             // Results area -- hidden until there's anything to show: either applied/pending-step
             // status, or a calculation preview (fresh Check Now, or the last one from before,
@@ -620,6 +623,43 @@
                             return [self._fmtDateTime(t.appliedAt), n2(t.targetFc, 1) + ' ppm', self._fmtDateTime(t.targetDate), nearest, t.nearest ? signed(t.difference) + ' ppm' : ''];
                         });
                 }
+            });
+        },
+        // Compares the algorithm's accuracy under alternative settings against the current ones, on the
+        // same readings (GET /state/autoSwg/projectionAccuracy/whatIf).
+        _showWhatIf: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/projectionAccuracy/whatIf', null, 'Re-scoring projections under other settings (this takes a few seconds)...', function (h) {
+                h = h || {};
+                var variants = Array.isArray(h.variants) ? h.variants : [];
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgWhatIf', { width: '860px', height: 'auto', title: 'What-If Sweep',
+                    buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+                var wrap = $('<div></div>').css({ maxHeight: '28rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                var note = function (text, style) { return $('<div></div>').css($.extend({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }, style || {})).text(text).appendTo(wrap); };
+                if (variants.length === 0 || !h.count) {
+                    note('Not enough scored readings to compare settings yet (' + (h.count || 0) + ' readings could be scored under every variant).', { fontStyle: 'italic', padding: '.5rem' });
+                    return;
+                }
+                var n2 = function (v) { return typeof v === 'number' ? v.toFixed(2) : '--'; };
+                var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
+                note('Each row re-scores the same ' + h.count + ' FC readings (' + (h.skipped || 0) + ' skipped) under different settings: the projected FC just before each reading, compared with what was measured. '
+                    + '"Change" is how much the mean absolute error moves versus your current settings (negative is better) with a 90% range; a setting is called better or worse only when that range excludes zero. '
+                    + 'Differences under about 0.1 ppm are too small to tell apart with this many readings. Nothing here changes your settings.');
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.6rem' }).appendTo(wrap);
+                var cols = [{ t: 'Settings', a: 'left' }, { t: 'Mean abs error (ppm)', a: 'right' }, { t: 'RMSE', a: 'right' }, { t: 'Bias', a: 'right' }, { t: 'Change vs current (90% range)', a: 'right' }, { t: 'Verdict', a: 'left' }];
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                cols.forEach(function (c) { $('<th></th>').text(c.t).css({ textAlign: c.a, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                variants.forEach(function (v) {
+                    var tr = $('<tr></tr>').appendTo(body);
+                    if (v.verdict === 'current') tr.css({ background: 'rgba(128,128,128,.12)', fontWeight: 'bold' });
+                    var change = v.verdict === 'current' ? '' : signed(v.diff) + '  [' + signed(v.diffLow) + ', ' + signed(v.diffHigh) + ']';
+                    var color = v.verdict === 'better' ? '#2a7' : (v.verdict === 'worse' ? '#c0392b' : '#666');
+                    [[v.label, 'left'], [n2(v.meanAbsError), 'right'], [n2(v.rmse), 'right'], [signed(v.bias), 'right'], [change, 'right'], [v.verdict === 'current' ? 'current' : v.verdict, 'left']].forEach(function (cell, i) {
+                        var td = $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr);
+                        if (i === 5 && v.verdict !== 'current') td.css({ color: color, fontWeight: v.verdict === 'no clear difference' ? 'normal' : 'bold' });
+                    });
+                });
             });
         },
         // Downloads the scored readings as CSV, oldest first.
