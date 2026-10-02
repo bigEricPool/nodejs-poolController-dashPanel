@@ -92,6 +92,11 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionDamping', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
                 .attr('title', "When projecting the current FC from your last reading, how much of the modelled change since then (SWG output minus consumption) to apply. FC usually moves less between tests than the model expects -- weather alone swings consumption by a ppm a day -- so a value below 1 often predicts better. 1 applies all of it, 0 starts from the last reading unchanged. Liquid chlorine you logged is always added in full. The Projection Accuracy report suggests a value from your own readings (and can apply it). A change takes effect the next time you Check or Refresh.");
 
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Taper Weighting After', binding: 'projectionTaperStartDays', min: 0, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Down to Zero At', binding: 'projectionTaperEndDays', min: 0, max: 60, step: 1, units: 'days (0 = no taper)', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', "The longer it has been since your last FC test, the less the modelled change (SWG output minus consumption) should be trusted. With these set, the Projection Weighting applies in full until the last reading is 'Taper Weighting After' days old, then falls in a straight line to zero at 'Down to Zero At' days, when the projection is simply your last measured FC plus any chlorine you logged. On the readings tested so far the model helped for gaps under about 5 days and hurt beyond, so something like 3 and 8 days works well. 0 for 'Down to Zero At' turns the taper off.");
+
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
             // below-target one. Same label width so the two spinners line up.
@@ -624,16 +629,18 @@
                 if (typeof wt.suggested === 'number') {
                     var pctOf = function (v) { return Math.round(v * 100) + '%'; };
                     var wbox = $('<div></div>').css({ marginTop: '.3rem' }).appendTo(sumBox);
-                    $('<div></div>').text('Projection weighting (how much of the modelled FC change since the last reading to trust): currently ' + pctOf(wt.current) + ' (' + n2(wt.maeCurrent, 2) + ' ppm). '
-                        + 'On these readings the best would have been ' + pctOf(wt.best) + ' (' + n2(wt.maeBest, 2) + ' ppm); suggested ' + pctOf(wt.suggested) + ' (' + n2(wt.maeSuggested, 2) + ' ppm), pulled toward the middle because ' + sm.count + ' readings is a small sample.').appendTo(wbox);
-                    if (Math.abs(wt.suggested - wt.current) >= 0.05) {
+                    var describe = function (c) { return pctOf(c.weight) + (c.taperEnd > 0 ? ', tapering to zero from ' + c.taperStart + ' to ' + c.taperEnd + ' days' : ', no taper'); };
+                    $('<div></div>').text('Projection weighting (how much of the modelled FC change since the last reading to trust): currently ' + describe(wt.current) + ' (' + n2(wt.maeCurrent, 2) + ' ppm). '
+                        + 'On these readings the best would have been ' + describe(wt.best) + ' (' + n2(wt.maeBest, 2) + ' ppm); suggested ' + describe(wt.suggested) + ' (' + n2(wt.maeSuggested, 2) + ' ppm), pulled toward the middle because ' + sm.count + ' readings is a small sample.').appendTo(wbox);
+                    var differs = Math.abs(wt.suggested.weight - wt.current.weight) >= 0.05 || wt.suggested.taperEnd !== wt.current.taperEnd || (wt.suggested.taperEnd > 0 && wt.suggested.taperStart !== wt.current.taperStart);
+                    if (differs) {
                         var wmsg = $('<div></div>').css({ color: '#2a7', marginTop: '.2rem' }).hide().appendTo(wbox);
-                        var wbtn = $('<div></div>').appendTo(wbox).actionButton({ text: 'Apply ' + pctOf(wt.suggested), icon: '<i class="fas fa-check"></i>' });
+                        var wbtn = $('<div></div>').appendTo(wbox).actionButton({ text: 'Apply ' + describe(wt.suggested), icon: '<i class="fas fa-check"></i>' });
                         wbtn.on('click', function () {
                             if (wbtn.hasClass('disabled')) return;
                             wbtn[0].disabled(true);
-                            $.putApiService('/config/autoSwg', { projectionDamping: wt.suggested }, 'Saving the projection weighting...', function () {
-                                wmsg.text('Saved ' + pctOf(wt.suggested) + '. It applies the next time you Check or Refresh; reopen Settings to see it there.').show();
+                            $.putApiService('/config/autoSwg', { projectionDamping: wt.suggested.weight, projectionTaperStartDays: wt.suggested.taperStart, projectionTaperEndDays: wt.suggested.taperEnd }, 'Saving the projection weighting...', function () {
+                                wmsg.text('Saved ' + describe(wt.suggested) + '. It applies the next time you Check or Refresh; reopen Settings to see it there.').show();
                             });
                         });
                     }
