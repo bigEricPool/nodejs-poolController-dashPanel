@@ -191,6 +191,9 @@
             self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
+            // The background PoolMath history archive (up to 18 months of logs, pulled from PoolMath's
+            // JSON interface for longer-range features such as a last-year consumption lookback).
+            self._elArchiveStatus = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             // What's actually explaining the % running on the chlorinator right now (saved at
             // Apply time, or by an automatic step).
             self._elAppliedRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
@@ -433,6 +436,9 @@
             // When the periodic automatic check is next due (only present while it's running).
             if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
             else self._elNextAutoCheck.hide();
+            if (result.archiveError) self._elArchiveStatus.text('PoolMath history sync problem: ' + result.archiveError + (result.archiveCount ? ' (last good sync kept ' + result.archiveCount + ' entries)' : '')).show();
+            else if (result.archiveCount) self._elArchiveStatus.text('PoolMath history archive: ' + result.archiveCount + ' entries back to ' + new Date(result.archiveOldest).toLocaleDateString([], { dateStyle: 'medium' }) + ' (synced ' + new Date(result.archiveSyncedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')').show();
+            else self._elArchiveStatus.hide();
             var hasApplied = result.lastAppliedAt && Array.isArray(result.lastAppliedRationale) && result.lastAppliedRationale.length > 0;
             self._elAppliedRationale.empty();
             if (hasApplied) {
