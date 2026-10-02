@@ -223,7 +223,7 @@
             btnHistory.on('click', function (e) { self._showHistory(); });
             var btnTune = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Tune', icon: '<i class="fas fa-sliders"></i>' })
                 .attr('title', 'Checks your saved settings against your FC history and recommends one change, or tells you your settings look good. The detailed Projection Accuracy and What-If Sweep reports open from there.');
-            btnTune.on('click', function (e) { self._showTune(); });
+            btnTune.on('click', function (e) { self._tuneClick(); });
             var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
                 .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
             btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
@@ -660,10 +660,32 @@
             var rec = e.record || {};
             return typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct ? 'Local - applied (overridden)' : 'Local - applied recommendation';
         },
+        // Pressing Tune: if it was run recently and too few FC readings have come in since to tell whether its change
+        // helped, ask first (with a Cancel). If the tuning settings were changed by hand since the last Tune, tuning again
+        // can be worthwhile, so go straight ahead.
+        _tuneClick: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/tune/status', null, function (st) {
+                st = st || {};
+                var tooSoon = !!st.lastTuneAt && !st.manualChangeSinceTune && typeof st.readingsSinceTune === 'number' && st.readingsSinceTune < (st.needed || 10);
+                if (!tooSoon) { self._showTune(st); return; }
+                var n = st.readingsSinceTune;
+                $.pic.modalDialog.createConfirm('dlgAutoSwgTuneAgain', {
+                    message: 'You last tuned on ' + new Date(st.lastTuneAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', and ' + (n === 0 ? 'no new FC readings have' : n + ' new FC reading' + (n === 1 ? ' has' : 's have')) + ' come in since. '
+                        + 'About ' + (st.needed || 10) + ' are needed to tell whether that change helped. Tuning again now fits the same history a second time, so any improvement it shows is likely to be noise. Tune anyway?',
+                    width: '460px', height: 'auto', title: 'Tune again so soon?',
+                    buttons: [
+                        { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } },
+                        { text: 'Tune Anyway', icon: '<i class="fas fa-sliders"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showTune(st); } }
+                    ]
+                });
+            });
+        },
         // Tune: the two reports boiled down to one recommendation (GET /state/autoSwg/tune). The detailed reports
         // are one click away from here.
-        _showTune: function () {
+        _showTune: function (st) {
             var self = this;
+            st = st || {};
             $.getApiService('/state/autoSwg/tune', null, 'Checking your settings against your FC history (this takes a few seconds)...', function (t) {
                 t = t || {};
                 var buttons = [
@@ -715,14 +737,14 @@
                     btn.on('click', function () {
                         if (btn.hasClass('disabled')) return;
                         btn[0].disabled(true);
-                        $.putApiService('/config/autoSwg', r.settings, 'Saving the settings...', function () {
+                        $.putApiService('/config/autoSwg', $.extend({ tuneApplied: true }, r.settings), 'Saving the settings...', function () {
                             self._applySettingsToForm(r.settings);
                             done.text('Saved. ' + (r.kind === 'window' ? 'Press Tune once more to see whether a weighting or taper is still worthwhile, then stop.' : 'You are done for now. Check "Since you changed" in Projection Accuracy after about 10 new readings.')).show();
                         });
                     });
                 }
-                if (t.sinceChange && t.sinceChange.count < 10) {
-                    para('Note: you changed the tuning settings with only ' + t.sinceChange.count + ' new reading' + (t.sinceChange.count === 1 ? '' : 's') + ' since. Changing them again now fits the same history twice, so any improvement may not be real; waiting for about 10 new readings is better.', { color: '#b36b00' });
+                if (st.manualChangeSinceTune) {
+                    para('You changed the tuning settings by hand since your last Tune, so tuning again can be worthwhile.', { color: '#2a6fa8' });
                 }
                 para('Tune uses your saved settings: if you just changed them in the form, press Save Settings first. Gains are an estimate until about 10 new readings confirm them.', { color: '#666', fontSize: '.85em' });
             });
@@ -745,7 +767,7 @@
                 'Tune checks your saved settings against your FC history and gives ONE recommendation, or says your settings look good.',
                 'Apply it. If it was a window change, press Tune once more (the window interacts with the weighting and taper), then stop.',
                 'Then leave it alone for about 10 new FC readings and check the "Since you changed" line in Projection Accuracy.',
-                'Do not tune in a loop: each pass is scored on the same history, so it makes the numbers look better without the real accuracy improving.'
+                'Do not tune in a loop: each pass is scored on the same history, so it makes the numbers look better without the real accuracy improving. Tune asks first (with a Cancel) if you run it again before about 10 new readings, unless you have changed the settings by hand since.'
             ]);
             para('The rest of this guide explains the two detailed reports behind Tune, which you can open from the Tune dialog.', { color: '#666' });
             head('1. Projection Accuracy: where you stand');
