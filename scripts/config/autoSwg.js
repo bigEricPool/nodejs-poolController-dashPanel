@@ -138,6 +138,8 @@
             });
             self._elAutoCheckHours = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Every', binding: 'autoCheckHours', min: 1, max: 168, step: 1, units: 'hours', labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How often to automatically re-check PoolMath and apply the result.');
+            self._elAutoCheckStart = $('<div></div>').appendTo(line).inputField({ labelText: 'Starting At', binding: 'autoCheckStartTime', inputAttrs: { maxlength: 8, placeholder: 'any time', style: { width: '4.5rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', "Optional time of day (e.g. '06:00' or '6am', in the Time Zone above) to pin the automatic checks to. Checks then run every \"Check Every\" hours counting from that time, and start over at it each day -- e.g. 06:00 every 12 hours checks at 6am and 6pm -- so restarts and settings saves don't shift them. Leave blank to count the interval from when njsPC starts, settings are saved, or the last check finishes. Only applies to intervals under 24 hours.");
 
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
@@ -147,6 +149,12 @@
                     $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) {
                         self.dataBind(c);
                         self._updateActionButtons(c && c.autoApplyEnabled);
+                        // Saving re-arms the automatic check, so pick up its new due time -- just that
+                        // line, not a full re-render, which would disable Apply on a pending result.
+                        $.getApiService('/state/autoSwg', null, function (result) {
+                            if (result && result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+                            else self._elNextAutoCheck.hide();
+                        });
                     });
                 }
             });
@@ -182,6 +190,7 @@
             // preview is showing below (or isn't), and Cancel never touches it.
             self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
+            self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             // What's actually explaining the % running on the chlorinator right now (saved at
             // Apply time, or by an automatic step).
             self._elAppliedRationaleHeader = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' }).hide();
@@ -300,6 +309,7 @@
         _updateAutoCheckHoursField: function (shown) {
             var self = this;
             if (self._elAutoCheckHours) self._elAutoCheckHours.toggle(!!shown);
+            if (self._elAutoCheckStart) self._elAutoCheckStart.toggle(!!shown);
         },
         _loadData: function () {
             var self = this;
@@ -420,6 +430,9 @@
             else self._elPendingStep.hide();
             if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
             else self._elLastApplied.hide();
+            // When the periodic automatic check is next due (only present while it's running).
+            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            else self._elNextAutoCheck.hide();
             var hasApplied = result.lastAppliedAt && Array.isArray(result.lastAppliedRationale) && result.lastAppliedRationale.length > 0;
             self._elAppliedRationale.empty();
             if (hasApplied) {
