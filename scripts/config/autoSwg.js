@@ -578,8 +578,8 @@
                 var note = entries.length + ' entries (' + swgCount + ' SWG %, ' + (entries.length - swgCount) + ' FC), newest first. Times are shown in this browser\'s time zone. '
                     + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
-                    + '. FC readings come from PoolMath: the ones on its share page plus an archive of up to 18 months of earlier readings, pulled once per share code. '
-                    + 'The local SWG % log is kept for 18 months; PoolMath SWG % entries older than its share page lists are not shown.';
+                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
+                    + '(the page refreshes the archive for the period it covers). The local SWG % log is kept for 18 months.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
