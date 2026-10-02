@@ -141,7 +141,9 @@
         _renderAutoSwgSummary: function (data) {
             var self = this, el = self.element;
             self._lastAutoSwgData = data;
-            if (!data || !data.lastAppliedAt) {
+            // Shown once something has been applied, or while the periodic automatic check is
+            // running (so its next due time is visible even before the first apply).
+            if (!data || (!data.lastAppliedAt && !data.nextAutoCheckAt)) {
                 if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
                 return;
             }
@@ -179,9 +181,12 @@
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
             }
-            var text = 'applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-            if (data.stepAt) text += ' · pending step ' + describeAutoSwgStep(data, false);
-            self._elAutoSwgSummary.find('span:last').html(text);
+            var parts = [];
+            if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+            if (data.stepAt) parts.push('pending step ' + describeAutoSwgStep(data, false));
+            // Only present while the periodic automatic check is armed (Auto-Apply + automatic checking on).
+            if (data.nextAutoCheckAt) parts.push('next auto check ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+            self._elAutoSwgSummary.find('span:last').html(parts.join(' · '));
             self._elAutoSwgSummary.show();
             if (data.lastAutoApplyLargeChange) {
                 self._elAutoSwgWarning.text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed to ' + data.lastAppliedPct + '% with no manual review -- tap to review.')
@@ -224,6 +229,7 @@
             var targetInfo = autoSwgTargetInfo(data);
             if (targetInfo) addLine('ℹ ' + targetInfo, { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
+            if (data.nextAutoCheckAt) addLine('Next automatic check: ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
                 $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(dlg);
