@@ -13,6 +13,13 @@
         if (days === 0) parts.push(mins + 'm');
         return parts.join(' ');
     }
+    // The warning that even 100% SWG can't reach the target within the window the last
+    // apply was aiming for -- only while that deadline is still ahead (afterward there's
+    // no longer a target being missed). Empty string when there's nothing to warn about.
+    function autoSwgTargetWarning(data) {
+        if (!data || !data.lastAppliedTargetWarning || !data.lastAppliedTargetDate) return '';
+        return new Date(data.lastAppliedTargetDate).getTime() > Date.now() ? data.lastAppliedTargetWarning : '';
+    }
     // Direction arrow, target %, time remaining, and the target FC that step is chasing --
     // e.g. "↓ to 45% in 2d 6h for target FC of 5 ppm", optionally with the target date/time
     // appended. lastAppliedTargetFc is whatever targetFc was in effect at the apply that
@@ -153,6 +160,12 @@
                     fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#c0392b',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // Separate from the one above (a different problem, and both can apply): the
+                // applied % is already maxed out and still won't reach the target in time.
+                self._elAutoSwgTargetWarning = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#d35400',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
             }
             var text = 'applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
             if (data.stepAt) text += ' · pending step ' + describeAutoSwgStep(data, false);
@@ -163,6 +176,9 @@
                     .off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             }
             else self._elAutoSwgWarning.hide();
+            var targetWarning = autoSwgTargetWarning(data);
+            if (targetWarning) self._elAutoSwgTargetWarning.text('⚠ ' + targetWarning).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgTargetWarning.hide();
         },
         // Full status -- the pending step (if any) with its target date/time, the last
         // applied change, and the rationale text behind it. Like the summary line, this
@@ -180,6 +196,10 @@
             if (data.lastAutoApplyLargeChange) {
                 addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved to ' + data.lastAppliedPct + '% with no manual review.',
                     { fontWeight: 'bold', color: '#fff', background: '#c0392b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            var targetWarning = autoSwgTargetWarning(data);
+            if (targetWarning) {
+                addLine('⚠ ' + targetWarning, { fontWeight: 'bold', color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });

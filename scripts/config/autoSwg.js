@@ -184,6 +184,12 @@
             self._elResultDivider = $('<hr></hr>').appendTo(results).hide();
             // Section B: the (possibly unapplied) calculation preview -- entirely cleared by
             // Cancel, independent of section A above.
+            // Even 100% SWG can't reach the target in the window -- the recommended % below is
+            // capped at 100, so say so up front rather than let it read like a plan that works.
+            self._elTargetWarning = $('<div></div>').appendTo(results).css({
+                fontWeight: 'bold', color: '#fff', background: '#d35400',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results);
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
@@ -392,6 +398,8 @@
 
             // Section B: the (possibly unapplied) calculation preview -- absent entirely once
             // there's no calculation to show (e.g. right after Cancel), regardless of section A.
+            if (hasCalc && result.targetWarning) self._elTargetWarning.text('⚠ ' + result.targetWarning).show();
+            else self._elTargetWarning.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
             self._elCurrentPct.toggle(hasCalc).text('Current SWG %: ' + result.currentPct + '%');
             self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
