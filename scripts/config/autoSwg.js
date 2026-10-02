@@ -183,6 +183,8 @@
             self._elTuningBtns = $('<div class="picBtnPanel btn-panel"></div>').appendTo(self._elTuning);
             self._applyTuningState();
 
+            // Says which settings a Tune or report just saved to the server (see _applySettingsToForm).
+            self._elApplied = $('<div></div>').appendTo(pnl).css({ fontWeight: 'bold', color: '#2a7', padding: '.4rem 0' }).hide();
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Settings', icon: '<i class="fas fa-save"></i>' });
             // Enabled only while the form differs from what is saved (see _updateSaveButton); until the settings
@@ -369,10 +371,26 @@
         // After a report saves settings straight to the server, show them in the Settings form too. Otherwise the
         // form keeps the old values, looks as if nothing changed, and a later Save would quietly put them back.
         _applySettingsToForm: function (settings) {
-            var self = this;
-            Object.keys(settings || {}).forEach(function (k) { self._setBound(k, settings[k]); });
-            self._updateTuningBadge();
-            self._markSaved(Object.keys(settings || {}));
+            var self = this, keys = Object.keys(settings || {});
+            var labels = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', daytimeLossSharePct: 'Daytime Share of FC Loss' };
+            var show = function (vals) {
+                keys.forEach(function (k) { self._setBound(k, vals[k]); });
+                self._updateTuningBadge();
+                self._markSaved(keys);
+                // The tuning options are usually collapsed: open them so the new values are in view.
+                if (keys.some(function (k) { return typeof self._tuningDefaults[k] !== 'undefined'; }) && !self._tuningOpen) {
+                    self._tuningOpen = true;
+                    self._applyTuningState();
+                }
+                var parts = keys.map(function (k) { return (labels[k] || k) + ' = ' + (typeof vals[k] === 'boolean' ? (vals[k] ? 'on' : 'off') : vals[k]); });
+                self._elApplied.text('Saved to the server at ' + new Date().toLocaleTimeString([], { timeStyle: 'short' }) + ': ' + parts.join('  ·  ') + '. The form now shows these values.').show();
+                try { self._elApplied[0].scrollIntoView({ block: 'nearest' }); } catch (e) { /* not essential */ }
+            };
+            // Show what was sent right away, then re-read the saved settings so what is displayed is what the server holds.
+            show(settings || {});
+            $.getApiService('/config/autoSwg', null, function (cfg) {
+                if (cfg) show($.extend({}, settings, keys.reduce(function (o, k) { if (typeof cfg[k] !== 'undefined') o[k] = cfg[k]; return o; }, {})));
+            });
         },
         // Dirty check for Save Settings. The baseline is the form as bound from the server (read back through the
         // same binder, so formatting differences can't look like edits); Save is enabled only while the form
@@ -394,6 +412,7 @@
         _markSaved: function (keys) {
             var self = this;
             var now = self._formValues();
+            if (!keys && self._elApplied) self._elApplied.hide();
             if (!self._savedValues || !keys) self._savedValues = $.extend({}, now);
             else keys.forEach(function (k) { self._savedValues[k] = now[k]; });
             self._updateSaveButton();
