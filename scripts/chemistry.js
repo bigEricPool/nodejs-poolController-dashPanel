@@ -275,9 +275,24 @@
             if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
             if (data.nextAutoCheckAt) addLine('Next automatic check: ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
             if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
+            // The reasoning behind what was applied expands and collapses (collapsed each time the popup
+            // opens); the warnings, the pending step and what was last applied above stay visible.
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
-                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(dlg);
-                var appliedUl = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(dlg);
+                var detailsOpen = false;
+                var chevron = $('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' });
+                var detailsBody = $('<div></div>').css({ padding: '.15rem 0 .15rem 1rem' }).hide();
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', marginTop: '.4rem', cursor: 'pointer', userSelect: 'none' })
+                    .append(chevron).append($('<span></span>').text('Calculation details'))
+                    .attr('title', 'Show or hide the reasoning behind the last applied SWG %')
+                    .on('click', function () {
+                        detailsOpen = !detailsOpen;
+                        chevron.removeClass('fa-chevron-right fa-chevron-down').addClass(detailsOpen ? 'fa-chevron-down' : 'fa-chevron-right');
+                        detailsBody.toggle(detailsOpen);
+                    })
+                    .appendTo(dlg);
+                detailsBody.appendTo(dlg);
+                $('<div></div>').css({ fontSize: '.8em', color: '#666' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(detailsBody);
+                var appliedUl = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(detailsBody);
                 data.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(appliedUl).text(line); });
             }
             // The "Refresh & Adjust to Target" recalculation only lives on the calculation
