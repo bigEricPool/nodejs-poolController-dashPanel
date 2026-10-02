@@ -781,6 +781,7 @@
                 var ul = $('<ul></ul>').css({ margin: '.1rem 0 .3rem 0', paddingLeft: '1.2rem' }).appendTo(wrap);
                 items.forEach(function (t) { $('<li></li>').appendTo(ul).text(t); });
             };
+            para('AutoSwg works from your PoolMath log. For it to work at all, log your FC tests and every change to the SWG % in the PoolMath app, and turn on sharing for the pool (enter its share code in Settings). More frequent FC tests and promptly logged SWG changes give better results.');
             para('The defaults suit most pools. Tuning starts to pay off once you have about 30 FC readings, and it is worth doing again when conditions change.');
             head('The quick way: press Tune');
             list([
@@ -815,6 +816,7 @@
             para('After the first few weeks, then when conditions change: a new season, a cell swap, a change in how often you test, or a CYA change. Not after every reading, because re-tuning on noise makes things worse.');
             head('Keep the data healthy');
             para('The reports are only as good as the PoolMath log: log SWG % changes promptly, log liquid chlorine as "Liquid Chlorine", and correct a mistyped reading. The anomaly note and the SWG rating warning point at the usual problems.');
+            para('Known limitation: only SWG output and liquid chlorine are credited. Other chlorine products (cal-hypo, dichlor, trichlor) are not recognized yet, so on a pool that doses them projections run low after each dose.', { color: '#666', fontSize: '.9em' });
             para('What they do not measure: whether the recommended % kept FC near your target. The target tracking table in Projection Accuracy covers that as your applies reach their deadlines.', { color: '#666', fontSize: '.9em' });
             para('Full guide: tools/autoswg-check/README.md in the njsPC fork, which also has a script that runs the same reports on any pool\'s PoolMath history.', { color: '#666', fontSize: '.9em' });
         },
