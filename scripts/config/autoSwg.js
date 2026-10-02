@@ -234,6 +234,12 @@
                 color: '#fff', background: '#d35400',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            // PoolMath's recent SWG entries imply a different rated output than the SWG Rating set here -- every
+            // recommended % is off by about that much until one of them is corrected.
+            self._elRatingNote = $('<div></div>').appendTo(results).css({
+                fontWeight: 'bold', color: '#fff', background: '#d35400',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
             // The newest FC reading is several days old, so the projection is mostly
             // extrapolation -- a caution, not an error.
             self._elStaleFcNote = $('<div></div>').appendTo(results).css({
@@ -474,6 +480,8 @@
             else self._elTargetWarning.hide();
             if (hasCalc && result.targetInfo) self._elTargetInfo.text('ℹ ' + result.targetInfo).show();
             else self._elTargetInfo.hide();
+            if (hasCalc && result.ratingNote) self._elRatingNote.text('⚠ ' + result.ratingNote).show();
+            else self._elRatingNote.hide();
             if (hasCalc && result.fcAnomalyNote) self._elFcAnomaly.text('⚠ ' + result.fcAnomalyNote).show();
             else self._elFcAnomaly.hide();
             if (hasCalc && result.staleFcNote) self._elStaleFcNote.text('ℹ ' + result.staleFcNote).show();

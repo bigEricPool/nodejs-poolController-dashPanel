@@ -181,6 +181,11 @@
                     fontSize: '1em', color: '#fff', background: '#d35400',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // The SWG Rating disagrees with what PoolMath's recent SWG entries imply (a swapped cell?).
+                self._elAutoSwgRating = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#d35400',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
                 // Informational (not a warning): FC is high enough that even 0% SWG won't reach
                 // the target by the deadline.
                 self._elAutoSwgTargetInfo = $('<div></div>').css({
@@ -218,6 +223,8 @@
             else self._elAutoSwgTargetWarning.hide();
             if (data.lastAppliedFcAnomalyNote) self._elAutoSwgAnomaly.text('⚠ Check PoolMath: an FC reading or chlorine addition may be missing -- tap for details.').off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgAnomaly.hide();
+            if (data.lastAppliedRatingNote) self._elAutoSwgRating.text('⚠ SWG Rating may be out of date: PoolMath\'s recent SWG entries imply a different rated output -- tap for details.').off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgRating.hide();
             var targetInfo = autoSwgTargetInfo(data);
             if (targetInfo) self._elAutoSwgTargetInfo.text('ℹ ' + targetInfo).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetInfo.hide();
@@ -264,6 +271,9 @@
             }
             // Only in this popup, not as a dashboard banner -- it's a caution about how reliable
             // the last apply's projection was, not something that needs attention.
+            if (data.lastAppliedRatingNote) {
+                addLine('⚠ ' + data.lastAppliedRatingNote, { fontWeight: 'bold', color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
             if (data.lastAppliedFcAnomalyNote) {
                 addLine('⚠ ' + data.lastAppliedFcAnomalyNote, { color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
