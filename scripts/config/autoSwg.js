@@ -771,9 +771,11 @@
             var d = this._fmtDateTime(rec.targetDate);
             // How far FC was from the target against the threshold, when the check compared them.
             var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
-            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why;
+            // A change of the run window since the previous apply.
+            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
+            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
             var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
-            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why;
+            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
         },
         // Pressing Tune: if it was run recently and too few FC readings have come in since to tell whether its change
         // helped, ask first (with a Cancel). If the tuning settings were changed by hand since the last Tune, tuning again
@@ -1205,6 +1207,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     ['Previous target date (ISO)', function (e) { return (e.record || {}).previousTargetDate; }],
                     ['Target stray (ppm)', function (e) { return (e.record || {}).targetStrayPpm; }],
                     ['New target date threshold (ppm)', function (e) { return (e.record || {}).targetThresholdPpm; }],
+                    ['Run window change', function (e) { var c = (e.record || {}).runWindowChange; return c ? c.from + ' -> ' + c.to : undefined; }],
                     ['Maintenance %', function (e) { return out(e).maintenancePct; }],
                     ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
                     ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
