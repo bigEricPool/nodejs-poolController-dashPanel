@@ -726,7 +726,17 @@
             return text;
         },
         // What kind of row a combined-history entry is, and its main value as shown in the dialog.
+        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
+        _settingsChangeText: function (e) {
+            var labels = { enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
+            return (e.changes || []).map(function (c) {
+                var name = labels[c.setting] || c.setting;
+                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
+            }).join('; ');
+        },
         _historyTypeLabel: function (e) {
+            if (e.type === 'SETTINGS') return 'Settings change';
             if (e.type === 'FC') return 'FC reading';
             if (e.type === 'CYA') return 'CYA change';
             if (e.type === 'CL') return 'Liquid chlorine';
@@ -734,6 +744,7 @@
         },
         _historyValueLabel: function (e) {
             var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
+            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
             if (e.type === 'FC') return n(e.value, 2) + ' ppm';
             if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
             if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
@@ -742,6 +753,7 @@
         // Human-readable source of a combined-history entry: PoolMath, or the local
         // log (an applied recommendation, an applied-but-overridden one, or a manual change).
         _historySourceLabel: function (e) {
+            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
             if (e.source === 'poolmath') return 'PoolMath';
             if (e.source === 'local-manual') return 'Local - manual change';
             var rec = e.record || {};
@@ -1114,11 +1126,12 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     return;
                 }
                 var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
-                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes), newest first. Times are shown in this browser\'s time zone. '
+                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
                     + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
+                    + 'Changes to the AutoSwg settings (target, days to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
                     + 'The local SWG % log is kept for 18 months.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
@@ -1138,14 +1151,14 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     [
                         [self._fmtDateTime(e.ts), 'left'],
                         [self._historyTypeLabel(e), 'left'],
-                        [self._historyValueLabel(e), 'right'],
+                        [self._historyValueLabel(e), e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
                         [self._historySourceLabel(e), 'left'],
                         [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
                         [blank(rec.previousPct), 'right'],
                         [blank(rec.recommendedPct), 'right'],
                         [self._historyTargetLabel(e), 'left']
                     ].forEach(function (cell) {
-                        $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(row);
+                        $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row);
                     });
                 });
             });
@@ -1162,7 +1175,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
             var text, type;
             if (format === 'json') {
-                text = JSON.stringify(ordered, null, 2);
+                // The share code and pool name are private (records saved before they were left out still hold them).
+                text = JSON.stringify(ordered, function (key, value) { return key === 'shareCode' || key === 'poolName' ? undefined : value; }, 2);
                 type = 'application/json';
             }
             else {
@@ -1172,6 +1186,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     ['Time (ISO)', function (e) { return e.ts; }],
                     ['Type', function (e) { return e.type; }],
                     ['Source', function (e) { return self._historySourceLabel(e); }],
+                    ['Settings changed', function (e) { return e.type === 'SETTINGS' ? self._settingsChangeText(e) : undefined; }],
                     ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
                     ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
                     ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
