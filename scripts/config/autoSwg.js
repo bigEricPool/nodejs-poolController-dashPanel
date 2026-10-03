@@ -100,8 +100,8 @@
             // Only used by Refresh and Apply and the periodic check, i.e. only while Auto-Apply is on.
             line = $('<div></div>').appendTo(pnl);
             self._elNewTargetRow = line;
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Threshold', binding: 'newTargetThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', 'Used by Refresh and Apply (and the periodic check). If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target -- a new deadline in the Days to Target window that applies, like Check Now. If it is within this many ppm, it just refreshes the SWG % against the existing target and deadline.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'Used by Refresh and Apply (and the periodic check). If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target date -- a new deadline in the Days to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoCheckRow = line;
@@ -217,7 +217,7 @@
                 .attr('title', 'Runs a fresh calculation using today\'s date, the Target FC configured above, and whichever Days to Target applies (above or below target, depending on where the projected FC is) -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
             self._btnCheck.on('click', function (e) { self._checkNow(); });
             self._btnRefreshApply = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh and Apply', icon: '<i class="fas fa-rotate"></i>' })
-                .attr('title', 'Re-fetches your PoolMath data and applies the result immediately, with no review. If the projected FC is within the New Target Threshold of Target FC, it just re-works the SWG % against your existing target and deadline. If it is further above or below Target FC than that, it starts a new target -- a new deadline in the Days to Target window that applies, like Check Now.')
+                .attr('title', 'Re-fetches your PoolMath data and applies the result immediately, with no review. If the projected FC is within the New Target Date Threshold of Target FC, it just re-works the SWG % against your existing target date. If it is further above or below Target FC than that, it starts a new target date -- a new deadline in the Days to Target window that applies, like Check Now.')
                 .hide();
             self._btnRefreshApply.on('click', function (e) { self._refreshAndApply(); });
             // Only meaningful while a glide-to-target from a previous apply is still in
