@@ -14,6 +14,11 @@
                 for (var i = 0; i < opts.heaters.length; i++) {
                     $('<div></div>').appendTo(el).pnlHeaterConfig(opts)[0].dataBind(opts.heaters[i]);
                 }
+                // The solar decision's settings (njsPC config.json controller.solar) are shown on a Nixie controller with a solar heater.
+                var solarVal = (opts.heaterTypes || []).filter(function (t) { return t.name === 'solar'; }).map(function (t) { return t.val; })[0];
+                var hasSolar = opts.heaters.some(function (h) { var tv = typeof h.type === 'object' && h.type !== null ? h.type.val : h.type; return tv === solarVal; });
+                var ctlType = ($('div.dashOuter').attr('data-controllertype') || $('body').attr('data-controllertype') || '').toLowerCase();
+                if (hasSolar && ctlType === 'nixie') self._buildSolarSettings(el, opts);
                 var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(el);
                 var btnAdd = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Add Heater', icon: '<i class="fas fa-plus" ></i>' });
                 if (opts.heaters.length >= 5) btnAdd.addClass('disabled');
@@ -27,6 +32,24 @@
                     if (heaters.length >= 5) $(this).addClass('disabled');
                 });
             });
+        },
+        _buildSolarSettings: function (parent, opts) {
+            var pnl = $('<div></div>').addClass('pnl-solar-settings').css({ margin: '1rem 0' }).appendTo(parent);
+            $('<div></div>').appendTo(pnl).css({ fontWeight: 'bold', marginBottom: '.25rem' }).text('Solar Controls')
+                .attr('title', 'Settings for the solar decision on this controller (njsPC config.json, controller.solar). A change applies at once.');
+            var line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Settle Delay', binding: 'settleMinutes', min: 0, max: 60, step: 1, units: 'min', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'After the pump starts or solar turns off, solar waits this long before starting. Solar stops for the water temperature only after the water has stayed past the stop level this long. 0 turns the delay off.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Hysteresis', binding: 'hysteresis', min: 0, max: 5, step: 0.5, units: '&deg;' + ((opts.tempUnits || {}).name || ''), inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'Solar stops once the water has stayed this many degrees above the Heat Point (for the settle delay) and restarts when the water is this many degrees below it. 0 turns it off.');
+            var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
+            var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Solar Controls', icon: '<i class="fas fa-save"></i>' });
+            btnSave.on('click', function () {
+                if (dataBinder.checkRequired(pnl, true)) {
+                    $.putApiService('/config/solar/settings', dataBinder.fromElement(pnl), 'Saving Solar Controls...', function (c) { dataBinder.bind(pnl, c); });
+                }
+            });
+            $.getApiService('/config/solar/settings', null, function (c) { dataBinder.bind(pnl, c); });
         }
     });
     $.widget('pic.pnlHeaterConfig', {

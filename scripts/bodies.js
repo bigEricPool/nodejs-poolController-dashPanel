@@ -191,6 +191,8 @@
             $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Heater Status').appendTo(line);
             $('<span></span>').addClass('picStatusData').attr('data-bind', 'heatStatus.desc').text('----').css({ maxWidth: '5.1rem', display: 'inline-block' }).appendTo(line);
             setpoints.appendTo(setpointsWrapper);
+            // Why solar is waiting (a settle delay, a hysteresis, the reheat guard), from the heatNote njsPC publishes on the body.
+            $('<div></div>').addClass('picHeatNote').css({ display: 'none', fontSize: '0.65rem', fontStyle: 'italic', lineHeight: '1.1', maxWidth: '12rem', marginTop: '.25rem' }).appendTo(setpointsWrapper);
             line = $('<div></div>').attr('data-circuitid', o.circuit).addClass('outerBodyEndTime').appendTo(setpointsWrapper).css('display', 'none');
             $('<label></label>').addClass('picInline-label').attr('data-circuitid', o.circuit).addClass('picSetpointText').text('Time to off').appendTo(line);
             $('<span class="bodyCircuitEndTime"></span>').appendTo(line);
@@ -381,6 +383,9 @@
                 el.attr('data-hassolar', typeof data.heaterOptions !== 'undefined' && data.heaterOptions.solar > 0);
                 // Every heater on this body is solar, on a Nixie controller (the panels enforce their own setpoint rules).
                 el.attr('data-solaronly', (pnlType || '').toLowerCase() === 'nixie' && typeof data.heaterOptions !== 'undefined' && data.heaterOptions.total > 0 && data.heaterOptions.solar === data.heaterOptions.total);
+                var heatNote = el.find('div.picHeatNote');
+                if (data.heatNote) heatNote.text(data.heatNote).attr('title', data.heatNote).show();
+                else heatNote.text('').removeAttr('title').hide();
                 if (typeof data.heaterOptions === 'undefined' || data.heaterOptions.total < 1) {
                     el.find('div.picBodySetpoints').hide();
                     el.find('div.picSetpointText').text('Set Point');
