@@ -267,7 +267,8 @@
                     heatMode: parseInt(body.attr('data-heatmode'), 10),
                     setPoint: parseInt(body.attr('data-setpoint'), 10),
                     coolSetpoint: parseInt(body.attr('data-coolsetpoint'), 10),
-                    hasCooling: makeBool(body.attr('data-hascooling'))
+                    hasCooling: makeBool(body.attr('data-hascooling')),
+                    solarOnly: makeBool(body.attr('data-solaronly'))
                 };
                 var openPopover = function (solarHeaters) {
                 $.getApiService('/v2/config/body/' + el.attr('data-id') + '/heatModes', null, function (data, status, xhr) {
@@ -289,6 +290,9 @@
                             }
                             return false;
                         };
+                        // The Cool Point must be above the Heat Point, except on a Nixie body heated by solar only, where nocturnal cooling is a separate
+                        // control that does not conflict with heating (a heat pump or UltraTemp would switch between heating and cooling).
+                        var coolMin = function (heat) { return settings.solarOnly ? (units === "F" ? 40 : 5) : heat + 1; };
                         var syncCoolVis = function (modeVal) {
                             var canCool = modeCanCool(modeVal);
                             divPopover.find('div[data-bind="coolSetpoint"]').toggle(canCool);
@@ -297,10 +301,11 @@
                             $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Heat Point', val: settings.setPoint, min: units === "F" ? 40 : 5, max: units === "F" ? 104 : 41, step: 1, binding: 'heatSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
                                 .on('change', function (e) {
                                     var coolSetpoint;
-                                    divPopover.find('div[data-bind="coolSetpoint"]').each(function () { this.minVal(e.value + 1); coolSetpoint = this.val(); });
+                                    divPopover.find('div[data-bind="coolSetpoint"]').each(function () { this.minVal(coolMin(e.value)); coolSetpoint = this.val(); });
                                     self.putSetpoints(e.value, undefined);
                                 });
-                            $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: settings.coolSetpoint || settings.setPoint + 1, min: settings.setPoint + 1, max: units === "F" ? 104 : 41, step: 1, binding: 'coolSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
+                            $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: settings.coolSetpoint || settings.setPoint + 1, min: coolMin(settings.setPoint), max: units === "F" ? 104 : 41, step: 1, binding: 'coolSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
+                                .attr('title', settings.solarOnly ? 'On a solar only body the Cool Point can be at or below the Heat Point. Nocturnal cooling then works against daytime heating, so keep it at or above the Heat Point minus the solar run delta (3 by default) to avoid heating and cooling the pool every day.' : '')
                                 .on('change', function (e) { self.putSetpoints(undefined, e.value); });
                         }
                         else
@@ -374,6 +379,8 @@
                 el.attr('data-setpoint', data.setPoint);
                 el.attr('data-coolsetpoint', data.coolSetpoint);
                 el.attr('data-hassolar', typeof data.heaterOptions !== 'undefined' && data.heaterOptions.solar > 0);
+                // Every heater on this body is solar, on a Nixie controller (the panels enforce their own setpoint rules).
+                el.attr('data-solaronly', (pnlType || '').toLowerCase() === 'nixie' && typeof data.heaterOptions !== 'undefined' && data.heaterOptions.total > 0 && data.heaterOptions.solar === data.heaterOptions.total);
                 if (typeof data.heaterOptions === 'undefined' || data.heaterOptions.total < 1) {
                     el.find('div.picBodySetpoints').hide();
                     el.find('div.picSetpointText').text('Set Point');
