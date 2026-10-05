@@ -169,6 +169,14 @@
                     fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#c0392b',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // What the njsPC watch found (the chlorinator reports a fault or no output in its run window, the automatic check stopped, a step did not
+                // happen): the SWG may not be holding FC, which no recommendation can fix. Red for an alarm, orange for a warning.
+                self._elAutoSwgAlerts = $('<div></div>').hide().appendTo(self._elAutoSwgSummary.parent());
+                // A fall in the chlorinator's salt reading: the pool was probably diluted (rain, or water removed and refilled).
+                self._elAutoSwgSaltNote = $('<div></div>').css({
+                    fontSize: '1em', color: '#0b3d5c', background: '#d6ecfa',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
                 // Separate from the one above (a different problem, and both can apply): the
                 // applied % is already maxed out and still won't reach the target in time.
                 self._elAutoSwgTargetWarning = $('<div></div>').css({
@@ -218,6 +226,16 @@
                     .off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             }
             else self._elAutoSwgWarning.hide();
+            self._elAutoSwgAlerts.empty();
+            var swgAlerts = Array.isArray(data.alerts) ? data.alerts : [];
+            swgAlerts.forEach(function (a) {
+                var alarm = a.level === 'alarm';
+                $('<div></div>').css({ fontWeight: 'bold', fontSize: '1em', color: '#fff', background: alarm ? '#c0392b' : '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem' })
+                    .text('⚠ ' + a.text + (a.since ? ' (since ' + new Date(a.since).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')' : '')).appendTo(self._elAutoSwgAlerts);
+            });
+            self._elAutoSwgAlerts.toggle(swgAlerts.length > 0);
+            if (data.saltNote) self._elAutoSwgSaltNote.text('ℹ ' + String(data.saltNote).split('. ')[0] + '.').attr('title', data.saltNote).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgSaltNote.hide();
             var targetWarning = autoSwgTargetWarning(data);
             if (targetWarning) self._elAutoSwgTargetWarning.text('⚠ ' + targetWarning).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetWarning.hide();
