@@ -323,6 +323,11 @@
                 color: '#5a4300', background: '#ffe9a8',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            // A recent fall in the chlorinator's salt reading: some FC lost may be dilution, not consumption. Informational; nothing is adjusted.
+            self._elSaltNote = $('<div></div>').appendTo(results).css({
+                color: '#0b3d5c', background: '#d6ecfa',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results);
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
@@ -729,6 +734,8 @@
             else self._elFcAnomaly.hide();
             if (hasCalc && result.staleFcNote) self._elStaleFcNote.text('ℹ ' + result.staleFcNote).show();
             else self._elStaleFcNote.hide();
+            if (hasCalc && result.saltNote) self._elSaltNote.text('ℹ ' + result.saltNote).show();
+            else self._elSaltNote.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
             self._elCurrentPct.toggle(hasCalc).text('Current SWG %: ' + result.currentPct + '%');
             self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
