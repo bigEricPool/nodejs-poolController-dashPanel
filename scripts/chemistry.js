@@ -218,6 +218,7 @@
             if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
             if (data.stepAt) parts.push('pending step ' + describeAutoSwgStep(data, false));
             // Only present while the periodic automatic check is armed (Auto-Apply + automatic checking on).
+            if (data.awayStatus === 'active' && data.awayUntil) parts.push('away protection until ' + data.awayUntil);
             if (data.nextAutoCheckAt) parts.push('next auto check ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
             self._elAutoSwgSummary.find('span:last').html(parts.join(' · '));
             self._elAutoSwgSummary.show();
