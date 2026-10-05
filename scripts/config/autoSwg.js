@@ -193,6 +193,23 @@
             self._elTuningBtns = $('<div class="picBtnPanel btn-panel"></div>').appendTo(self._elTuning);
             self._applyTuningState();
 
+            // Auto tune: only in the automatic mode (the server says so in the gate, see _applyAutoTuneState). Tune runs by itself once enough new FC
+            // readings have arrived, and its recommendation can be applied by itself once the guards pass.
+            self._elAutoTune = $('<div></div>').appendTo(pnl).css({ padding: '.4rem 0 .2rem 1rem', margin: '.6rem 0 .2rem 0', borderLeft: '2px solid rgba(128,128,128,.3)' }).hide();
+            $('<div></div>').appendTo(self._elAutoTune).css({ fontWeight: 'bold', marginBottom: '.2rem' }).text('Auto tune');
+            line = $('<div></div>').appendTo(self._elAutoTune);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Tune automatically', binding: 'autoTuneEnabled' })
+                .attr('title', 'After a PoolMath check, if at least this many new FC readings have arrived since the last Tune, run Tune by itself. What it finds is kept in the Tune history and shown here; it changes nothing unless the next checkbox is also on.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'After', binding: 'autoTuneAfterFcReadings', min: 3, max: 60, step: 1, units: 'new FC readings', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'How many new FC readings must have arrived since the last Tune before auto tune runs. Tuning again on the same history only makes the numbers look better, so about 10 is the guide. The Tune dialog uses the same number for its "too soon" warning.');
+            line = $('<div></div>').appendTo(self._elAutoTune);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Apply the Tune recommendation automatically', binding: 'autoTuneApplyEnabled' })
+                .attr('title', 'Apply what auto tune recommends without asking. It is applied only when every guard passes: you have applied enough Tune recommendations yourself, the data and history are good enough, the gain is worth it, the same change was recommended on several auto tunes in a row, and the setting is one that is changed automatically and stays inside its safe range. Otherwise the recommendation is kept, with the reasons it was held.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Once you have applied', binding: 'autoTuneApplyAfterManual', min: 0, max: 20, step: 1, units: 'Tune recommendations yourself', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'How many times you must have applied a Tune recommendation from the Tune dialog before auto tune may apply any. This is how it earns trust: you see what Tune does to your pool first.');
+            self._elAutoTuneGuard = $('<div></div>').appendTo(self._elAutoTune).css({ fontSize: '.85em', color: '#666', margin: '.2rem 0' });
+            self._elAutoTuneNote = $('<div></div>').appendTo(self._elAutoTune).css({ fontSize: '.85em', margin: '.2rem 0' });
+
             // Says which settings a Tune or report just saved to the server (see _applySettingsToForm).
             self._elApplied = $('<div></div>').appendTo(pnl).css({ fontWeight: 'bold', color: '#2a7', padding: '.4rem 0' }).hide();
             var btnPnl =$('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
@@ -368,6 +385,23 @@
             }
             else if (g && g.advanced === true && g.tuneAccepted === false && g.automationAvailable === false) text = 'Run Tune and accept its result to continue.';
             self._elGateNote.text(text).toggle(text.length > 0);
+            self._applyAutoTuneState();
+        },
+        // The Auto tune settings are shown only when the server says auto tune is available (the automatic mode, with enough history and an accepted Tune).
+        // Under them: how many Tune recommendations you have applied yourself, and what the last auto tune did.
+        _applyAutoTuneState: function () {
+            var self = this, g = self._gate;
+            if (!self._elAutoTune) return;
+            var show = !!(g && g.automatic === true && g.autoTuneAvailable === true);
+            self._elAutoTune.toggle(show);
+            if (!show) return;
+            var done = g.manualTuneApplies || 0, need = g.manualTuneAppliesNeeded || 0;
+            self._elAutoTuneGuard.text('Tune recommendations you have applied yourself: ' + done + (need > 0 ? ' of the ' + need + ' needed before auto tune may apply any.' : '.'));
+            $.getApiService('/state/autoSwg', null, function (result) {
+                var note = result && result.autoTuneNote;
+                var when = result && result.autoTuneAt ? new Date(result.autoTuneAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ': ' : '';
+                self._elAutoTuneNote.text(note ? 'Last auto tune, ' + when + note : 'Auto tune has not run yet.');
+            });
         },
         // Reads the gate again (after a Tune was applied or accepted) so the tuning options and the automation settings appear.
         _reloadGate: function () {
@@ -939,7 +973,8 @@
                         var set = 'window ' + st2.windowDays + ' d, weighting ' + Math.round((st2.projectionWeight !== undefined ? st2.projectionWeight : (st2.projectionDamping !== undefined ? st2.projectionDamping : 1)) * 100) + '%' + (st2.projectionTaperEndDays > 0 ? ', taper ' + st2.projectionTaperStartDays + ' to ' + st2.projectionTaperEndDays + ' d' : ', no taper');
                         var outcome = r.status === 'good' ? 'settings looked good'
                             : r.status === 'insufficient' ? 'too few readings to tune on'
-                            : 'recommended ' + (r.recommendation ? r.recommendation.label + ' (expected ' + n2(r.recommendation.expectedMae, 2) + ' ppm)' : '') + (r.applied ? ', applied ' + new Date(r.applied.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ', not applied');
+                            : 'recommended ' + (r.recommendation ? r.recommendation.label + ' (expected ' + n2(r.recommendation.expectedMae, 2) + ' ppm)' : '') + (r.applied ? ', applied ' + (r.applied.by === 'auto' ? 'automatically ' : '') + new Date(r.applied.at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ', not applied' + (r.held && r.held.length ? ' (held: ' + r.held.join('; ') + ')' : ''));
+                        if (r.by === 'auto') outcome = 'auto tune: ' + outcome;
                         $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '.1rem 0' })
                             .text(new Date(r.ts).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' · ' + set + ' · ' + r.readings + ' readings, error ' + n2(r.meanAbsError, 2) + ' ppm' + (typeof r.unchangedMae === 'number' ? ' (baseline ' + n2(r.unchangedMae, 2) + ')' : '') + ' · ' + outcome)
                             .appendTo(prevBox);
