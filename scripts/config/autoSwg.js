@@ -23,7 +23,7 @@
             var acc = $('<div></div>').appendTo(el).accordian({
                 columns: [{ binding: 'title', glyph: 'fas fa-tint', style: { width: '20rem' } }]
             });
-            acc[0].columns()[0].elText().text('Automatic SWG % (PoolMath)');
+            acc[0].columns()[0].elText().text('AutoSwg % (PoolMath)');
             var pnl = acc.find('div.picAccordian-contents');
             self._pnl = pnl;
 
@@ -85,8 +85,8 @@
                 .attr('title', 'How many days to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner.');
 
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Step to maintenance % after the target period', binding: 'autoStepEnabled' })
-                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the setpoint to the maintenance % (up or down, whichever way it needs to go) once the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. A manual change to the SWG % cancels the pending step.');
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and it is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoApplyRow = line;       // hidden until the server says the automation is available (see _updateAutoApplyFields)
@@ -357,9 +357,9 @@
             if (g && g.tuningAvailable === false) {
                 var parts = [(g.scorable || 0) + ' of ' + g.scorableNeeded + ' FC readings the reports can score', (g.days || 0) + ' of ' + g.daysNeeded + ' days of history'];
                 if ((g.swgEntries || 0) < g.swgNeeded) parts.push((g.swgEntries || 0) + ' of ' + g.swgNeeded + ' SWG % entries');
-                text = 'Tuning and automation unlock once there is enough history to judge the calculation: ' + parts.join(', ') + '.';
+                text = 'The tuning options appear once there is enough history to judge the calculation: ' + parts.join(', ') + '.';
             }
-            else if (g && g.tuneAccepted === false && g.automationAvailable === false) text = 'Automation unlocks after you run Tune and accept its result.';
+            else if (g && g.advanced === true && g.tuneAccepted === false && g.automationAvailable === false) text = 'Run Tune and accept its result to continue.';
             self._elGateNote.text(text).toggle(text.length > 0);
         },
         // Reads the gate again (after a Tune was applied or accepted) so the tuning options and the automation settings appear.
@@ -883,7 +883,8 @@
                     // Accepting this result (there is nothing to apply) is what lets the automation be turned on.
                     var acceptDone = $('<div></div>').css({ color: '#2a7', fontWeight: 'bold', padding: '.2rem 0' }).hide().appendTo(wrap);
                     var btnAccept = $('<div></div>').appendTo(wrap).actionButton({ text: 'Accept', icon: '<i class="fas fa-check"></i>' })
-                        .attr('title', 'Accept these settings. This is what unlocks the automation (Auto-Apply and the automatic check); you still choose whether to turn it on.');
+                        .toggle(!!(self._gate && self._gate.advanced));
+                        .attr('title', 'Accept these settings.');
                     btnAccept.on('click', function () {
                         if (btnAccept.hasClass('disabled')) return;
                         btnAccept[0].disabled(true);
@@ -951,13 +952,15 @@
                 items.forEach(function (t) { $('<li></li>').appendTo(ul).text(t); });
             };
             para('AutoSwg works from your PoolMath log. For it to work at all, log your FC tests and every change to the SWG % in the PoolMath app, and turn on sharing for the pool (enter its share code in Settings). More frequent FC tests and promptly logged SWG changes give better results.');
-            head('Getting started: go in stages');
-            list([
-                'First, run in manual mode for a while: use Check Now, read each recommendation and apply it yourself.',
-                'Then turn on Auto-Apply Recommendations for a while and tune with your real history (the Tune button below). Auto-Apply changes the SWG % with no review, so watch the dashboard warnings.',
-                'Only then turn on "Also check PoolMath automatically", which re-checks on its own every "Check Every" hours.'
-            ]);
-            para('The defaults suit most pools. Tuning starts to pay off once you have about 30 FC readings, and it is worth doing again when conditions change.');
+            var stages = ['First, run in manual mode for a while: use Check Now, read each recommendation and apply it yourself.'];
+            if (self._automation !== false) {
+                stages.push('Then turn on Auto-Apply Recommendations for a while and tune with your real history (the Tune button below). Auto-Apply changes the SWG % with no review, so watch the dashboard warnings.');
+                stages.push('Only then turn on "Also check PoolMath automatically", which re-checks on its own every "Check Every" hours.');
+            }
+            else stages.push('Tune with your real history (the Tune button below), and keep applying each recommendation yourself.');
+            head(self._automation !== false ? 'Getting started: go in stages' : 'Getting started');
+            list(stages);
+            para('The defaults suit most pools. Tuning starts to pay off once there is enough history for the reports to score (the tuning options appear on their own), and it is worth doing again when conditions change.');
             head('The quick way: press Tune');
             list([
                 'Tune checks your saved settings against your FC history and gives ONE recommendation, or says your settings look good.',
