@@ -883,7 +883,7 @@
                     // Accepting this result (there is nothing to apply) is what lets the automation be turned on.
                     var acceptDone = $('<div></div>').css({ color: '#2a7', fontWeight: 'bold', padding: '.2rem 0' }).hide().appendTo(wrap);
                     var btnAccept = $('<div></div>').appendTo(wrap).actionButton({ text: 'Accept', icon: '<i class="fas fa-check"></i>' })
-                        .toggle(!!(self._gate && self._gate.advanced));
+                        .toggle(!!(self._gate && self._gate.advanced))
                         .attr('title', 'Accept these settings.');
                     btnAccept.on('click', function () {
                         if (btnAccept.hasClass('disabled')) return;
