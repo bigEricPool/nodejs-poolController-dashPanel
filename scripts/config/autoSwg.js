@@ -174,7 +174,7 @@
 
             line = $('<div></div>').appendTo(self._elTuning);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Anomaly Tolerance', binding: 'fcAnomalyTolerancePpm', min: 0, max: 10, step: 0.5, units: 'ppm (0 = off)', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). FC tests are good to about a ppm, so the default of 2 ignores ordinary scatter. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
+                .attr('title', "When FC rises between two readings by more than the SWG output and the liquid chlorine logged in PoolMath can explain, plus this many ppm, that interval is left out of the average consumption and a banner asks you to check PoolMath (an unlogged chlorine addition, or a mistyped reading). A reading varies by about a ppm, so the default of 2 ignores ordinary variation. Raise it to flag less; 0 turns the check off. A change takes effect the next time you Check or Refresh (or the next automatic check runs) -- saving alone doesn't re-evaluate anything, and the banners update then too.");
 
             line = $('<div></div>').appendTo(self._elTuning);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Projection Weighting', binding: 'projectionWeight', min: 0, max: 1, step: 0.05, units: '(1 = full model, 0 = last reading only)', inputAttrs: { style: { width: '3.5rem' } } })
@@ -702,7 +702,7 @@
             self._elAvgConsumption.toggle(hasCalc).text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
             self._elAvgWindow.toggle(hasCalc).text(self._describeAvgWindow(result));
             var fcRange = (result.details || {}).projectedFcRange;
-            self._elProjectedFc.toggle(hasCalc).text('Projected current FC: ' + result.projectedCurrentFc + ' ppm' + (hasCalc && fcRange ? ' (the next test is likely to read ' + fcRange.low.toFixed(1) + ' to ' + fcRange.high.toFixed(1) + ' ppm, about 90%; most of that spread is the noise of the test itself)' : ''))
+            self._elProjectedFc.toggle(hasCalc).text('Projected current FC: ' + result.projectedCurrentFc + ' ppm' + (hasCalc && fcRange ? ' (the next test is likely to read ' + fcRange.low.toFixed(1) + ' to ' + fcRange.high.toFixed(1) + ' ppm, about 90%; that is the variation to expect from the test itself and from day-to-day consumption)' : ''))
                 .attr('title', fcRange ? (fcRange.basis === 'history' ? 'The projection plus or minus how far it has recently missed the tests that followed it (' + fcRange.intervals + ' intervals in the last 90 days), a little wider for an older reading. The Projection Accuracy report shows how often this range actually held for your pool.' : 'Too few intervals in the last 90 days to measure how far the projection misses, so a typical value was used.') : '');
             // A newer check exists (unapplied) whenever it's later than the last apply, or
             // there's never been an apply at all.
@@ -981,7 +981,7 @@
             head('1. Projection Accuracy: where you stand');
             list([
                 'Readings scored: aim for 30 or more; with fewer, everything is rough.',
-                'Mean absolute error: 1.2 to 1.6 ppm is normal, because an FC test is only good to about a ppm.',
+                'Mean absolute error: 1.2 to 1.6 ppm is normal: the test itself varies by about a ppm, and real consumption varies day to day with sun, rain and temperature.',
                 'The "FC unchanged" baseline: the algorithm should beat it. If it is worse, the weighting and taper are the fix.',
                 'By time since the previous reading: errors usually jump past about 5 days, which is why the taper exists and why testing more often helps.'
             ]);
@@ -1000,7 +1000,7 @@
                 'If it is no better than the "unchanged" baseline after about 15, use Reset Tuning to Defaults and Save.'
             ]);
             head('5. How often');
-            para('After the first few weeks, then when conditions change: a new season, a cell swap, a change in how often you test, or a CYA change. Not after every reading, because re-tuning on noise makes things worse.');
+            para('After the first few weeks, then when conditions change: a new season, a cell swap, a change in how often you test, or a CYA change. Not after every reading, because re-tuning on ordinary variation makes things worse.');
             head('Keep the data healthy');
             para('The reports are only as good as the PoolMath log: log SWG % changes promptly, log liquid chlorine as "Liquid Chlorine", and correct a mistyped reading. The anomaly note and the SWG rating warning point at the usual problems.');
             para('Known limitation: only SWG output and liquid chlorine are credited. Other chlorine products (cal-hypo, dichlor, trichlor) are not recognized yet, so on a pool that doses them projections run low after each dose.', { color: '#666', fontSize: '.9em' });
