@@ -91,16 +91,16 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
                 .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
-            // Vacation: Away protection. Until the return date, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
-            // the chlorinator's salt reading) or an outage (njsPC not running), never below the maintenance % and never more than the limit above it. It needs the
-            // return to the maintenance %, so each boost ends by itself. Available in every mode.
+            // Vacation: Away protection. While it is on, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
+            // the chlorinator's salt reading) or an outage (njsPC not running), never below the maintenance % and never more than the limit above it. It
+            // needs the return to the maintenance %, so each boost ends by itself. Available in every mode. It pauses Auto-Apply, the automatic check and
+            // auto tune (their settings are kept, shown grayed out) and ends when it is unchecked and saved, or by itself when a new FC reading is logged.
+            // Saving the settings is what starts it.
             line = $('<div></div>').appendTo(pnl).css({ marginTop: '.8rem' });
             $('<div></div>').appendTo(line).css({ fontWeight: 'bold' }).text('Vacation: Away protection');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Away protection: check PoolMath every 12 hours until I am back and keep FC safe', binding: 'awayEnabled' })
-                .attr('title', 'Until the return date, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: the SWG % stays between the maintenance % and the limit above it, it never goes below the maintenance %, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). Log an FC test and apply a plan before you leave; this is a safety net, not a replacement for testing.');
-            $('<div></div>').appendTo(line).inputField({ labelText: 'Return date', binding: 'awayUntil', inputAttrs: { maxlength: 10, placeholder: 'YYYY-MM-DD', style: { width: '7rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'The last day Away protection is on; it stops at the end of that day. Your first FC test after you return takes over.');
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Away protection: keep FC safe while I am away', binding: 'awayEnabled' })
+                .attr('title', 'Set your vacation Target FC above, check this and save the settings to start. AutoSwg then checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: the SWG % stays between the maintenance % and the limit at right, it never goes below the maintenance %, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). While it is on, Auto-Apply, the automatic check and auto tune are paused (their settings are kept). It ends when you uncheck it and save, or by itself when a new FC test is logged in PoolMath. Log your last test before you turn it on, since a test logged afterward ends it.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'At most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points above the maintenance %', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How far above the maintenance % Away protection may raise the SWG %. It never goes below the maintenance %.');
             self._elAwayStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '.2rem 0' }).hide();
@@ -244,8 +244,8 @@
                     $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) {
                         self.dataBind(c);
                         self._updateTuningBadge();
-                        self._updateActionButtons(c && c.autoApplyEnabled);
-                        self._applyAwayStatus(c && c.awayStatus, c && c.awayUntil);
+                        self._updateActionButtons(c && c.autoApplyEnabled && c.awayStatus !== 'active');
+                        self._applyAwayStatus(c);
                         self._markSaved();
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
@@ -411,19 +411,26 @@
             self._elGateNote.text(text).toggle(text.length > 0);
             self._applyAutoTuneState();
         },
-        // The Auto tune settings are shown only when the server says auto tune is available (the automatic mode, with enough history and an accepted Tune).
-        // Under them: how many Tune recommendations you have applied yourself, and what the last auto tune did.
-        // The Away protection status line under its settings.
-        _applyAwayStatus: function (status, until) {
+        // The Away protection status line under its settings; while it is on, the settings it pauses are grayed out.
+        _applyAwayStatus: function (cfg) {
             var self = this;
             if (!self._elAwayStatus) return;
-            var text = '', color = '#666';
-            if (status === 'active') { text = 'Away protection is ON until the end of ' + until + '. It checks PoolMath every 12 hours and may raise the SWG % to make up for dilution or an outage, never below the maintenance %.'; color = '#2a7'; }
-            else if (status === 'needs-return-date') text = 'Enter your return date (YYYY-MM-DD) to turn Away protection on.';
-            else if (status === 'return-date-passed') text = 'The return date has passed, so Away protection is off. Set a new date to use it again.';
+            var status = cfg && cfg.awayStatus, text = '', color = '#666';
+            if (status === 'active') {
+                var since = cfg.awayStartedAt ? new Date(cfg.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
+                text = 'Away protection is ON' + (since ? ' (since ' + since + ')' : '') + '. It checks PoolMath every 12 hours and may raise the SWG % to make up for dilution or an outage, never below the maintenance % and at most ' + (cfg.stormMaxExtraPct) + ' points above it. Auto-Apply, the automatic check and auto tune are paused (their settings are kept). It ends when you uncheck it and save, or by itself when a new FC reading is logged in PoolMath.';
+                color = '#2a7';
+            }
             else if (status === 'needs-step') { text = 'Turn on "Return to the maintenance % when the target period ends" so each boost ends by itself. Away protection is off until then.'; color = '#b36b00'; }
+            else if (cfg && cfg.awayEndedNote) { text = cfg.awayEndedNote; color = '#0b3d5c'; }
             self._elAwayStatus.text(text).css({ color: color }).toggle(text.length > 0);
+            var paused = status === 'active';
+            [self._elAutoApplyRow, self._elNewTargetRow, self._elAutoCheckRow, self._elAutoTune].forEach(function (el) {
+                if (el) el.css({ opacity: paused ? 0.45 : '', pointerEvents: paused ? 'none' : '' }).attr('title', paused ? 'Paused while Away protection is on.' : null);
+            });
         },
+        // The Auto tune settings are shown only when the server says auto tune is available (the automatic mode, with enough history and an accepted Tune).
+        // Under them: how many Tune recommendations you have applied yourself, and what the last auto tune did.
         _applyAutoTuneState: function () {
             var self = this, g = self._gate;
             if (!self._elAutoTune) return;
@@ -445,7 +452,7 @@
                 self._automation = !(cfg && cfg.automationAvailable === false);
                 self._gate = cfg && cfg.gate;
                 self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
-                self._applyAwayStatus(cfg && cfg.awayStatus, cfg && cfg.awayUntil);
+                self._applyAwayStatus(cfg);
                 self._applyGateNote();
                 self._applyTuningState();
             });
@@ -652,11 +659,11 @@
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
-                        self._applyAwayStatus(cfg && cfg.awayStatus, cfg && cfg.awayUntil);
+                        self._applyAwayStatus(cfg);
                         self._applyGateNote();
                         self._applyTuningState();
                         self._updateTuningBadge();
-                        self._updateActionButtons(cfg && cfg.autoApplyEnabled);
+                        self._updateActionButtons(cfg && cfg.autoApplyEnabled && cfg.awayStatus !== 'active');
                         self._markSaved();
                     });
                     // Show whatever was last calculated (and/or applied), if anything, without
