@@ -86,7 +86,7 @@
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
-                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and it is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoApplyRow = line;       // hidden until the server says the automation is available (see _updateAutoApplyFields)
