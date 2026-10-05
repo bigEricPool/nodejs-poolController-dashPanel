@@ -83,6 +83,9 @@
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC below target)', binding: 'targetDaysBelow', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many days to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Aim Above Target as the Last Test Ages', binding: 'overshootPpmPerDay', min: 0, max: 0.5, step: 0.05, units: 'ppm per day (0 = aim at the target)', inputAttrs: { style: { width: '3.5rem' } } })
+                .attr('title', 'The older your last FC test, the less certain the projected FC is, and FC a little high is the safer miss than a little low. The SWG % that reaches the target is worked out for the target plus this many ppm for each day since the last test (at most 1 ppm). It does not change the maintenance %, the target date or the projection.');
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
@@ -140,7 +143,7 @@
             // form, so Save and loading work as for every other setting.
             self._tuningOpen = false;
             try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
-            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8 };
+            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8, burnTempAdjust: false };
             self._elTuningToggle = $('<div></div>').appendTo(pnl)
                 .css({ cursor: 'pointer', margin: '.6rem 0 .2rem 0', userSelect: 'none', fontWeight: 'bold' })
                 .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
@@ -181,6 +184,10 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Taper Weighting After', binding: 'projectionTaperStartDays', min: 0, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } } });
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Down to Zero At', binding: 'projectionTaperEndDays', min: 0, max: 60, step: 1, units: 'days (0 = no taper)', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', "The longer it has been since your last FC test, the less the modelled change (SWG output minus consumption) should be trusted. With these set, the Projection Weighting applies in full until the last reading is 'Taper Weighting After' days old, then falls in a straight line to zero at 'Down to Zero At' days, when the projection is simply your last measured FC plus any chlorine you logged. On the readings tested so far the model helped for gaps under about 5 days and hurt beyond, so something like 3 and 8 days works well. 0 for 'Down to Zero At' turns the taper off.");
+
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Adjust the burn for the water temperature', binding: 'burnTempAdjust' })
+                .attr('title', 'Chlorine is used faster in warmer water. With this on, the burn rate is moved along a line fitted to your own interval burn rates against the water temperature logged with your FC tests, but only when that line is clear (at least 8 intervals with a temperature at both ends, a slope at least 2 standard errors from zero) and never by more than 30% of the burn. Off by default: on the pool it was tried on the water temperature barely moved within a window and the adjustment did not improve the projection. The What-If Sweep scores it for your pool.');
 
             // Tools for tuning (the accuracy report and what-if sweep) and the reset live in this row.
             self._elTuningBtns = $('<div class="picBtnPanel btn-panel"></div>').appendTo(self._elTuning);
@@ -402,7 +409,7 @@
         // form keeps the old values, looks as if nothing changed, and a later Save would quietly put them back.
         _applySettingsToForm: function (settings) {
             var self = this, keys = Object.keys(settings || {});
-            var labels = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', daytimeLossSharePct: 'Daytime Share of FC Loss' };
+            var labels = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', daytimeLossSharePct: 'Daytime Share of FC Loss', burnTempAdjust: 'Water temperature adjustment' };
             var show = function (vals) {
                 keys.forEach(function (k) { self._setBound(k, vals[k]); });
                 self._updateTuningBadge();
@@ -694,7 +701,9 @@
             self._elMaintenancePct.toggle(hasCalc).text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
             self._elAvgConsumption.toggle(hasCalc).text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
             self._elAvgWindow.toggle(hasCalc).text(self._describeAvgWindow(result));
-            self._elProjectedFc.toggle(hasCalc).text('Projected current FC: ' + result.projectedCurrentFc + ' ppm');
+            var fcRange = (result.details || {}).projectedFcRange;
+            self._elProjectedFc.toggle(hasCalc).text('Projected current FC: ' + result.projectedCurrentFc + ' ppm' + (hasCalc && fcRange ? ' (the next test is likely to read ' + fcRange.low.toFixed(1) + ' to ' + fcRange.high.toFixed(1) + ' ppm, about 90%; most of that spread is the noise of the test itself)' : ''))
+                .attr('title', fcRange ? (fcRange.basis === 'history' ? 'The projection plus or minus how far it has recently missed the tests that followed it (' + fcRange.intervals + ' intervals in the last 90 days), a little wider for an older reading. The Projection Accuracy report shows how often this range actually held for your pool.' : 'Too few intervals in the last 90 days to measure how far the projection misses, so a typical value was used.') : '');
             // A newer check exists (unapplied) whenever it's later than the last apply, or
             // there's never been an apply at all.
             var hasNewerCheck = hasCalc && (!result.lastAppliedAt || new Date(result.lastCheckedAt) > new Date(result.lastAppliedAt));
@@ -767,7 +776,7 @@
         // What kind of row a combined-history entry is, and its main value as shown in the dialog.
         // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
         _settingsChangeText: function (e) {
-            var labels = { enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var labels = { enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
             var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
             return (e.changes || []).map(function (c) {
                 var name = labels[c.setting] || c.setting;
@@ -854,7 +863,7 @@
                 var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
                 var n2 = function (v, d) { return typeof v === 'number' ? v.toFixed(d) : '--'; };
                 var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
-                var names = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance' };
+                var names = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', burnTempAdjust: 'Water temperature adjustment' };
                 var fmt = function (k, v) {
                     if (typeof v === 'boolean') return v ? 'on' : 'off';
                     if (k === 'windowDays' || k === 'projectionTaperStartDays' || k === 'projectionTaperEndDays') return v + (k === 'projectionTaperEndDays' && v === 0 ? ' (no taper)' : ' days');
@@ -1023,7 +1032,10 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     + 'It uses the PoolMath share page plus the local archive of earlier history' + (h.history ? ' (' + h.history.readings + ' FC readings from ' + new Date(h.history.from).toLocaleDateString([], { dateStyle: 'medium' }) + (h.history.archived ? ', ' + h.history.archived + ' of them archived' : '; the archive has not been pulled yet, so this is the page alone') + ')' : '') + ', and it uses today\'s run window and sunrise/sunset for past days.');
                 var sumBox = $('<div></div>').css({ padding: '.4rem .6rem', margin: '0 0 .6rem 0', background: 'rgba(128,128,128,.12)', borderRadius: '.25rem', fontSize: '.9em' }).appendTo(wrap);
                 $('<div></div>').css({ fontWeight: 'bold' }).text(sm.count + ' readings scored' + (h.skipped ? ' (' + h.skipped + ' skipped: long gaps or too little earlier data)' : '')).appendTo(sumBox);
-                $('<div></div>').text('Mean absolute error ' + n2(sm.meanAbsError, 2) + ' ppm  ·  RMSE ' + n2(sm.rmse, 2) + ' ppm  ·  bias ' + signed(sm.bias) + ' ppm  ·  within 1 ppm: ' + (sm.within1 || 0) + '%  ·  within 2 ppm: ' + (sm.within2 || 0) + '%').appendTo(sumBox);
+                $('<div></div>').text('Mean absolute error ' + n2(sm.meanAbsError, 2) + ' ppm  ·  RMSE ' + n2(sm.rmse, 2) + ' ppm  ·  bias ' + signed(sm.bias) + (typeof sm.biasSe === 'number' ? ' ± ' + n2(sm.biasSe, 2) : '') + ' ppm  ·  within 1 ppm: ' + (sm.within1 || 0) + '%  ·  within 2 ppm: ' + (sm.within2 || 0) + '%').appendTo(sumBox);
+                if (typeof sm.coveragePct === 'number') {
+                    $('<div></div>').css({ color: '#666' }).text('The range shown with each projection held ' + sm.coveragePct + '% of the time (it is meant to hold about 90%)  ·  FC measured more than 1 ppm below the projection: ' + (sm.fellShortPct || 0) + '%  ·  more than 1 ppm above: ' + (sm.ranHighPct || 0) + '%.  A bias smaller than about twice its "±" figure cannot be told from none.').appendTo(sumBox);
+                }
                 $('<div></div>').css({ color: '#666' }).text('By time since the previous reading: ' + (sm.byGap || []).filter(function (g) { return g.count > 0; }).map(function (g) { return g.label + ' ' + n2(g.meanAbsError, 2) + ' ppm (' + g.count + ')'; }).join('  ·  ')).appendTo(sumBox);
                 // The no-model baseline gives the error some context, and the suggested projection weighting
                 // can be applied straight from here.
