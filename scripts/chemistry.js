@@ -236,11 +236,12 @@
             }
             var parts = [];
             if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
-            if (data.stepAt) parts.push('pending step ' + describeAutoSwgStep(data, false));
+            if (data.stepAt) parts.push('Pending step: ' + describeAutoSwgStep(data, false));
             // Only present while the periodic automatic check is armed (Auto-Apply + automatic checking on).
-            if (data.awayStatus === 'active') parts.push('away protection ON' + (data.awayStartedAt ? ' since ' + new Date(data.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''));
-            if (data.nextAutoCheckAt) parts.push('next auto check ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
-            self._elAutoSwgSummary.find('span:last').html(parts.join(' · '));
+            if (data.awayStatus === 'active') parts.push('Away protection ON' + (data.awayStartedAt ? ' since ' + new Date(data.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''));
+            if (data.nextAutoCheckAt) parts.push('Next auto check: ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+            // One fact to a line (what is applied, what happens next, when the next check is), not one run-on line that wraps on a narrow card.
+            self._elAutoSwgSummary.find('span:last').html(parts.join('<br>'));
             self._elAutoSwgSummary.show();
             if (data.lastAutoApplyLargeChange) {
                 // Tapping the banner opens the calculation details; Dismiss clears it once you have seen the change (applying a reviewed result or changing the % by hand also clears it).
