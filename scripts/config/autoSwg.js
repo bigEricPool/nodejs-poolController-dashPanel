@@ -82,7 +82,7 @@
             // Which window applies depends on which side of Target FC the projected FC is on
             // when a calculation runs -- the above-target one is listed first, above the
             // below-target one. Same label width so the two spinners line up.
-            var daysLabel = { style: { width: '14rem' } };
+            var daysLabel = { style: { width: '22rem' } };   // wide enough for 'Run Periods (days) to Target (FC above target)' (about 21 rem)
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to Target FC when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
