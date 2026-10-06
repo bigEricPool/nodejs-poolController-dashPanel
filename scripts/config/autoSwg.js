@@ -393,6 +393,12 @@
             self._elAutoApplied = $('<div></div>').appendTo(resultsBtnPnl).css({ fontWeight: 'bold', color: '#2a7', padding: '.4rem 0' }).hide();
             // Shown after a Refresh found no new FC reading in PoolMath (nothing was changed).
             self._elSkipNote = $('<div></div>').appendTo(resultsBtnPnl).css({ fontWeight: 'bold', color: '#2a6fa8', padding: '.4rem 0' }).hide();
+            // The order on the page: the latest calculation and its buttons first (it is what was just done), then a divider, then what is running now, when it
+            // was applied, the pending step (what happens next), the next automatic check and the archive line, and last the long description the applied % was
+            // based on, which is the footnote. The elements are created in a different order above; appending an existing element moves it.
+            results.append(self._elResultDivider);
+            [self._elRunningNow, self._elLastApplied, self._elPendingStep, self._elNextAutoCheck, self._elArchiveStatus, self._elAppliedRationaleHeader, self._elAppliedRationale]
+                .forEach(function (el) { results.append(el); });
         },
         // Keeps Apply and Cancel enabled/disabled together -- both only make sense while
         // there's a fresh, unapplied calculation to act on.
