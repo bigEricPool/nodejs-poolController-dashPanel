@@ -298,6 +298,8 @@
             $('<hr></hr>').appendTo(results);
             // Section A: applied status. This persists regardless of whatever calculation
             // preview is showing below (or isn't), and Cancel never touches it.
+            // What is running on the chlorinator now, so the pending step below reads as a later change from it (and not as the recommendation in the calculation).
+            self._elRunningNow = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' }).hide();
             self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
@@ -347,8 +349,9 @@
                 color: '#0b3d5c', background: '#d6ecfa',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            self._elCalcHeader = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#555', marginBottom: '.15rem' }).hide();
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
-            self._elCurrentPct = $('<div></div>').appendTo(results);
+            self._elCurrentPct = $('<div></div>').appendTo(results).hide();
             self._elRecommendedPct = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' });
             self._elMaintenancePct = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' });
             self._elAvgConsumption = $('<div></div>').appendTo(results);
@@ -742,13 +745,7 @@
 
             // Section A: applied status -- the pending step (if any) matters more than the
             // calculation's mechanics in section B, so it's first and most prominent.
-            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).show();
-            else self._elPendingStep.hide();
-            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
-            else self._elLastApplied.hide();
-            // When the periodic automatic check is next due (only present while it's running).
-            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
-            else self._elNextAutoCheck.hide();
+            self._renderSectionA(result);
             if (result.archiveError) self._elArchiveStatus.text('PoolMath history sync problem: ' + result.archiveError + (result.archiveCount ? ' (last good sync kept ' + result.archiveCount + ' entries)' : '')).show();
             else if (result.archiveCount) self._elArchiveStatus.text('PoolMath history archive: ' + result.archiveCount + ' entries back to ' + new Date(result.archiveOldest).toLocaleDateString([], { dateStyle: 'medium' }) + ' (synced ' + new Date(result.archiveSyncedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')').show();
             else self._elArchiveStatus.hide();
@@ -776,7 +773,7 @@
             if (hasCalc && result.saltNote) self._elSaltNote.text('ℹ ' + result.saltNote).show();
             else self._elSaltNote.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
-            self._elCurrentPct.toggle(hasCalc).text('Current SWG %: ' + result.currentPct + '%');
+            self._elCalcHeader.toggle(hasCalc).text(result.pending ? 'Latest calculation (not applied yet):' : 'Latest calculation (applied):');
             self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC on schedule)');
             self._elMaintenancePct.toggle(hasCalc).text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
             self._elAvgConsumption.toggle(hasCalc).text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
@@ -796,21 +793,46 @@
 
             self._elResultDivider.toggle(hasSectionA && hasCalc);
             self._resultsPnl.toggle(hasSectionA || hasCalc);
+            self._startSectionARefresh();
         },
-        // Concise one-liner for a pending auto-step: direction, target %, time
-        // remaining, and the target date/time -- e.g. "will increase SWG setting to 62% in 2d 6h (Fri 3:15 PM)".
+        // The applied status at the top of the results: what is running now, the pending step after it, when it was last applied and when the next automatic
+        // check is due. Redrawn by every result and, so the countdown and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
+        _renderSectionA: function (result) {
+            var self = this;
+            if (typeof result.lastAppliedPct === 'number') self._elRunningNow.text('Current SWG %: ' + result.lastAppliedPct + '%').show();
+            else self._elRunningNow.hide();
+            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).show();
+            else self._elPendingStep.hide();
+            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            else self._elLastApplied.hide();
+            // When the periodic automatic check is next due (only present while it's running).
+            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            else self._elNextAutoCheck.hide();
+        },
+        // Once a minute while the results are showing: reload what was applied and redraw just section A (not the calculation preview, whose buttons depend on
+        // the result in hand).
+        _startSectionARefresh: function () {
+            var self = this;
+            if (self._sectionATimer) return;
+            self._sectionATimer = setInterval(function () {
+                if (!self.element || self.element.closest('body').length === 0) { clearInterval(self._sectionATimer); self._sectionATimer = undefined; return; }
+                if (!self._resultsPnl || !self._resultsPnl.is(':visible')) return;
+                $.getApiService('/state/autoSwg', null, function (result) { if (result) self._renderSectionA(result); });
+            }, 60000);
+        },
+        // Concise one-liner for a pending auto-step: what happens at the end of the target period, to what %, and when -- e.g.
+        // "at the end of the target period (target FC 8.5 ppm) SWG drops to 15% (10/7/26, 6:41 AM, in 23h 59m)".
         _describePendingStep: function (result) {
             var self = this;
             // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
             // right after an Apply (see _confirmApply) it can still hold the pre-apply value.
-            var verb = result.stepPct > result.lastAppliedPct ? 'will increase SWG setting to ' : 'will decrease SWG setting to ';
+            var verb = result.stepPct > result.lastAppliedPct ? 'rises to ' : 'drops to ';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
-            var s = verb + result.stepPct + '% in ' + remaining;
             // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
             // this step -- not necessarily today's config, which may have changed since.
-            if (typeof result.lastAppliedTargetFc === 'number') s += ' for target FC of ' + result.lastAppliedTargetFc + ' ppm';
-            return s + ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+            var s = 'at the end of the target period' + (typeof result.lastAppliedTargetFc === 'number' ? ' (target FC ' + result.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + result.stepPct + '%';
+            return s + ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', in ' + remaining + ')';
         },
         // "2d 6h", "6h 5m", or "due now" -- kept to 2 units for brevity.
         _fmtCountdown: function (ms) {

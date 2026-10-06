@@ -48,10 +48,10 @@
     function describeAutoSwgStep(data, withDate) {
         // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
         // right after an Apply it can still hold the pre-apply value.
-        var verb = data.stepPct > data.lastAppliedPct ? 'will increase SWG setting to ' : 'will decrease SWG setting to ';
+        var verb = data.stepPct > data.lastAppliedPct ? 'rises to ' : 'drops to ';
         var target = new Date(data.stepAt);
-        var s = verb + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
-        if (typeof data.lastAppliedTargetFc === 'number') s += ' for target FC of ' + data.lastAppliedTargetFc + ' ppm';
+        // "at the end of the target period (target FC 8.5 ppm) SWG drops to 15% in 1d 15h (10/7/26, 6:41 AM)": a later change from what is running now, not the recommendation.
+        var s = 'at the end of the target period' + (typeof data.lastAppliedTargetFc === 'number' ? ' (target FC ' + data.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
         if (withDate) s += ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
         return s;
     }
@@ -64,6 +64,11 @@
             el[0].setChemControllerData = function (data) { self.setChemControllerData(data); };
             el[0].setChemDoserData = function (data) { self.setChemDoserData(data); };
             el[0].setAutoSwgData = function (data) { self.setAutoSwgData(data); };
+            // The countdown in the AutoSwg summary is worked out when it is drawn, so draw it again once a minute (the page only gets a new update when something changes).
+            self._autoSwgTick = setInterval(function () {
+                if (el.closest('body').length === 0) { clearInterval(self._autoSwgTick); self._autoSwgTick = undefined; return; }
+                if (self._lastAutoSwgData) self._renderAutoSwgSummary(self._lastAutoSwgData);
+            }, 60000);
         },
         setChlorinatorData: function (data) {
             var self = this, o = self.options, el = self.element;
