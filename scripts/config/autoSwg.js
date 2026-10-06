@@ -298,10 +298,11 @@
             $('<hr></hr>').appendTo(results);
             // Section A: applied status. This persists regardless of whatever calculation
             // preview is showing below (or isn't), and Cancel never touches it.
-            // What is running on the chlorinator now, so the pending step below reads as a later change from it (and not as the recommendation in the calculation).
+            // What is running on the chlorinator now, when it was applied, and what will happen next (the pending step, a future change). The calculations that explain
+            // them (what the applied % was based on, and the latest calculation) are the footnote below these lines.
             self._elRunningNow = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' }).hide();
-            self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60' }).hide();
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
+            self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60', margin: '.2rem 0' }).hide();
             self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             // The background PoolMath history archive (up to 18 months of logs, pulled from PoolMath's
             // JSON interface for longer-range features such as a last-year consumption lookback).
@@ -795,8 +796,8 @@
             self._resultsPnl.toggle(hasSectionA || hasCalc);
             self._startSectionARefresh();
         },
-        // The applied status at the top of the results: what is running now, the pending step after it, when it was last applied and when the next automatic
-        // check is due. Redrawn by every result and, so the countdown and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
+        // The applied status at the top of the results: what is running now, when it was last applied and when the next automatic check is due, plus the pending
+        // step, which comes right after the last applied line because it is what happens next. Redrawn by every result and, so the countdown and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
         _renderSectionA: function (result) {
             var self = this;
             if (typeof result.lastAppliedPct === 'number') self._elRunningNow.text('Current SWG %: ' + result.lastAppliedPct + '%').show();
