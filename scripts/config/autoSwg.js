@@ -90,6 +90,9 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC below target)', binding: 'targetDaysBelow', min: 0.5, max: 30, step: 0.5, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many days to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner.');
             line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep FC at the target through the night', binding: 'protectOvernightLow' })
+                .attr('title', 'FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
+            line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Aim Above Target as the Last Test Ages', binding: 'overshootPpmPerDay', min: 0, max: 0.5, step: 0.05, units: 'ppm per day (0 = aim at the target)', inputAttrs: { style: { width: '3.5rem' } } })
                 .attr('title', 'The older your last FC test, the less certain the projected FC is, and FC a little high is the safer miss than a little low. The SWG % that reaches the target is worked out for the target plus this many ppm for each day since the last test (at most 1 ppm). It does not change the maintenance %, the target date or the projection.');
 
@@ -167,7 +170,7 @@
             try { self._calcDetailsOpen = window.localStorage.getItem('autoSwgCalcDetailsOpen') === '1'; } catch (e) { /* storage unavailable */ }
             self._tuningOpen = false;
             try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
-            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8, burnTempAdjust: false };
+            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, nightBurnRatio: 0.5, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8, burnTempAdjust: false };
             self._elTuningToggle = $('<div></div>').appendTo(pnl)
                 .css({ cursor: 'pointer', margin: '.6rem 0 .2rem 0', userSelect: 'none', fontWeight: 'bold' })
                 .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
@@ -192,6 +195,9 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Daytime Share of FC Loss', binding: 'daytimeLossSharePct', min: 0, max: 100, step: 5, units: '% (0 = auto)', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', "What percentage of a day's chlorine consumption happens in daylight (sunlight/UV drives most of it). Used to weight the part of a day between FC readings -- e.g. a reading taken in the morning and checked in the evening has lost more than the clock fraction of a day. 0 estimates it from today's sunrise-to-sunset length with a parabolic model (about 56% in winter, 67% in the fall/spring, 78% in summer); enter a value to override. Needs the controller's location (for sunrise/sunset) to be set, otherwise time is counted by the clock.");
 
+            line = $('<div></div>').appendTo(self._elTuning);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Night Burn vs Day', binding: 'nightBurnRatio', min: 0.1, max: 1.5, step: 0.05, units: 'x the daytime rate', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', "How much chlorine your pool uses at night compared with the same hour of daylight. 0.5 is the usual figure for a well-kept pool (sunlight does most of the work); a pool with a lot of organic load or bather use can lose more at night. It sets how much of a day's consumption is counted in daylight, so it matters for the part of a day between readings and for the overnight low. Tune scores other values on your own readings and says plainly when the history cannot tell. Ignored while Daytime Share of FC Loss is set.");
             line = $('<div></div>').appendTo(self._elTuning);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Credit liquid chlorine additions logged in PoolMath', binding: 'creditChlorineAdditions' })
                 .attr('title', "A liquid chlorine addition logged in PoolMath between two FC readings raises the second reading without the SWG having done it. With this on, each addition is credited as FC added (strength x amount / pool volume, using Gallons above) when working out consumption and projecting the current FC; with it off, the rise is counted as SWG output and consumption is understated. Other chlorine products aren't recognized yet.");
@@ -525,7 +531,7 @@
         // form keeps the old values, looks as if nothing changed, and a later Save would quietly put them back.
         _applySettingsToForm: function (settings) {
             var self = this, keys = Object.keys(settings || {});
-            var labels = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', daytimeLossSharePct: 'Daytime Share of FC Loss', burnTempAdjust: 'Water temperature adjustment' };
+            var labels = { windowDays: 'Averaging Window', nightBurnRatio: 'Night Burn vs Day', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', daytimeLossSharePct: 'Daytime Share of FC Loss', burnTempAdjust: 'Water temperature adjustment' };
             var show = function (vals) {
                 keys.forEach(function (k) { self._setBound(k, vals[k]); });
                 self._updateTuningBadge();
@@ -1029,7 +1035,7 @@
                 var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
                 var n2 = function (v, d) { return typeof v === 'number' ? v.toFixed(d) : '--'; };
                 var signed = function (v) { return typeof v === 'number' ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; };
-                var names = { windowDays: 'Averaging Window', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', burnTempAdjust: 'Water temperature adjustment' };
+                var names = { windowDays: 'Averaging Window', nightBurnRatio: 'Night Burn vs Day', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', creditChlorineAdditions: 'Credit liquid chlorine additions', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', burnTempAdjust: 'Water temperature adjustment' };
                 var fmt = function (k, v) {
                     if (typeof v === 'boolean') return v ? 'on' : 'off';
                     if (k === 'windowDays' || k === 'projectionTaperStartDays' || k === 'projectionTaperEndDays') return v + (k === 'projectionTaperEndDays' && v === 0 ? ' (no taper)' : ' days');
@@ -1046,6 +1052,7 @@
                     var base = typeof t.unchangedMae === 'number' ? ' The "FC unchanged" baseline is ' + n2(t.unchangedMae, 2) + ' ppm, so the algorithm is ' + Math.abs(Math.round(t.skill * 100)) + '% ' + (t.skill > 0 ? 'better' : 'worse') + ' than that.' : '';
                     para('Your saved settings score a mean error of ' + n2(t.meanAbsError, 2) + ' ppm over ' + t.readings + ' FC readings' + (t.history && t.history.from ? ' (history from ' + new Date(t.history.from).toLocaleDateString([], { dateStyle: 'medium' }) + ')' : '') + '.' + base, { color: '#666' });
                 }
+                if (t.nightBurnNote) para(t.nightBurnNote, { color: '#555' });
                 if (t.status === 'insufficient') {
                     var b0 = box('#ffe9a8', '#5a4300');
                     b0.append($('<div></div>').css({ fontWeight: 'bold' }).text('Not enough readings to tune on yet'));
