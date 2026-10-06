@@ -155,6 +155,10 @@
             // ---- Tuning options: model settings that rarely change once tuned (the Projection Accuracy and
             // What-If Sweep reports suggest values), kept out of the way unless wanted. The fields stay in the
             // form, so Save and loading work as for every other setting.
+            // The calculation details (the lists explaining the applied % and the latest calculation) expand and contract; contracted unless you opened them. A
+            // calculation still waiting for your Apply shows its details so you can review them.
+            self._calcDetailsOpen = false;
+            try { self._calcDetailsOpen = window.localStorage.getItem('autoSwgCalcDetailsOpen') === '1'; } catch (e) { /* storage unavailable */ }
             self._tuningOpen = false;
             try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
             self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8, burnTempAdjust: false };
@@ -759,10 +763,11 @@
             var hasApplied = result.lastAppliedAt && Array.isArray(result.lastAppliedRationale) && result.lastAppliedRationale.length > 0;
             self._elAppliedRationale.empty();
             if (hasApplied) {
-                self._elAppliedRationaleHeader.text('From the ' + result.lastAppliedPct + '% applied on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' (what\'s actually running now):').show();
+                self._setDetailsHeader(self._elAppliedRationaleHeader, 'Calculation details: from the ' + result.lastAppliedPct + '% applied on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' (what\'s actually running now)');
                 result.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(self._elAppliedRationale).text(line); });
+                self._elAppliedRationale.toggle(!!self._calcDetailsOpen);
             }
-            else self._elAppliedRationaleHeader.hide();
+            else { self._elAppliedRationaleHeader.hide(); self._elAppliedRationale.hide(); }
             var hasSectionA = !!(result.stepAt || result.lastAppliedAt);
 
             // Section B: the (possibly unapplied) calculation preview -- absent entirely once
@@ -793,14 +798,40 @@
             var hasNewerCheck = hasCalc && (!result.lastAppliedAt || new Date(result.lastCheckedAt) > new Date(result.lastAppliedAt));
             self._elRationale.empty();
             if (hasCalc && (hasNewerCheck || !hasApplied)) {
-                self._elRationaleHeader.text(hasApplied ? 'From the latest (not yet applied) calculation:' : 'From the last calculation:').show();
+                self._setDetailsHeader(self._elRationaleHeader, hasApplied ? 'Calculation details: from the latest (not yet applied) calculation' : 'Calculation details: from the last calculation', !!result.pending);
                 (result.rationale || []).forEach(function (line) { $('<li></li>').appendTo(self._elRationale).text(line); });
+                self._elRationale.toggle(!!self._calcDetailsOpen || !!result.pending);
             }
-            else self._elRationaleHeader.hide();
+            else { self._elRationaleHeader.hide(); self._elRationale.hide(); }
 
             self._elResultDivider.toggle(hasSectionA && hasCalc);
             self._resultsPnl.toggle(hasSectionA || hasCalc);
             self._startSectionARefresh();
+        },
+        // A "Calculation details" header with a chevron: clicking it expands or contracts the lists of explanations (both of them together, and the choice is
+        // remembered in this browser). `forceOpen` keeps a list open that is waiting for your Apply.
+        _setDetailsHeader: function (header, text, forceOpen) {
+            var self = this;
+            var open = !!self._calcDetailsOpen || !!forceOpen;
+            header.empty().css({ cursor: 'pointer', userSelect: 'none' }).attr('title', 'Click to expand or contract the calculation details')
+                .append($('<i></i>').addClass('fas').addClass(open ? 'fa-chevron-down' : 'fa-chevron-right').css({ width: '1rem', display: 'inline-block' }))
+                .append($('<span></span>').text(text)).show();
+            if (!header.data('detailsBound')) {
+                header.data('detailsBound', true).on('click', function () {
+                    self._calcDetailsOpen = !self._calcDetailsOpen;
+                    try { window.localStorage.setItem('autoSwgCalcDetailsOpen', self._calcDetailsOpen ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+                    self._applyDetailsOpen();
+                });
+            }
+        },
+        // Opens or contracts the two lists (and turns their chevrons) to match the choice, without redrawing the rest.
+        _applyDetailsOpen: function () {
+            var self = this, pending = !!(self._lastResult && self._lastResult.pending);
+            [[self._elAppliedRationaleHeader, self._elAppliedRationale, false], [self._elRationaleHeader, self._elRationale, pending]].forEach(function (p) {
+                var open = !!self._calcDetailsOpen || p[2];
+                p[0].find('i').removeClass('fa-chevron-right fa-chevron-down').addClass(open ? 'fa-chevron-down' : 'fa-chevron-right');
+                if (p[0][0].style.display !== 'none') p[1].toggle(open);
+            });
         },
         // The applied status at the top of the results: what is running now, when it was last applied and when the next automatic check is due, plus the pending
         // step, which comes right after the last applied line because it is what happens next. Redrawn by every result and, so the countdown and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
