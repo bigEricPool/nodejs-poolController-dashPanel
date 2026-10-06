@@ -200,7 +200,7 @@
             $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Solar Return').appendTo(line);
             $('<span></span>').addClass('picSolarReturnData').appendTo(line);
             // Why solar is waiting (a settle delay, a hysteresis, the reheat guard), from the heatNote njsPC publishes on the body.
-            $('<div></div>').addClass('picHeatNote').css({ display: 'none', fontSize: '0.65rem', fontStyle: 'italic', lineHeight: '1.1', maxWidth: '12rem', marginTop: '.25rem' }).appendTo(setpointsWrapper);
+            $('<div></div>').addClass('picHeatNote').css({ display: 'none', fontSize: '0.65rem', fontStyle: 'italic', lineHeight: '1.1', width: 0, minWidth: '100%', marginTop: '.25rem' }).appendTo(setpointsWrapper);   // width 0 and min-width 100%: the note wraps to the setpoints column instead of widening it under the temperature
             line = $('<div></div>').attr('data-circuitid', o.circuit).addClass('outerBodyEndTime').appendTo(setpointsWrapper).css('display', 'none');
             $('<label></label>').addClass('picInline-label').attr('data-circuitid', o.circuit).addClass('picSetpointText').text('Time to off').appendTo(line);
             $('<span class="bodyCircuitEndTime"></span>').appendTo(line);
