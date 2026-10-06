@@ -13,6 +13,21 @@
         if (days === 0) parts.push(mins + 'm');
         return parts.join(' ');
     }
+    // How the automatic change that tripped the warning reads: "from 15% to 30% (+15 points; the threshold is 10) by the automatic check at 10:00 AM".
+    // The earlier percent and the threshold come from njsPC; an older njsPC that does not send them gets "to 30%".
+    function autoSwgLargeChangeText(data) {
+        var to = data.lastAppliedPct, from = data.lastAutoApplyPreviousPct, text;
+        if (typeof from === 'number' && typeof to === 'number') {
+            var moved = to - from;
+            text = 'from ' + from + '% to ' + to + '% (' + (moved > 0 ? '+' : '') + moved + ' points' + (typeof data.lastAutoApplyThresholdPct === 'number' ? '; the threshold is ' + data.lastAutoApplyThresholdPct : '') + ')';
+        }
+        else text = 'to ' + to + '%';
+        if (data.lastAppliedAt) {
+            var at = new Date(data.lastAppliedAt);
+            if (!isNaN(at.getTime())) text += ' by the automatic check at ' + at.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+        }
+        return text;
+    }
     // The warning that even 100% SWG can't reach the target within the window the last
     // apply was aiming for -- only while that deadline is still ahead (afterward there's
     // no longer a target being missed). Empty string when there's nothing to warn about.
@@ -225,7 +240,7 @@
             if (data.lastAutoApplyLargeChange) {
                 // Tapping the banner opens the calculation details; Dismiss clears it once you have seen the change (applying a reviewed result or changing the % by hand also clears it).
                 self._elAutoSwgWarning.empty()
-                    .append($('<span></span>').text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed to ' + data.lastAppliedPct + '% with no manual review -- tap to review.'))
+                    .append($('<span></span>').text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed ' + autoSwgLargeChangeText(data) + ' with no manual review -- tap to review.'))
                     .append($('<span></span>').text('Dismiss').css({ display: 'inline-block', marginLeft: '.6rem', padding: '.1rem .5rem', border: '1px solid #fff', borderRadius: '.25rem', cursor: 'pointer', fontSize: '.8em' })
                         .on('click', function (e) { e.stopPropagation(); $.putApiService('state/autoSwg/acknowledge', {}, function () { }); }))
                     .off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
@@ -285,7 +300,7 @@
             var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: '420px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
             if (data.lastAutoApplyLargeChange) {
-                addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved to ' + data.lastAppliedPct + '% with no manual review.',
+                addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved ' + autoSwgLargeChangeText(data) + ' with no manual review.',
                     { fontWeight: 'bold', color: '#fff', background: '#c0392b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
             var targetWarning = autoSwgTargetWarning(data);
