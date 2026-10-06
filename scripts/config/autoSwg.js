@@ -110,7 +110,7 @@
             var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Auto-Apply Recommendations', binding: 'autoApplyEnabled' })
                 .attr('title', 'Applies a recommendation with NO manual review whenever one is produced -- from the Refresh and Apply button (which replaces Check Now and Refresh while this is saved as on), or (if also enabled below) the periodic automatic check. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Warning Threshold', binding: 'autoApplyWarnThresholdPct', min: 1, max: 100, step: 1, units: 'pts', labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'If an auto-applied change moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect.');
+                .attr('title', 'If an automatic check moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect. A check you start yourself with a button that would move it this far is not applied until you review it and press Apply.');
             cbAutoApply.on('change', function (e) {
                 self._updateAutoApplyFields(cbAutoApply.find('input[type=checkbox]').is(':checked'));
             });

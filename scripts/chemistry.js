@@ -223,7 +223,11 @@
             self._elAutoSwgSummary.find('span:last').html(parts.join(' · '));
             self._elAutoSwgSummary.show();
             if (data.lastAutoApplyLargeChange) {
-                self._elAutoSwgWarning.text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed to ' + data.lastAppliedPct + '% with no manual review -- tap to review.')
+                // Tapping the banner opens the calculation details; Dismiss clears it once you have seen the change (applying a reviewed result or changing the % by hand also clears it).
+                self._elAutoSwgWarning.empty()
+                    .append($('<span></span>').text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed to ' + data.lastAppliedPct + '% with no manual review -- tap to review.'))
+                    .append($('<span></span>').text('Dismiss').css({ display: 'inline-block', marginLeft: '.6rem', padding: '.1rem .5rem', border: '1px solid #fff', borderRadius: '.25rem', cursor: 'pointer', fontSize: '.8em' })
+                        .on('click', function (e) { e.stopPropagation(); $.putApiService('state/autoSwg/acknowledge', {}, function () { }); }))
                     .off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             }
             else self._elAutoSwgWarning.hide();
