@@ -53,6 +53,9 @@
         // "at the end of the target period (target FC 8.5 ppm) SWG drops to 15% in 1d 15h (10/7/26, 6:41 AM)": a later change from what is running now, not the recommendation.
         var s = 'at the end of the target period' + (typeof data.lastAppliedTargetFc === 'number' ? ' (target FC ' + data.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
         if (withDate) s += ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+        // the period can end while the SWG is off, and the step is then set for one minute after it next starts: say when the period ends
+        var end = data.lastAppliedTargetDate ? new Date(data.lastAppliedTargetDate) : null;
+        if (end && !isNaN(end.getTime()) && Math.abs(target.getTime() - end.getTime()) > 10 * 60000) s += '; the target period ends ' + end.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' with the SWG off';
         return s;
     }
     $.widget("pic.chemistry", {

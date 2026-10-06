@@ -84,11 +84,11 @@
             // below-target one. Same label width so the two spinners line up.
             var daysLabel = { style: { width: '14rem' } };
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC above target)', binding: 'targetDaysAbove', min: 0.5, max: 30, step: 0.5, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
-                .attr('title', 'How many days to take bringing FC down to Target FC when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to Target FC when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC below target)', binding: 'targetDaysBelow', min: 0.5, max: 30, step: 0.5, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
-                .attr('title', 'How many days to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep FC at the target through the night', binding: 'protectOvernightLow' })
                 .attr('title', 'FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
@@ -98,7 +98,7 @@
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
-                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Days to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Run Periods to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
             // Vacation: Away protection. While it is on, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
             // the chlorinator's salt reading) or an outage (njsPC not running), never below the maintenance % and never more than the limit above it. It
@@ -128,7 +128,7 @@
             line = $('<div></div>').appendTo(pnl);
             self._elNewTargetRow = line;
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', 'Used by Refresh and Apply (and the periodic check). If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target date -- a new deadline in the Days to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
+                .attr('title', 'Used by Refresh and Apply (and the periodic check). If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoCheckRow = line;
@@ -277,10 +277,10 @@
             // Refresh and Apply button, which makes that choice itself (see
             // _updateActionButtons); with it off, the two stay as separate, reviewed actions.
             self._btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now: New Target', icon: '<i class="fas fa-calculator"></i>' })
-                .attr('title', 'Runs a fresh calculation using today\'s date, the Target FC configured above, and whichever Days to Target applies (above or below target, depending on where the projected FC is) -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
+                .attr('title', 'Runs a fresh calculation using today\'s date, the Target FC configured above, and whichever Run Periods to Target applies (above or below target, depending on where the projected FC is) -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
             self._btnCheck.on('click', function (e) { self._checkNow(); });
             self._btnRefreshApply = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh and Apply', icon: '<i class="fas fa-rotate"></i>' })
-                .attr('title', 'Re-fetches your PoolMath data and applies the result immediately, with no review. If the projected FC is within the New Target Date Threshold of Target FC, it just re-works the SWG % against your existing target date. If it is further above or below Target FC than that, it starts a new target date -- a new deadline in the Days to Target window that applies, like Check Now.')
+                .attr('title', 'Re-fetches your PoolMath data and applies the result immediately, with no review. If the projected FC is within the New Target Date Threshold of Target FC, it just re-works the SWG % against your existing target date. If it is further above or below Target FC than that, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now.')
                 .hide();
             self._btnRefreshApply.on('click', function (e) { self._refreshAndApply(); });
             // Only meaningful while a glide-to-target from a previous apply is still in
@@ -902,6 +902,12 @@
             // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
             // this step -- not necessarily today's config, which may have changed since.
             var s = 'at the end of the target period' + (typeof result.lastAppliedTargetFc === 'number' ? ' (target FC ' + result.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + result.stepPct + '%';
+            // When the period ends while the SWG is off, the step is set for one minute after its next start: say both times so the later one is not read as the end.
+            var end = result.lastAppliedTargetDate ? new Date(result.lastAppliedTargetDate) : null;
+            if (end && !isNaN(end.getTime()) && Math.abs(target.getTime() - end.getTime()) > 10 * 60000) {
+                return s.replace('at the end of the target period', 'at the end of the target period (' + end.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')')
+                    + '; the SWG is off then, so the step is set for one minute after it next starts (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', in ' + remaining + ')';
+            }
             return s + ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', in ' + remaining + ')';
         },
         // "2d 6h", "6h 5m", or "due now" -- kept to 2 units for brevity.
@@ -948,7 +954,7 @@
         // What kind of row a combined-history entry is, and its main value as shown in the dialog.
         // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
         _settingsChangeText: function (e) {
-            var labels = { enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var labels = { enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
             var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
             return (e.changes || []).map(function (c) {
                 var name = labels[c.setting] || c.setting;
@@ -1376,7 +1382,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
-                    + 'Changes to the AutoSwg settings (target, days to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
+                    + 'Changes to the AutoSwg settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
                     + 'The local SWG % log is kept for 18 months.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
@@ -1460,7 +1466,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     ['Run stop', function (e) { return inp(e).swgStopTime; }],
                     ['Window days', function (e) { return inp(e).windowDays; }],
                     ['Target FC (ppm)', function (e) { return inp(e).targetFc; }],
-                    ['Target days', function (e) { return inp(e).targetDays; }]
+                    ['Target period (days on the clock)', function (e) { return inp(e).targetDays; }]
                 ];
                 var esc = function (v) {
                     if (typeof v === 'undefined' || v === null) return '';
