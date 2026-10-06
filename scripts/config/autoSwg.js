@@ -84,10 +84,10 @@
             // below-target one. Same label width so the two spinners line up.
             var daysLabel = { style: { width: '14rem' } };
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC above target)', binding: 'targetDaysAbove', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC above target)', binding: 'targetDaysAbove', min: 0.5, max: 30, step: 0.5, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many days to take bringing FC down to Target FC when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %.');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC below target)', binding: 'targetDaysBelow', min: 1, max: 30, step: 1, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Days to Target (FC below target)', binding: 'targetDaysBelow', min: 0.5, max: 30, step: 0.5, units: 'days', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many days to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner.');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Aim Above Target as the Last Test Ages', binding: 'overshootPpmPerDay', min: 0, max: 0.5, step: 0.05, units: 'ppm per day (0 = aim at the target)', inputAttrs: { style: { width: '3.5rem' } } })
