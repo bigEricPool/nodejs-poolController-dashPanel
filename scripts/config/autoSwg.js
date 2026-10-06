@@ -70,6 +70,12 @@
                 .attr('title', "e.g. '19:00' or '7pm'. Ignored while a SWG Schedule above is selected -- that schedule's own end time is used instead.");
             $('<div></div>').appendTo(line).inputField({ labelText: 'Time Zone', binding: 'timezone', inputAttrs: { maxlength: 40, style: { width: '9rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } }).attr('title', "IANA zone name, e.g. 'America/New_York'");
 
+            // What the SWG can make in that window at its 100% setting (ppm/day), from the pool volume, the capacity and the run window the calculation really uses
+            // (a selected schedule's own window wins over the times typed above), so the plan can be judged against it. Redrawn as the volume and capacity are edited.
+            line = $('<div></div>').appendTo(pnl);
+            self._elSwgCapacity = $('<div></div>').appendTo(line).css({ fontSize: '.85em', color: '#666', margin: '.1rem 0 .3rem 0' }).hide();
+            pnl.on('change keyup mouseup click', function () { setTimeout(function () { self._applySwgWindow(); }, 60); });
+
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Target FC', binding: 'targetFc', min: 0, max: 20, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
 
@@ -250,6 +256,7 @@
                         self._updateTuningBadge();
                         self._updateActionButtons(c && c.autoApplyEnabled && c.awayStatus !== 'active');
                         self._applyAwayStatus(c);
+                        self._applySwgWindow(c);
                         self._markSaved();
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
@@ -425,6 +432,23 @@
             self._elGateNote.text(text).toggle(text.length > 0);
             self._applyAutoTuneState();
         },
+        // "SWG can make up to 4.74 ppm/day at its 100% setting over 7.75 h (09:21-17:06, from schedule #2)". The window comes from the server (it knows the
+        // schedule); the volume and capacity are read from the form, so editing them updates the number before saving.
+        _applySwgWindow: function (cfg) {
+            var self = this;
+            if (!self._elSwgCapacity) return;
+            if (cfg && cfg.swgWindow) self._swgWindow = cfg.swgWindow;
+            var w = self._swgWindow;
+            if (!w || !(w.hours > 0)) { self._elSwgCapacity.hide(); return; }
+            var v = {};
+            try { v = dataBinder.fromElement(self._pnl) || {}; } catch (e) { v = {}; }
+            var gal = Number(v.gallons), lbs = Number(v.swgLbsPerDay);
+            var ppm = gal > 0 && lbs > 0 ? (lbs * 1000000) / (gal * 8.34) * (w.hours / 24) : w.ppmPerDayAtFull;
+            if (!(ppm > 0)) { self._elSwgCapacity.hide(); return; }
+            var src = w.note && /schedule #/.test(w.note) ? ', from ' + /schedule #\d+/.exec(w.note)[0] : '';
+            self._elSwgCapacity.text('The SWG can make up to ' + ppm.toFixed(2) + ' ppm/day of FC at its 100% setting over ' + (Math.round(w.hours * 100) / 100) + ' h (' + w.start + '-' + w.stop + src + ').')
+                .attr('title', 'The rated lbs/day scaled to the run window, for this pool volume. The recommended SWG % is the share of this that is needed.').show();
+        },
         // The Away protection status line under its settings; while it is on, the settings it pauses are grayed out.
         _applyAwayStatus: function (cfg) {
             var self = this;
@@ -467,6 +491,7 @@
                 self._gate = cfg && cfg.gate;
                 self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
                 self._applyAwayStatus(cfg);
+                self._applySwgWindow(cfg);
                 self._applyGateNote();
                 self._applyTuningState();
             });
@@ -674,6 +699,7 @@
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
                         self._applyAwayStatus(cfg);
+                        self._applySwgWindow(cfg);
                         self._applyGateNote();
                         self._applyTuningState();
                         self._updateTuningBadge();
