@@ -266,6 +266,8 @@
                         self._applyAwayStatus(c);
                         self._applySwgWindow(c);
                         self._markSaved();
+                        // Turning Away protection on (or off) makes a check a few seconds after the save: pick up its calculation when it is done.
+                        setTimeout(function () { self._refreshFromServer(); }, 8000);
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
                         $.getApiService('/state/autoSwg', null, function (result) {
@@ -891,15 +893,26 @@
             if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
             else self._elNextAutoCheck.hide();
         },
-        // Once a minute while the results are showing: reload what was applied and redraw just section A (not the calculation preview, whose buttons depend on
-        // the result in hand).
+        // Reloads what the server has now: section A (what is applied, the pending step, the next check) always, and the whole calculation and its details
+        // when a newer one has been made (an automatic check, or Away protection acting) and there is no unapplied preview here waiting for your Apply.
+        _refreshFromServer: function () {
+            var self = this;
+            if (!self.element || self.element.closest('body').length === 0) return;
+            if (!self._resultsPnl || !self._resultsPnl.is(':visible')) return;
+            $.getApiService('/state/autoSwg', null, function (result) {
+                if (!result) return;
+                self._renderSectionA(result);
+                var shown = self._lastResult;
+                if ((!shown || !shown.pending) && result.lastCheckedAt && (!shown || shown.lastCheckedAt !== result.lastCheckedAt)) self._renderResult(result, true);
+            });
+        },
+        // Once a minute while the results are showing (see _refreshFromServer, which does not touch an unapplied preview).
         _startSectionARefresh: function () {
             var self = this;
             if (self._sectionATimer) return;
             self._sectionATimer = setInterval(function () {
                 if (!self.element || self.element.closest('body').length === 0) { clearInterval(self._sectionATimer); self._sectionATimer = undefined; return; }
-                if (!self._resultsPnl || !self._resultsPnl.is(':visible')) return;
-                $.getApiService('/state/autoSwg', null, function (result) { if (result) self._renderSectionA(result); });
+                self._refreshFromServer();
             }, 60000);
         },
         // Concise one-liner for a pending auto-step: what happens at the end of the target period, to what %, and when -- e.g.
