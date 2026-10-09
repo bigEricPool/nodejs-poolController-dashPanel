@@ -168,6 +168,7 @@
             // running (so its next due time is visible even before the first apply).
             if (!data || (!data.lastAppliedAt && !data.nextAutoCheckAt)) {
                 if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
+                if (self._elAutoSwgAwayBadge) self._elAutoSwgAwayBadge.hide();
                 if (self._elAutoSwgDetailsToggle) { self._elAutoSwgDetailsToggle.hide(); self._elAutoSwgDetails.hide(); }
                 return;
             }
@@ -180,6 +181,11 @@
                     .attr('title', 'Click for Automatic SWG % status')
                     .on('click', function () { self._showAutoSwgPopup(); })
                     .appendTo(el);
+                // Shown while Away protection is on, above everything else here, so it is plain at a glance that the vacation settings are in place.
+                self._elAutoSwgAwayBadge = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#117a8b',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.25rem 0', textAlign: 'center', cursor: 'pointer'
+                }).attr('title', 'Click for Automatic SWG % status').on('click', function () { self._showAutoSwgPopup(); }).hide().insertBefore(self._elAutoSwgSummary);
                 // The controller's name -- leftmost and larger than the status text that follows.
                 $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.05em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
                     .text('Auto SWG %').appendTo(self._elAutoSwgSummary);
@@ -223,6 +229,11 @@
                     fontSize: '1em', color: '#fff', background: '#2a6fa8',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // What the check made when you turned Away protection on or off did to the SWG %: a change you caused on purpose, so a plain note, not the red warning.
+                self._elAutoSwgAwayNote = $('<div></div>').css({
+                    fontSize: '1em', color: '#fff', background: '#2a6fa8',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
                 // The calculation details (the reasoning behind what was applied) expand and collapse,
                 // collapsed by default; what was applied, the pending step and every warning/info message
                 // above stay visible either way.
@@ -242,7 +253,15 @@
             if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
             if (data.stepAt) parts.push('Pending step: ' + describeAutoSwgStep(data, false));
             // Only present while the periodic automatic check is armed (Auto-Apply + automatic checking on).
-            if (data.awayStatus === 'active') parts.push('Away protection ON' + (data.awayStartedAt ? ' since ' + new Date(data.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''));
+            if (data.awayStatus === 'active') {
+                var awayLine = 'Away Mode Active';
+                if (typeof data.awayTargetFc === 'number') awayLine += ' -- vacation target ' + data.awayTargetFc + ' ppm';
+                if (data.awayStartedAt) awayLine += ' (since ' + new Date(data.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+                self._elAutoSwgAwayBadge.text(awayLine).show();
+            }
+            else self._elAutoSwgAwayBadge.hide();
+            if (data.awayChangeNote) self._elAutoSwgAwayNote.text('ℹ ' + data.awayChangeNote).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgAwayNote.hide();
             if (data.nextAutoCheckAt) parts.push('Next auto check: ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
             // One fact to a line (what is applied, what happens next, when the next check is), not one run-on line that wraps on a narrow card.
             self._elAutoSwgSummary.find('span:last').html(parts.join('<br>'));
@@ -309,6 +328,10 @@
             ];
             var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: Math.min(780, Math.max(300, (window.innerWidth || 780) - 24)) + 'px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });   // wide, so the long calculation lines wrap less and the popup is not as tall; narrower than the screen on a phone
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
+            if (data.awayStatus === 'active') {
+                addLine('Away Mode Active' + (typeof data.awayTargetFc === 'number' ? ' -- vacation target ' + data.awayTargetFc + ' ppm' : ''), { fontWeight: 'bold', color: '#fff', background: '#117a8b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            if (data.awayChangeNote) addLine('ℹ ' + data.awayChangeNote, { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             if (data.lastAutoApplyLargeChange) {
                 addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved ' + autoSwgLargeChangeText(data) + ' with no manual review.',
                     { fontWeight: 'bold', color: '#fff', background: '#c0392b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
