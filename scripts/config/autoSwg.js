@@ -906,7 +906,11 @@
                 if (!result) return;
                 self._renderSectionA(result);
                 var shown = self._lastResult;
-                if ((!shown || !shown.pending) && result.lastCheckedAt && (!shown || shown.lastCheckedAt !== result.lastCheckedAt)) self._renderResult(result, true);
+                if ((!shown || !shown.pending) && result.lastCheckedAt && (!shown || shown.lastCheckedAt !== result.lastCheckedAt)) {
+                    self._renderResult(result, true);
+                    // The Away protection status line (and its note about the end) can change with a new apply: read it again.
+                    $.getApiService('/config/autoSwg', null, function (cfg) { if (cfg) self._applyAwayStatus(cfg); });
+                }
             });
         },
         // Once a minute while the results are showing (see _refreshFromServer, which does not touch an unapplied preview).
