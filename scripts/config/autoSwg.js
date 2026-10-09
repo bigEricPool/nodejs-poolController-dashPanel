@@ -100,19 +100,6 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
                 .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Run Periods to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
-            // Vacation: Away protection. While it is on, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
-            // the chlorinator's salt reading) or an outage (njsPC not running), never below the maintenance % and never more than the limit above it. It
-            // needs the return to the maintenance %, so each boost ends by itself. Available in every mode. It pauses Auto-Apply, the automatic check and
-            // auto tune (their settings are kept, shown grayed out) and ends when it is unchecked and saved, or by itself when a new FC reading is logged.
-            // Saving the settings is what starts it.
-            line = $('<div></div>').appendTo(pnl).css({ marginTop: '.8rem' });
-            $('<div></div>').appendTo(line).css({ fontWeight: 'bold' }).text('Vacation: Away protection');
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Away protection: keep FC safe while I am away', binding: 'awayEnabled' })
-                .attr('title', 'Set your vacation Target FC above, check this and save the settings to start. AutoSwg then checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: it applies the glide up to the vacation target you set (not limited), it never goes below the maintenance %, a storm or outage adds at most the points at right to that, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). While it is on, Auto-Apply, the automatic check and auto tune are paused (their settings are kept). It ends when you uncheck it and save, or by itself when a new FC test is logged in PoolMath. Log your last test before you turn it on, since a test logged afterward ends it.');
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Storm or outage adds at most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'How many points a storm (a sharp fall in the salt reading) or an outage may add to the SWG % your plan would have used without it. It does not limit the glide up to the vacation target you set. The SWG % never goes below the maintenance %.');
-            self._elAwayStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '.2rem 0' }).hide();
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoApplyRow = line;       // hidden until the server says the automation is available (see _updateAutoApplyFields)
@@ -160,6 +147,20 @@
                 .attr('title', 'How often to automatically re-check PoolMath and apply the result.');
             self._elAutoCheckStart = $('<div></div>').appendTo(line).inputField({ labelText: 'Starting At', binding: 'autoCheckStartTime', inputAttrs: { maxlength: 8, placeholder: 'any time', style: { width: '4.5rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', "Optional time of day (e.g. '06:00' or '6am', in the Time Zone above) to pin the automatic checks to. Checks then run every \"Check Every\" hours counting from that time, and start over at it each day -- e.g. 06:00 every 12 hours checks at 6am and 6pm -- so restarts and settings saves don't shift them. Leave blank to count the interval from when njsPC starts, settings are saved, or the last check finishes. Only applies to intervals under 24 hours.");
+
+            // Vacation: Away protection. While it is on, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
+            // the chlorinator's salt reading) or an outage (njsPC not running), never below the maintenance % and never more than the limit above it. It
+            // needs the return to the maintenance %, so each boost ends by itself. Available in every mode. It pauses Auto-Apply, the automatic check and
+            // auto tune (their settings are kept, shown grayed out) and ends when it is unchecked and saved, or by itself when a new FC reading is logged.
+            // Saving the settings is what starts it.
+            line = $('<div></div>').appendTo(pnl).css({ marginTop: '.8rem' });
+            $('<div></div>').appendTo(line).css({ fontWeight: 'bold' }).text('Vacation: Away protection');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Away protection: keep FC safe while I am away', binding: 'awayEnabled' })
+                .attr('title', 'Set your vacation Target FC above, check this and save the settings to start. AutoSwg then checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: it applies the glide up to the vacation target you set (not limited), it never goes below the maintenance %, a storm or outage adds at most the points at right to that, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). While it is on, Auto-Apply, the automatic check and auto tune are paused (their settings are kept). It ends when you uncheck it and save, or by itself when a new FC test is logged in PoolMath. Log your last test before you turn it on, since a test logged afterward ends it.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Storm or outage adds at most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'How many points a storm (a sharp fall in the salt reading) or an outage may add to the SWG % your plan would have used without it. It does not limit the glide up to the vacation target you set. The SWG % never goes below the maintenance %.');
+            self._elAwayStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '.2rem 0' }).hide();
 
             // ---- Tuning options: model settings that rarely change once tuned (the Projection Accuracy and
             // What-If Sweep reports suggest values), kept out of the way unless wanted. The fields stay in the
@@ -273,9 +274,9 @@
                     });
                 }
             });
-            // While Auto-Apply is saved as on, Check Now and Refresh give way to the single
-            // Refresh and Apply button, which makes that choice itself (see
-            // _updateActionButtons); with it off, the two stay as separate, reviewed actions.
+            // While Auto-Apply is saved as on, Refresh gives way to the single Refresh and Apply
+            // button, which makes that choice itself (see _updateActionButtons); Check Now: New
+            // Target stays, and applies at once then. With it off they are separate, reviewed actions.
             self._btnCheck = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Check Now: New Target', icon: '<i class="fas fa-calculator"></i>' })
                 .attr('title', 'Runs a fresh calculation using today\'s date, the Target FC configured above, and whichever Run Periods to Target applies (above or below target, depending on where the projected FC is) -- starts a brand new target and countdown. Use this to start (or restart) a glide from scratch; use Refresh: Adjust % instead to correct one already in progress without resetting its deadline.');
             self._btnCheck.on('click', function (e) { self._checkNow(); });
@@ -646,7 +647,9 @@
         _updateActionButtons: function (autoApplySaved) {
             var self = this;
             self._autoApplySaved = !!autoApplySaved;
-            self._btnCheck.toggle(!self._autoApplySaved);
+            // Check Now: New Target stays available with Auto-Apply on: it starts a new target from the settings and applies it at once, which is the way to
+            // start over when a refresh keeps the old deadline.
+            self._btnCheck.show();
             self._btnRefreshApply.toggle(self._autoApplySaved);
             self._updateRefineButton(self._lastResult);
         },
