@@ -306,7 +306,7 @@
                 { text: 'Open Settings', icon: '<i class="fas fa-cog"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._goToAutoSwgCheck(); } },
                 { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
             ];
-            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: '420px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: Math.min(780, Math.max(300, (window.innerWidth || 780) - 24)) + 'px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });   // wide, so the long calculation lines wrap less and the popup is not as tall; narrower than the screen on a phone
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
             if (data.lastAutoApplyLargeChange) {
                 addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved ' + autoSwgLargeChangeText(data) + ' with no manual review.',
