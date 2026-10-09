@@ -231,8 +231,9 @@
                     .css({ cursor: 'pointer', fontSize: '.85em', color: '#666', marginTop: '.3rem', userSelect: 'none' })
                     .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
                     .append($('<span></span>').text('Calculation details'))
-                    .attr('title', 'Show or hide the reasoning behind the last applied SWG %')
-                    .on('click', function () { self._autoSwgDetailsOpen = !self._autoSwgDetailsOpen; self._applyAutoSwgDetailsState(); })
+                    .attr('title', 'Open the reasoning behind the last applied SWG %')
+                    // Opens in the wide status popup (with the details expanded) instead of expanding inside this narrow card, where the long lines wrapped into a tall list.
+                    .on('click', function () { self._showAutoSwgPopup({ openDetails: true }); })
                     .hide().appendTo(self._elAutoSwgSummary.parent());
                 self._elAutoSwgDetails = $('<div></div>').css({ fontSize: '.8em', color: '#666', padding: '.15rem 0 .15rem 1rem' })
                     .hide().appendTo(self._elAutoSwgSummary.parent());
@@ -299,7 +300,7 @@
         // applied change, and the rationale text behind it. Like the summary line, this
         // only ever reflects what's actually applied, and doesn't repeat the current SWG %
         // shown live on the Chlorinator widget.
-        _showAutoSwgPopup: function () {
+        _showAutoSwgPopup: function (opts) {
             var self = this;
             var data = self._lastAutoSwgData || {};
             var buttons = [
@@ -335,9 +336,9 @@
             // The reasoning behind what was applied expands and collapses (collapsed each time the popup
             // opens); the warnings, the pending step and what was last applied above stay visible.
             if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
-                var detailsOpen = false;
-                var chevron = $('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' });
-                var detailsBody = $('<div></div>').css({ padding: '.15rem 0 .15rem 1rem' }).hide();
+                var detailsOpen = !!(opts && opts.openDetails);   // opened from the card's Calculation details: show them expanded
+                var chevron = $('<i class="fas ' + (detailsOpen ? 'fa-chevron-down' : 'fa-chevron-right') + '"></i>').css({ width: '1rem', display: 'inline-block' });
+                var detailsBody = $('<div></div>').css({ padding: '.15rem 0 .15rem 1rem' }).toggle(detailsOpen);
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', marginTop: '.4rem', cursor: 'pointer', userSelect: 'none' })
                     .append(chevron).append($('<span></span>').text('Calculation details'))
                     .attr('title', 'Show or hide the reasoning behind the last applied SWG %')
