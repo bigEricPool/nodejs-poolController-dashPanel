@@ -42,6 +42,8 @@
                 .attr('title', 'After the pump starts or solar turns off, solar waits this long before starting. Solar stops for the water temperature only after the water has stayed past the stop level this long. 0 turns the delay off.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Hysteresis', binding: 'hysteresis', min: 0, max: 5, step: 0.5, units: '&deg;' + ((opts.tempUnits || {}).name || ''), inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'Solar stops once the water has stayed this many degrees above the Heat Point (for the settle delay) and restarts when the water is this many degrees below it. 0 turns it off.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Valve Delay', binding: 'valveDelaySeconds', min: 0, max: 600, step: 15, units: 'sec', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'When solar should start, the pump first runs at its solar speed for this long with the valve relay still off, and the start is checked again with the readings taken at that speed. The valve relay turns on only if it is still worthwhile. Needs a pump speed tied to the solar circuit. 0 turns it off.');
             var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Solar Controls', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function () {
