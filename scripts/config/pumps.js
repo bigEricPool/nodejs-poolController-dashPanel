@@ -264,7 +264,7 @@
                     let prly = type.name !== 'hwrly' && typeof type.relays !== 'undefined' ? type.relays.find(elem => elem.id === ps) : undefined;
                     primeSpeeds.push({ val: ps, desc: typeof prly !== 'undefined' ? prly.name : `Speed #${ps}` });
                 }
-                line = $('<div></div>').appendTo(pnl).attr('title', 'When a schedule turns the pump on, it also runs at the priming speed, with the priming circuit on, for the priming time. Turning the pump on by hand does not prime it. A time of 0 turns priming off.');
+                line = $('<div></div>').appendTo(pnl).attr('title', 'When a schedule turns the pump on, or the pump stopped because njsPC or the relay manager was restarted or could not be reached, it also runs at the priming speed, with the priming circuit on, for the priming time. Turning the pump on by hand does not prime it. A time of 0 turns priming off.');
                 $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Priming Time', binding: binding + 'primingMinutes', min: 0, max: 60, step: 1, units: 'min', style: { width: '17rem' }, inputAttrs: { maxlength: 5 }, labelAttrs: { style: lblStyle } });
                 $('<div></div>').appendTo(line).pickList({
                     bindColumn: 0, displayColumn: 1, labelText: 'Priming Speed', binding: binding + 'primingRelay',
@@ -463,6 +463,12 @@
             var type = o.pumpTypes.find(elem => elem.val === obj.type) || { val: -1, name: 'invalid', desc: 'Unknown Type' };
             var cols = acc[0].columns();
             var isNixie = $('body').attr('data-controllertype') === 'nixie';
+            // What njsPC uses when the priming settings have never been set: 3 minutes, and the high speed of a two speed pump.
+            if (type.schedulePriming === true) {
+                if (typeof obj.primingMinutes === 'undefined' || obj.primingMinutes === null) obj.primingMinutes = 3;
+                if (typeof obj.primingCircuit === 'undefined' || obj.primingCircuit === null) obj.primingCircuit = 0;
+                if (typeof obj.primingRelay === 'undefined' || obj.primingRelay === null) obj.primingRelay = type.name === 'ds' ? 2 : 0;
+            }
             self._resetPumpPanel(type, obj);
             var circuits = '';
             if (typeof obj.circuits !== 'undefined') {
