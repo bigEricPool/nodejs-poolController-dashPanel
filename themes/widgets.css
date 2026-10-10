@@ -364,6 +364,7 @@ span.picWeatherValue {
     font-weight: bold;
     white-space: nowrap;
     min-width: 5.5rem;
+    text-align: center;
 }
 span.picWeatherValue.picWeatherBig {
     font-size: 1.4em;
