@@ -266,16 +266,18 @@
                 }
                 line = $('<div></div>').appendTo(pnl).attr('title', 'When a schedule turns the pump on, or the pump stopped because njsPC or the relay manager was restarted or could not be reached, it also runs at the priming speed, with the priming circuit on, for the priming time. Turning the pump on by hand does not prime it. Priming is off unless the box is checked.');
                 $('<div></div>').appendTo(line).checkbox({ labelText: 'Priming', binding: binding + 'primingEnabled' });
-                $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Priming Time', binding: binding + 'primingMinutes', min: 0, max: 60, step: 1, units: 'min', style: { width: '13rem' }, inputAttrs: { maxlength: 5 }, labelAttrs: { style: { marginLeft: '.5rem' } } });
+                $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Priming Time', binding: binding + 'primingMinutes', min: 0, max: 60, step: 1, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
+                // The speed and the circuit go on a line of their own.
+                line = $('<div></div>').appendTo(pnl).attr('title', line.attr('title'));
                 $('<div></div>').appendTo(line).pickList({
                     bindColumn: 0, displayColumn: 1, labelText: 'Priming Speed', binding: binding + 'primingRelay',
                     columns: [{ binding: 'val', hidden: true, text: 'val', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'Speed', style: { whiteSpace: 'nowrap' } }],
-                    items: primeSpeeds, inputAttrs: { style: { width: '7rem' } }, labelAttrs: { style: { marginLeft: '.25rem' } }
+                    items: primeSpeeds, inputAttrs: { style: { width: '7rem' } }, labelAttrs: { style: lblStyle }
                 });
                 $('<div></div>').appendTo(line).pickList({
                     labelText: 'Priming Circuit', binding: binding + 'primingCircuit',
                     columns: [{ binding: 'id', hidden: true, text: 'Id', style: { whiteSpace: 'nowrap' } }, { binding: 'name', text: 'Circuit', style: { whiteSpace: 'nowrap' } }],
-                    items: [{ id: 0, name: 'None' }].concat(o.circuits || []), inputAttrs: { style: { width: '9rem' } }, labelAttrs: { style: { marginLeft: '.25rem' } }
+                    items: [{ id: 0, name: 'None' }].concat(o.circuits || []), inputAttrs: { style: { width: '9rem' } }, labelAttrs: { style: { marginLeft: '1rem' } }
                 });
             }
             line = $('<div></div>').appendTo(pnl).css({ margin: '3px' });
