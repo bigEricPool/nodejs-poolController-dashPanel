@@ -279,8 +279,13 @@
             var swgAlerts = Array.isArray(data.alerts) ? data.alerts : [];
             swgAlerts.forEach(function (a) {
                 var alarm = a.level === 'alarm';
-                $('<div></div>').css({ fontWeight: 'bold', fontSize: '1em', color: '#fff', background: alarm ? '#c0392b' : '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem' })
+                var elAlert = $('<div></div>').css({ fontWeight: 'bold', fontSize: '1em', color: '#fff', background: alarm ? '#c0392b' : '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem' })
                     .text('⚠ ' + a.text + (a.since ? ' (since ' + new Date(a.since).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')' : '')).appendTo(self._elAutoSwgAlerts);
+                // "njsPC was not running" is a notice, not a condition that clears itself: Dismiss hides it (applying a result you asked for does too). The outage still counts in the calculation.
+                if (String(a.id || '').indexOf('outage-') === 0) {
+                    $('<span></span>').text('Dismiss').css({ display: 'inline-block', marginLeft: '.6rem', padding: '.1rem .5rem', border: '1px solid #fff', borderRadius: '.25rem', cursor: 'pointer', fontSize: '.8em', fontWeight: 'normal' })
+                        .on('click', function (e) { e.stopPropagation(); $.putApiService('state/autoSwg/dismissOutages', { id: a.id }, function () { }); }).appendTo(elAlert);
+                }
             });
             self._elAutoSwgAlerts.toggle(swgAlerts.length > 0);
             if (data.saltNote) self._elAutoSwgSaltNote.text('ℹ ' + String(data.saltNote).split('. ')[0] + '.').attr('title', data.saltNote).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
