@@ -369,14 +369,16 @@
                 if (typeof data.temp === 'undefined') el.find('span.picTempData').text('--');
                 // The temperature is shown with the time it is as of (njsPC's tempTime, when it was last fed the reading). While solar waits out its check
                 // period, the temperature shown is the reading taken at the solar pump speed at the last check (solarCheckTemp), marked with an asterisk,
-                // and the time is when that was read; the live reading is in the tooltip.
+                // and the time is when that was read. While the check itself is running (solarChecking), it is the reading from before the pump sped up,
+                // without the asterisk, so the number does not jump until the check is over. The live reading is in the tooltip.
                 var tempData = el.find('span.picTempData'), tempAsOf = el.find('div.picTempAsOf');
                 var asOfText = function (iso) { var dt = new Date(iso); return typeof iso === 'undefined' || iso === null || isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
                 if (typeof data.solarCheckTemp === 'number') {
                     var tempMask = tempData.attr('data-fmtmask') || '#,##0';
-                    var tip = 'Read at the solar pump speed at the last solar check.' + (typeof data.temp === 'number' ? ' The sensor reads ' + data.temp.format(tempMask, '--') + ' now.' : '');
-                    tempData.text(data.solarCheckTemp.format(tempMask, '--') + '*').attr('title', tip);
-                    tempAsOf.text('* as of ' + (asOfText(data.solarCheckTime) || 'the last solar check')).attr('title', tip).show();
+                    var checking = makeBool(data.solarChecking);
+                    var tip = (checking ? 'Read before the pump sped up for the solar check, which is under way.' : 'Read at the solar pump speed at the last solar check.') + (typeof data.temp === 'number' ? ' The sensor reads ' + data.temp.format(tempMask, '--') + ' now.' : '');
+                    tempData.text(data.solarCheckTemp.format(tempMask, '--') + (checking ? '' : '*')).attr('title', tip);
+                    tempAsOf.text((checking ? 'as of ' : '* as of ') + (asOfText(data.solarCheckTime) || 'the last solar check')).attr('title', tip).show();
                 }
                 else {
                     tempData.removeAttr('title');
