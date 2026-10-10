@@ -9,6 +9,7 @@
     --picFilters-order: 17;
     --picValves-order: 20;
     --picCovers-order: 22;
+    --picWeather-order: 24;
     --picBodies-display: block;
     --picCircuits-display: block;
     --picLights-display: block;
@@ -19,6 +20,7 @@
     --picFilters-display: block;
     --picValves-display: block;
     --picCovers-display: block;
+    --picWeather-display: block;
     --number-of-columns: 2;
     --dashContainer2-display: block;
     --dashContainer3-display: block;
@@ -306,6 +308,70 @@ div.picValves {
 div.picCovers {
     order: var(--picCovers-order);
     display: var(--picCovers-display) !important;
+}
+div.picWeather {
+    order: var(--picWeather-order);
+    display: var(--picWeather-display) !important;
+}
+div.picWeather.picWeatherOff {
+    display: none !important;
+}
+a.picWeatherStation {
+    font-size: .75rem;
+    margin-left: .5rem;
+    color: inherit;
+    opacity: .8;
+}
+span.picWeatherTabs {
+    float: right;
+    font-size: .8rem;
+    font-weight: normal;
+}
+span.picWeatherTab {
+    cursor: pointer;
+    padding: 0 .4rem;
+    border-radius: .6rem;
+    opacity: .7;
+}
+span.picWeatherTab.selected {
+    opacity: 1;
+    font-weight: bold;
+    text-decoration: underline;
+}
+div.picWeatherRow {
+    font-size: .9rem;
+    display: flex;
+    align-items: baseline;
+    gap: .3rem;
+    padding-top: .15rem;
+    padding-bottom: .15rem;
+}
+span.picWeatherIcon {
+    display: inline-block;
+    min-width: 1.2rem;
+    text-align: center;
+}
+label.picWeatherLabel {
+    min-width: 4.5rem;
+}
+span.picWeatherValue {
+    font-weight: bold;
+    white-space: nowrap;
+}
+span.picWeatherValue.picWeatherBig {
+    font-size: 1.4em;
+}
+span.picWeatherExtra {
+    flex: 1;
+    text-align: right;
+    font-size: .85em;
+    opacity: .85;
+}
+div.picWeatherNote {
+    font-size: .75rem;
+    font-style: italic;
+    opacity: .8;
+    padding-top: .15rem;
 }
 div.picLights{
     order :var(--picLights-order);
