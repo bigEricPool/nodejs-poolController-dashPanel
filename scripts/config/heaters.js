@@ -46,6 +46,13 @@
                 .attr('title', 'When solar should start, the pump first runs at its solar speed for this long with the valve relay still off, and the start is checked again with the readings taken at that speed. The valve relay turns on only if it is still worthwhile. Needs a pump speed tied to the solar circuit. 0 turns it off.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Period', binding: 'checkPeriodMinutes', min: 0, max: 1440, step: 5, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'After the valve delay check turns a start down, solar does not check again for this long, so the pump is not sped up to test the water more often than that. A change of the Heat Point is checked at once. While it waits, the pool temperature shown is the reading taken at the solar pump speed, marked with * and the time it was read.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).pickList({
+                bindColumn: 0, displayColumn: 1, labelText: 'Return Sensor', binding: 'returnSensor',
+                columns: [{ binding: 'val', hidden: true, text: 'val', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'Sensor', style: { whiteSpace: 'nowrap' } }],
+                items: [{ val: '', desc: 'None' }, { val: 'solarSensor2', desc: 'Solar Sensor 2' }, { val: 'solarSensor3', desc: 'Solar Sensor 3' }, { val: 'solarSensor4', desc: 'Solar Sensor 4' }],
+                inputAttrs: { style: { width: '9rem' } }
+            }).attr('title', 'The temperature input that is on the pipe coming back from the solar collector, if there is one. Its reading, and how much warmer it is than the pool water while solar runs, are shown on the dashboard and written to the solar log. It takes no part in deciding when solar runs.');
             var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Solar Controls', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function () {

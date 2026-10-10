@@ -195,6 +195,10 @@
             $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Status').appendTo(line);
             $('<span></span>').addClass('picStatusData').attr('data-bind', 'heatStatus.desc').text('----').css({ maxWidth: '5.1rem', display: 'inline-block' }).appendTo(line);
             setpoints.appendTo(setpointsWrapper);
+            // The water coming back from the solar collector, and its gain over the pool water while solar runs, when njsPC has a return sensor.
+            line = $('<div></div>').addClass('picSolarReturn').css({ display: 'none' }).appendTo(setpoints);
+            $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Solar Return').appendTo(line);
+            $('<span></span>').addClass('picSolarReturnData').appendTo(line);
             // Why solar is waiting (a settle delay, a hysteresis, the reheat guard), from the heatNote njsPC publishes on the body.
             $('<div></div>').addClass('picHeatNote').css({ display: 'none', fontSize: '0.65rem', fontStyle: 'italic', lineHeight: '1.1', width: 0, minWidth: '100%', whiteSpace: 'normal', marginTop: '.25rem' }).appendTo(setpointsWrapper);   // width 0 and min-width 100%: the note wraps to the setpoints column instead of widening it under the temperature; white-space normal because the card is nowrap
             line = $('<div></div>').attr('data-circuitid', o.circuit).addClass('outerBodyEndTime').appendTo(setpointsWrapper).css('display', 'none');
@@ -405,6 +409,13 @@
                 el.attr('data-hassolar', typeof data.heaterOptions !== 'undefined' && data.heaterOptions.solar > 0);
                 // Every heater on this body is solar, on a Nixie controller (the panels enforce their own setpoint rules).
                 el.attr('data-solaronly', (pnlType || '').toLowerCase() === 'nixie' && typeof data.heaterOptions !== 'undefined' && data.heaterOptions.total > 0 && data.heaterOptions.solar === data.heaterOptions.total);
+                var solarReturn = el.find('div.picSolarReturn');
+                if (typeof data.solarReturnTemp === 'number') {
+                    var gain = typeof data.solarGain === 'number' ? ' (' + (data.solarGain >= 0 ? '+' : '') + data.solarGain.format('#,##0.0', '--') + '\u00B0)' : '';
+                    solarReturn.find('span.picSolarReturnData').text(data.solarReturnTemp.format('#,##0.0', '--') + '\u00B0' + gain);
+                    solarReturn.attr('title', 'The water coming back from the solar collector' + (gain ? ', and how much warmer it is than the pool water' : '') + '.').show();
+                }
+                else solarReturn.hide();
                 var heatNote = el.find('div.picHeatNote');
                 if (data.heatNote) heatNote.text(data.heatNote).attr('title', data.heatNote).show();
                 else heatNote.text('').removeAttr('title').hide();
