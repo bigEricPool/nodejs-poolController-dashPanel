@@ -44,6 +44,8 @@
                 .attr('title', 'Solar stops once the water has stayed this many degrees above the Heat Point (for the settle delay) and restarts when the water is this many degrees below it. 0 turns it off.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Valve Delay', binding: 'valveDelaySeconds', min: 0, max: 600, step: 15, units: 'sec', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'When solar should start, the pump first runs at its solar speed for this long with the valve relay still off, and the start is checked again with the readings taken at that speed. The valve relay turns on only if it is still worthwhile. Needs a pump speed tied to the solar circuit. 0 turns it off.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Period', binding: 'checkPeriodMinutes', min: 0, max: 1440, step: 5, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'After the valve delay check turns a start down, solar does not check again for this long, so the pump is not sped up to test the water more often than that. A change of the Heat Point is checked at once. While it waits, the pool temperature shown is the reading taken at the solar pump speed, marked with * and the time it was read.');
             var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Solar Controls', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function () {

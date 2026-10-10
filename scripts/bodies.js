@@ -168,6 +168,9 @@
             $('<span></span>').addClass('picTempData').attr('data-bind', 'temp').attr('data-fmttype', 'number').attr('data-fmtmask', tempFmt).attr('data-fmtempty', '--.-').appendTo(line);
             $('<label></label>').addClass('picUnitSymbol').html('&deg').css({ fontSize: '.4em', verticalAlign:'top', display:'inline-block', paddingTop:'.25em' }).appendTo(line);
             $('<span></span>').addClass('picTempUnits').text('-').css({ fontSize: '.4em', verticalAlign: 'top', display: 'inline-block', paddingTop: '.25em'}).appendTo(line);
+            // The time the temperature above is as of: when njsPC was last fed it, or, marked with an asterisk, when it was read at the solar pump
+            // speed (see setEquipmentData).
+            $('<div></div>').addClass('picTempAsOf').css({ fontSize: '.7rem', whiteSpace: 'nowrap' }).hide().appendTo(bodyTemp);
             bodyTemp.appendTo(el);
 
             var setpointsWrapper = $('<div></div>').appendTo(el);
@@ -364,6 +367,22 @@
             try {
                 if (typeof data.isCovered !== 'undefined') el.attr('data-covered', data.isCovered);
                 if (typeof data.temp === 'undefined') el.find('span.picTempData').text('--');
+                // The temperature is shown with the time it is as of (njsPC's tempTime, when it was last fed the reading). While solar waits out its check
+                // period, the temperature shown is the reading taken at the solar pump speed at the last check (solarCheckTemp), marked with an asterisk,
+                // and the time is when that was read; the live reading is in the tooltip.
+                var tempData = el.find('span.picTempData'), tempAsOf = el.find('div.picTempAsOf');
+                var asOfText = function (iso) { var dt = new Date(iso); return typeof iso === 'undefined' || iso === null || isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+                if (typeof data.solarCheckTemp === 'number') {
+                    var tempMask = tempData.attr('data-fmtmask') || '#,##0';
+                    var tip = 'Read at the solar pump speed at the last solar check.' + (typeof data.temp === 'number' ? ' The sensor reads ' + data.temp.format(tempMask, '--') + ' now.' : '');
+                    tempData.text(data.solarCheckTemp.format(tempMask, '--') + '*').attr('title', tip);
+                    tempAsOf.text('* as of ' + (asOfText(data.solarCheckTime) || 'the last solar check')).attr('title', tip).show();
+                }
+                else {
+                    tempData.removeAttr('title');
+                    if (asOfText(data.tempTime) !== '') tempAsOf.text('as of ' + asOfText(data.tempTime)).removeAttr('title').show();
+                    else if (typeof data.tempTime !== 'undefined' || typeof data.temp === 'undefined') tempAsOf.text('').hide();
+                }
                 if (typeof data.showInDashboard !== 'undefined') {
                     if (makeBool(data.showInDashboard) === false) el.hide();
                     else el.show();
