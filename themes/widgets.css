@@ -1,4 +1,7 @@
 :root {
+    /* The heat settings box on a body card: its text size and the width of its labels (a longer body name needs the room). */
+    --picBodySetpoints-font-size: .8rem;
+    --picBodySetpoints-label-width: 5.4em;
     --picBodies-order: 0;
     --picCircuits-order: 100;
     --picLights-order: 105;
@@ -400,9 +403,10 @@ label {
 }
 div.picBodySetpoints {
     cursor:pointer;
+    font-size:var(--picBodySetpoints-font-size);
 }
 div.picBodySetpoints label.picInline-label {
-    min-width:7em;
+    min-width:var(--picBodySetpoints-label-width);
     display:inline-block;
 }
 div.picBodyIcon {
