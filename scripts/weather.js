@@ -92,8 +92,11 @@
             self._row(body, 'fas fa-cloud-rain', 'Rain', self._fmt(day.precipTotal, lenPlaces, len),
                 raining ? 'raining now, ' + self._fmt(cur.precipRate, lenPlaces, len + '/hr') : (typeof s.precip7Days === 'number' ? '7 days: ' + self._fmt(s.precip7Days, lenPlaces, len) : ''));
             // What else moves a pool: wind and dry air (evaporation, heat loss, debris), and sun (solar heat, chlorine loss).
-            if (cur) self._row(body, 'fas fa-wind', 'Wind', self._fmt(cur.windSpeed, 0, spd) + (self._compass(cur.windDir) ? ' ' + self._compass(cur.windDir) : ''), 'gusts to ' + self._fmt(day.windGustHigh, 0, spd));
-            else self._row(body, 'fas fa-wind', 'Wind', self._fmt(day.windSpeedAvg, 0, spd), 'avg, gusts to ' + self._fmt(day.windGustHigh, 0, spd));
+            // The day's strongest gust leads: a sheltered station reads a steady wind near zero, and gusts are what move debris and water.
+            var calm = function (v) { return typeof v !== 'number' || isNaN(v) || Math.round(v) < 1; };
+            var wind = cur ? (calm(cur.windSpeed) ? 'now calm' : 'now ' + self._fmt(cur.windSpeed, 0, spd) + (self._compass(cur.windDir) ? ' ' + self._compass(cur.windDir) : ''))
+                : (calm(day.windSpeedAvg) ? '' : 'avg ' + self._fmt(day.windSpeedAvg, 0, spd));
+            self._row(body, 'fas fa-wind', 'Gusts', self._fmt(day.windGustHigh, 0, spd), 'peak' + (wind ? ', ' + wind : ''));
             if (cur) self._row(body, 'fas fa-tint', 'Humidity', self._fmt(cur.humidity, 0, '%'), 'dew point ' + self._fmt(cur.dewpt, 0, deg));
             else self._row(body, 'fas fa-tint', 'Humidity', self._fmt(day.humidityAvg, 0, '%'), 'avg, dew point ' + self._fmt(day.dewptAvg, 0, deg));
             if (typeof day.solarRadHigh === 'number' || (cur && typeof cur.solarRad === 'number'))
