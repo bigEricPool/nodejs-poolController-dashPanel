@@ -420,6 +420,10 @@ div.picBodyIcon div.picIndicator {
     width:2.5em;
     cursor:pointer;
 }
+/* The on/off text of this box is nudged down by a fixed offset in the theme (made for a 2.5em box), so move it up by half of the height taken off. */
+div.picBodyIcon div.picIndicator::before {
+    top:calc(0.8rem - 5px - (2.5em - var(--picBodyIcon-height)) / 2);
+}
 div.picPumps {
     order:var(--picPumps-order);
     display: var(--picPumps-display) !important;
