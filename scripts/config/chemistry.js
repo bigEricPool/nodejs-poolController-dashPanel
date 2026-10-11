@@ -1096,6 +1096,11 @@
                     });
                 }
             });
+            var btnDetails = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Details', icon: '<i class="fas fa-circle-info"></i>' }).addClass('chlorDetails').attr('title', 'Shows the latest message of each kind received from the chlorinator over RS485.');
+            btnDetails.on('click', function (e) {
+                var v = dataBinder.fromElement($(e.target).parents('div.picAccordian-contents:first'));
+                if (v.id > 0) self._showDetails(v.id, v.name);
+            });
             var btnDelete = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Delete Chlorinator', icon: '<i class="fas fa-trash"></i>' });
             btnDelete.on('click', function (e) {
                 var p = $(e.target).parents('div.picAccordian-contents:first');
@@ -1125,11 +1130,51 @@
             });
 
         },
+        // The latest message of each kind njsPC has received from the chlorinator over RS485 since it
+        // started, with what each means where that is known and the raw packet.
+        _showDetails: function (id, name) {
+            var self = this;
+            $.getApiService('/state/chlorinator/' + id + '/rs485', null, 'Loading chlorinator details...', function (d) {
+                d = d || {};
+                var records = Array.isArray(d.records) ? d.records : [];
+                var fmtTime = function (iso) { return iso ? new Date(iso).toLocaleString() : 'never'; };
+                var fmtAge = function (iso) {
+                    var s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+                    return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s / 60) + 'm ' + (s % 60) + 's ago' : Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm ago';
+                };
+                var buttons = [
+                    { text: 'Refresh', icon: '<i class="fas fa-rotate"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showDetails(id, name); } },
+                    { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                ];
+                var dlg = $.pic.modalDialog.createDialog('dlgChlorinatorDetails', { width: '760px', height: 'auto', title: (name || d.name || 'Chlorinator') + ' Details', buttons: buttons });
+                var wrap = $('<div></div>').css({ maxHeight: '26rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                $('<div></div>').css({ padding: '0 0 .4rem .25rem' }).text('Last heard from the chlorinator: ' + fmtTime(d.lastComm) + (d.lastComm ? ' (' + fmtAge(d.lastComm) + ')' : '')).appendTo(wrap);
+                if (records.length === 0) {
+                    $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' }).text('No messages have been received from this chlorinator since njsPC started.').appendTo(wrap);
+                    return;
+                }
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text('The most recent message of each kind received since njsPC started. Times are shown in this browser\'s time zone.').appendTo(wrap);
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                ['Action', 'Received', 'Meaning', 'Packet'].forEach(function (t) { $('<th></th>').css({ textAlign: 'left', padding: '.2rem .4rem', borderBottom: '1px solid #999' }).text(t).appendTo(head); });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                records.forEach(function (r) {
+                    var tr = $('<tr></tr>').appendTo(body);
+                    var cell = function (text, extra) { return $('<td></td>').css($.extend({ padding: '.2rem .4rem', borderBottom: '1px solid #ddd', verticalAlign: 'top' }, extra || {})).text(text).appendTo(tr); };
+                    cell(r.action);
+                    cell(fmtTime(r.receivedAt) + ' (' + fmtAge(r.receivedAt) + ')', { whiteSpace: 'nowrap' });
+                    cell(r.description || '');
+                    cell('[' + (r.packet || []).join(', ') + ']', { fontFamily: 'monospace', wordBreak: 'break-all' });
+                });
+            });
+        },
         dataBind: function (obj) {
             var self = this, o = self.options, el = self.element;
             var acc = el.find('div.picAccordian:first');
             var cols = acc[0].columns();
             // if (typeof obj.master === 'undefined') el.find('div[data-bind=isVirtual]').show();
+            // Details come from a saved chlorinator's RS485 traffic, so a new unsaved one has none.
+            el.find('div.chlorDetails').toggle(typeof obj.id === 'number' && obj.id > 0);
 
             cols[0].elText().text(obj.name || 'Chlorinator');
             if (obj.id === 1 || obj.id === 6) el.find('div.picPickList[data-bind=type]').addClass('disabled');
