@@ -12,14 +12,15 @@ Base for new branches: master at a5e8c15.
 |---|---|---|---|---|
 | `master` | mirror | Untouched copy of the original project's master. Every module and fix branch is cut from it. | none | none |
 | `pool` | integration | Everything together; the branch the pool controller runs. To be built from the branches below, never edited directly. | all module and fix branches | none |
-| `pool-next` | integration | The rebuild of pool from the branches in this list; replaces pool once the remaining re-cut branches are in and it has been tested. | all module and fix branches | none |
+| `pool-next` | integration | pool rebuilt from the branches in this list, in a fixed order. It is replaced at every rebuild; pool takes it over after testing. | all module and fix branches | none |
 | `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. | none | none |
 | `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
 | `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. | none | none |
 | `feature/pump-priming` | feature | Priming for relay driven pumps (two speed, relay switched variable speed); off by default. | none | none |
 | `feature/pws-weather` | feature | Hourly weather log from a personal weather station, and a Weather panel. | none | none |
-| `feature/solar-enhancements` | feature | Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls. To be re-cut on top of fix/solar-restart. | fix/solar-restart, optional: feature/pump-priming, optional: fix/heater-command-inflight | #1248 |
+| `feature/solar-enhancements` | feature | Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls; in dashPanel also the Nocturnal Cooling toggle. Stacked on fix/solar-restart in njsPC. | fix/solar-restart, optional: feature/pump-priming, optional: fix/heater-command-inflight | #1248 |
+| `feature/auto-swg` | feature | AutoSwg: a recommended SWG % from PoolMath readings, with Away protection. AutoSwg code only. The tagged releases autoswg-v0.1.x are the earlier form of this branch. | optional: fix/chlorinator-poll-stall | none |
 | `local/npm` | local | package.json allowScripts and the audit-fix lock file. Not for upstream. | none | none |
 
 ## Planned (not created yet)
@@ -32,9 +33,8 @@ Base for new branches: master at a5e8c15.
 
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
-| `feature/dashboard-enhancements` | feature | Older combined branch (RS485 diagnostic view; in dashPanel also sun times and the Nocturnal Cooling toggle); being split. | none | #1250 |
-| `feature/auto-swg` | feature | AutoSwg release branch as tagged (autoswg-v0.1.x): AutoSwg plus copies of the fixes. To become AutoSwg code only. | optional: fix/chlorinator-poll-stall | none |
-| `feature/auto-swg-clean` | feature | AutoSwg code only, except the chlorinator poll-stall change, which moves to fix/chlorinator-poll-stall. Source for the new feature/auto-swg. | none | none |
+| `feature/dashboard-enhancements` | feature | Older combined branch; replaced by feature/chlorinator-rs485-diag and, in dashPanel, feature/dashboard-sun-times. | none | #1250 |
+| `feature/auto-swg-clean` | feature | Earlier AutoSwg-only branch; replaced by feature/auto-swg. | none | none |
 | `feature/auto-swg-automation` | feature | Former working branch (AutoSwg plus solar, average, tools). Kept for history; no new work. | none | none |
 
 ## Kept for history

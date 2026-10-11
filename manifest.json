@@ -34,7 +34,7 @@
       "name": "pool-next",
       "kind": "integration",
       "status": "active",
-      "purpose": "The rebuild of pool from the branches in this list; replaces pool once the remaining re-cut branches are in and it has been tested.",
+      "purpose": "pool rebuilt from the branches in this list, in a fixed order. It is replaced at every rebuild; pool takes it over after testing.",
       "depends": [
         "all module and fix branches"
       ],
@@ -72,7 +72,7 @@
       "name": "feature/dashboard-enhancements",
       "kind": "feature",
       "status": "legacy",
-      "purpose": "Older combined branch (RS485 diagnostic view; in dashPanel also sun times and the Nocturnal Cooling toggle); being split.",
+      "purpose": "Older combined branch; replaced by feature/chlorinator-rs485-diag and, in dashPanel, feature/dashboard-sun-times.",
       "depends": [],
       "upstream": "#1250",
       "build": true
@@ -108,7 +108,7 @@
       "name": "feature/solar-enhancements",
       "kind": "feature",
       "status": "active",
-      "purpose": "Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls. To be re-cut on top of fix/solar-restart.",
+      "purpose": "Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls; in dashPanel also the Nocturnal Cooling toggle. Stacked on fix/solar-restart in njsPC.",
       "depends": [
         "fix/solar-restart",
         "optional: feature/pump-priming",
@@ -120,8 +120,8 @@
     {
       "name": "feature/auto-swg",
       "kind": "feature",
-      "status": "legacy",
-      "purpose": "AutoSwg release branch as tagged (autoswg-v0.1.x): AutoSwg plus copies of the fixes. To become AutoSwg code only.",
+      "status": "active",
+      "purpose": "AutoSwg: a recommended SWG % from PoolMath readings, with Away protection. AutoSwg code only. The tagged releases autoswg-v0.1.x are the earlier form of this branch.",
       "depends": [
         "optional: fix/chlorinator-poll-stall"
       ],
@@ -132,7 +132,7 @@
       "name": "feature/auto-swg-clean",
       "kind": "feature",
       "status": "legacy",
-      "purpose": "AutoSwg code only, except the chlorinator poll-stall change, which moves to fix/chlorinator-poll-stall. Source for the new feature/auto-swg.",
+      "purpose": "Earlier AutoSwg-only branch; replaced by feature/auto-swg.",
       "depends": [],
       "upstream": "",
       "build": true
