@@ -2,6 +2,9 @@
     /* The heat settings box on a body card: its text size and the width of its labels (a longer body name needs the room). */
     --picBodySetpoints-font-size: .8rem;
     --picBodySetpoints-label-width: 5.4em;
+    /* The size of the body temperature, and the height of the green on/off box beside it. */
+    --picBodyTemp-font-size: 1.8em;
+    --picBodyIcon-height: 2em;
     --picBodies-order: 0;
     --picCircuits-order: 100;
     --picLights-order: 105;
@@ -413,7 +416,7 @@ div.picBodyIcon {
     text-align:center;
 }
 div.picBodyIcon div.picIndicator {
-    height:2.5em;
+    height:var(--picBodyIcon-height);
     width:2.5em;
     cursor:pointer;
 }
