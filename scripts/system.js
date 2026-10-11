@@ -242,13 +242,13 @@
             self._tile(tiles, 'Storage', s.storage ? self._num(s.storage.use, 0, '%') : '--', s.storage ? self._bytes(s.storage.free) + ' free' : '');
             var h = s.history;
             if (h && h.t && h.t.length > 1) {
-                var charts = $('<div class="picSystemCharts"></div>').appendTo(body);
+                var charts = $('<div class="picSystemCharts picSystemChartsWide picSystemChartsNow"></div>').appendTo(body);
                 var mins = Math.max(1, Math.round((h.t[h.t.length - 1] - h.t[0]) / 60000));
                 var gap = (h.sampleSeconds || 10) * 3000;
-                if (h.temp.some(function (v) { return typeof v === 'number'; })) self._chart(charts, 'Temp', [{ values: h.temp }], { unit: ' C', span: 4, mark: 60, times: h.t, xTicks: 3, gapMs: gap });
-                self._chart(charts, 'Use', [{ values: h.cpu }], { unit: '%', min: 0, span: 10, times: h.t, xTicks: 3, gapMs: gap });
-                self._chart(charts, 'Memory', [{ values: h.mem }], { unit: '%', span: 10, times: h.t, xTicks: 3, gapMs: gap });
-                $('<div class="picSystemNote"></div>').text('The last ' + (mins >= 60 ? Math.round(mins / 60) + ' h' : mins + ' min') + '. The dashed line is 60 C.').appendTo(body);
+                if (h.temp.some(function (v) { return typeof v === 'number'; })) self._chart(charts, 'Temperature (C)', [{ values: h.temp }], { unit: ' C', span: 4, mark: 60, axes: true, times: h.t, gapMs: gap });
+                self._chart(charts, 'Processor use (%)', [{ values: h.cpu }], { unit: '%', min: 0, span: 10, axes: true, times: h.t, gapMs: gap });
+                self._chart(charts, 'Memory (%)', [{ values: h.mem }], { unit: '%', span: 10, axes: true, times: h.t, gapMs: gap });
+                $('<div class="picSystemNote"></div>').text('The last ' + (mins >= 60 ? Math.round(mins / 60) + ' h' : mins + ' min') + '. A dashed line marks 60 C when the chart reaches it.').appendTo(body);
             }
             var rows = $('<div class="picSystemRows"></div>').appendTo(body);
             var info = s.info || {};
