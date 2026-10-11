@@ -41,12 +41,12 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Settle Delay', binding: 'settleMinutes', min: 0, max: 60, step: 1, units: 'min', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', 'After the pump starts or solar turns off, solar waits this long before starting. Solar stops for the water temperature only after the water has stayed past the stop level this long. 0 turns the delay off.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Hysteresis', binding: 'hysteresis', min: 0, max: 5, step: 0.5, units: '&deg;' + ((opts.tempUnits || {}).name || ''), inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'Solar stops once the water has stayed this many degrees above the Heat Point (for the settle delay) and restarts when the water is this many degrees below it. 0 turns it off.');
+                .attr('title', 'Solar stops once the water has stayed this many degrees above the Heat Point (for the settle delay) and restarts when the water is this many degrees below it. 0 turns it off. Raise it to 1 if solar still switches off and on around the Heat Point.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Valve Delay', binding: 'valveDelaySeconds', min: 0, max: 600, step: 15, units: 'sec', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'When solar should start, the pump first runs at its solar speed for this long with the valve relay still off, and the start is checked again with the readings taken at that speed. The valve relay turns on only if it is still worthwhile. Needs a pump speed tied to the solar circuit. 0 turns it off.');
+                .attr('title', 'When solar should start, the pump first runs at its solar speed for this long with the valve relay still off, and the start is checked again with the readings taken at that speed. The valve relay turns on only if it is still worthwhile. Needs a pump speed tied to the solar circuit. 0 turns it off. To see whether your pool needs it: with solar off, compare the water reading at the normal pump speed with the reading two minutes after switching to the solar pump speed. If they differ by more than the hysteresis, set this to 120.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Period', binding: 'checkPeriodMinutes', min: 0, max: 1440, step: 5, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'After the valve delay check turns a start down, solar does not check again for this long, so the pump is not sped up to test the water more often than that. A change of the Heat Point is checked at once. While it waits, the pool temperature shown is the reading taken at the solar pump speed, marked with * and the time it was read.');
-            line = $('<div></div>').appendTo(pnl);
+            line = $('<div></div>').addClass('pnl-solar-return').appendTo(pnl);
             $('<div></div>').appendTo(line).pickList({
                 bindColumn: 0, displayColumn: 1, labelText: 'Return Sensor', binding: 'returnSensor',
                 columns: [{ binding: 'val', hidden: true, text: 'val', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'Sensor', style: { whiteSpace: 'nowrap' } }],
@@ -60,7 +60,8 @@
                     $.putApiService('/config/solar/settings', dataBinder.fromElement(pnl), 'Saving Solar Controls...', function (c) { dataBinder.bind(pnl, c); });
                 }
             });
-            $.getApiService('/config/solar/settings', null, function (c) { dataBinder.bind(pnl, c); });
+            // njsPC offers the return sensor only on a system with one body (returnSensorAvailable); an older njsPC does not say, and it is shown.
+            $.getApiService('/config/solar/settings', null, function (c) { dataBinder.bind(pnl, c); if (c && c.returnSensorAvailable === false) pnl.find('div.pnl-solar-return').hide(); });
         }
     });
     $.widget('pic.pnlHeaterConfig', {

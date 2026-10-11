@@ -380,7 +380,7 @@
                 if (typeof data.solarCheckTemp === 'number') {
                     var tempMask = tempData.attr('data-fmtmask') || '#,##0';
                     var checking = makeBool(data.solarChecking);
-                    var tip = (checking ? 'Read before the pump sped up for the solar check, which is under way.' : 'Read at the solar pump speed at the last solar check.') + (typeof data.temp === 'number' ? ' The sensor reads ' + data.temp.format(tempMask, '--') + ' now.' : '');
+                    var tip = (checking ? 'Read before the pump sped up for the solar check, which is under way. The number changes when the check is over.' : '* Read with the pump at its solar speed, at the time shown: at the last solar check, or as solar last ran. The water sensor reads differently at the normal pump speed, so this is the reading solar goes by.') + (typeof data.temp === 'number' ? ' The sensor reads ' + data.temp.format(tempMask, '--') + ' now.' : '');
                     tempData.text(data.solarCheckTemp.format(tempMask, '--') + (checking ? '' : '*')).attr('title', tip);
                     tempAsOf.text((checking ? 'as of ' : '* as of ') + (asOfText(data.solarCheckTime) || 'the last solar check')).attr('title', tip).show();
                 }
