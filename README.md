@@ -12,21 +12,21 @@ Base for new branches: master at a5e8c15.
 |---|---|---|---|---|
 | `master` | mirror | Untouched copy of the original project's master. Every module and fix branch is cut from it. | none | none |
 | `pool` | integration | Everything together; the branch the pool controller runs. To be built from the branches below, never edited directly. | all module and fix branches | none |
-| `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. To be re-cut on current master. | none | none |
-| `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. To be re-cut on current master. | none | none |
+| `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. | none | none |
+| `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
+| `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
+| `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. | none | none |
 | `feature/pump-priming` | feature | Priming for relay driven pumps (two speed, relay switched variable speed); off by default. | none | none |
 | `feature/pws-weather` | feature | Hourly weather log from a personal weather station, and a Weather panel. | none | none |
 | `feature/solar-enhancements` | feature | Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls. To be re-cut on top of fix/solar-restart. | fix/solar-restart, optional: feature/pump-priming, optional: fix/heater-command-inflight | #1248 |
+| `local/npm` | local | package.json allowScripts and the audit-fix lock file. Not for upstream. | none | none |
 
 ## Planned (not created yet)
 
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
 | `pool-next` | integration | The rebuild of pool from this manifest; replaces pool once its content matches and the build check passes. | all module and fix branches | none |
-| `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
-| `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
 | `feature/swg-assist` | feature | feature/auto-swg plus the rename to SWG Assist (user-facing text only). | feature/auto-swg | none |
-| `local/npm` | local | package.json allowScripts and the audit-fix lock file. Not for upstream. | none | none |
 
 ## Being replaced
 
@@ -42,5 +42,6 @@ Base for new branches: master at a5e8c15.
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
 | `audit-fix-pi` | archive | Snapshot of an earlier install; fully contained in pool. | none | none |
+| `archive/2026-10-11/*` | archive | Tips of branches as they were before being re-cut on current master on 2026-10-11. | none | none |
 
 The code in this fork and this page are written with the help of an AI assistant (Claude) and reviewed and run by the owner.

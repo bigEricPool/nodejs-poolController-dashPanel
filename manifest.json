@@ -45,7 +45,7 @@
       "name": "fix/body-card-width",
       "kind": "fix",
       "status": "active",
-      "purpose": "Body card layout: narrower heat settings box, smaller temperature, centered on/off box. To be re-cut on current master.",
+      "purpose": "Body card layout: narrower heat settings box, smaller temperature, centered on/off box.",
       "depends": [],
       "upstream": "",
       "build": true
@@ -53,20 +53,20 @@
     {
       "name": "feature/chlorinator-rs485-diag",
       "kind": "feature",
-      "status": "planned",
+      "status": "active",
       "purpose": "RS485 diagnostic view of chlorinator messages in both directions, with the Details popup.",
       "depends": [],
       "upstream": "tagyoureit/nodejs-poolController#1250 (closed)",
-      "build": false
+      "build": true
     },
     {
       "name": "feature/dashboard-sun-times",
       "kind": "feature",
-      "status": "planned",
+      "status": "active",
       "purpose": "Sunrise and sunset beside the Schedules title, and schedule offsets.",
       "depends": [],
       "upstream": "",
-      "build": false
+      "build": true
     },
     {
       "name": "feature/dashboard-enhancements",
@@ -81,7 +81,7 @@
       "name": "feature/temp-average-24h",
       "kind": "feature",
       "status": "active",
-      "purpose": "24 hour average water temperature for each body. To be re-cut on current master.",
+      "purpose": "24 hour average water temperature for each body.",
       "depends": [],
       "upstream": "",
       "build": true
@@ -160,17 +160,26 @@
     {
       "name": "local/npm",
       "kind": "local",
-      "status": "planned",
+      "status": "active",
       "purpose": "package.json allowScripts and the audit-fix lock file. Not for upstream.",
       "depends": [],
       "upstream": "",
-      "build": false
+      "build": true
     },
     {
       "name": "audit-fix-pi",
       "kind": "archive",
       "status": "archive",
       "purpose": "Snapshot of an earlier install; fully contained in pool.",
+      "depends": [],
+      "upstream": "",
+      "build": false
+    },
+    {
+      "name": "archive/2026-10-11/*",
+      "kind": "archive",
+      "status": "archive",
+      "purpose": "Tips of branches as they were before being re-cut on current master on 2026-10-11.",
       "depends": [],
       "upstream": "",
       "build": false
