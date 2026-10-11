@@ -168,6 +168,8 @@
             $('<span></span>').addClass('picTempData').attr('data-bind', 'temp').attr('data-fmttype', 'number').attr('data-fmtmask', tempFmt).attr('data-fmtempty', '--.-').appendTo(line);
             $('<label></label>').addClass('picUnitSymbol').html('&deg').css({ fontSize: '.4em', verticalAlign:'top', display:'inline-block', paddingTop:'.25em' }).appendTo(line);
             $('<span></span>').addClass('picTempUnits').text('-').css({ fontSize: '.4em', verticalAlign: 'top', display: 'inline-block', paddingTop: '.25em'}).appendTo(line);
+            // The average of the last 24 hours of readings, from the avgTemp24h njsPC publishes on the body.
+            $('<div></div>').addClass('picTempAvg').css({ display: 'none', fontSize: '0.65rem', lineHeight: '1.1', marginTop: '.25em' }).appendTo(bodyTemp);
             bodyTemp.appendTo(el);
 
             var setpointsWrapper = $('<div></div>').appendTo(el);
@@ -343,6 +345,13 @@
                 self.disabled(data.stopDelay);
                 el.attr('data-setpoint', data.setPoint);
                 el.attr('data-coolsetpoint', data.coolSetpoint);
+                var tempAvg = el.find('div.picTempAvg');
+                if (typeof data.avgTemp24h === 'number') {
+                    var avgUnits = el.parents('div.picBodies:first').attr('data-unitsname') || '';
+                    tempAvg.text('24 h avg ' + data.avgTemp24h.toFixed(1) + '\u00B0' + avgUnits).show();
+                    tempAvg.attr('title', typeof data.avgTempHours === 'number' && data.avgTempHours < 24 ? 'Average of the last ' + data.avgTempHours.toFixed(1) + ' hours of readings (njsPC has recorded this long so far)' : 'Average of the last 24 hours of readings');
+                }
+                else tempAvg.text('').removeAttr('title').hide();
                 if (typeof data.heaterOptions === 'undefined' || data.heaterOptions.total < 1) {
                     el.find('div.picBodySetpoints').hide();
                     el.find('div.picSetpointText').text('Set Point');
