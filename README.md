@@ -1,0 +1,46 @@
+# nodejs-poolController-dashPanel (bigEricPool fork)
+
+This fork of [rstrouse/nodejs-poolController-dashPanel](https://github.com/rstrouse/nodejs-poolController-dashPanel) holds one branch per feature and one per bug fix, each cut from the original project's `master` so it can be offered upstream on its own. The branch `pool` contains all of them together. The companion fork is [bigEricPool/nodejs-poolController](https://github.com/bigEricPool/nodejs-poolController).
+
+This page is the list of branches. `manifest.json` holds the same list for the build check, which runs `npm ci` and `npm run build` on every branch marked to build.
+
+Base for new branches: master at a5e8c15.
+
+## In use
+
+| Branch | Kind | Purpose | Depends on | Related report |
+|---|---|---|---|---|
+| `master` | mirror | Untouched copy of the original project's master. Every module and fix branch is cut from it. | none | none |
+| `pool` | integration | Everything together; the branch the pool controller runs. To be built from the branches below, never edited directly. | all module and fix branches | none |
+| `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. To be re-cut on current master. | none | none |
+| `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. To be re-cut on current master. | none | none |
+| `feature/pump-priming` | feature | Priming for relay driven pumps (two speed, relay switched variable speed); off by default. | none | none |
+| `feature/pws-weather` | feature | Hourly weather log from a personal weather station, and a Weather panel. | none | none |
+| `feature/solar-enhancements` | feature | Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls. To be re-cut on top of fix/solar-restart. | fix/solar-restart, optional: feature/pump-priming, optional: fix/heater-command-inflight | #1248 |
+
+## Planned (not created yet)
+
+| Branch | Kind | Purpose | Depends on | Related report |
+|---|---|---|---|---|
+| `pool-next` | integration | The rebuild of pool from this manifest; replaces pool once its content matches and the build check passes. | all module and fix branches | none |
+| `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
+| `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
+| `feature/swg-assist` | feature | feature/auto-swg plus the rename to SWG Assist (user-facing text only). | feature/auto-swg | none |
+| `local/npm` | local | package.json allowScripts and the audit-fix lock file. Not for upstream. | none | none |
+
+## Being replaced
+
+| Branch | Kind | Purpose | Depends on | Related report |
+|---|---|---|---|---|
+| `feature/dashboard-enhancements` | feature | Older combined branch (RS485 diagnostic view; in dashPanel also sun times and the Nocturnal Cooling toggle); being split. | none | #1250 |
+| `feature/auto-swg` | feature | AutoSwg release branch as tagged (autoswg-v0.1.x): AutoSwg plus copies of the fixes. To become AutoSwg code only. | optional: fix/chlorinator-poll-stall | none |
+| `feature/auto-swg-clean` | feature | AutoSwg code only, except the chlorinator poll-stall change, which moves to fix/chlorinator-poll-stall. Source for the new feature/auto-swg. | none | none |
+| `feature/auto-swg-automation` | feature | Former working branch (AutoSwg plus solar, average, tools). Kept for history; no new work. | none | none |
+
+## Kept for history
+
+| Branch | Kind | Purpose | Depends on | Related report |
+|---|---|---|---|---|
+| `audit-fix-pi` | archive | Snapshot of an earlier install; fully contained in pool. | none | none |
+
+The code in this fork and this page are written with the help of an AI assistant (Claude) and reviewed and run by the owner.
