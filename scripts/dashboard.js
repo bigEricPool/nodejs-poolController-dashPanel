@@ -20,6 +20,7 @@
             el.find('div.picSchedules').each(function () { this.initSchedules(); });
             el.find('div.picFilters').each(function () { this.initFilters(); });
             el.find('div.picValves').each(function () { this.initValves(); });
+            el.find('div.picSystem').each(function () { this.initSystem(); });
             el.find('div.picCovers').each(function () { this.initCovers(); });
             el.find('div.picWeather').each(function () { this.initWeather(); });
         },
@@ -47,6 +48,10 @@
         _createValvesPanel: function (data) {
             var self = this, o = self.options, el = self.element;
             el.find('div.picValves').each(function () { this.initValves(data); });
+        },
+        _createSystemPanel: function (data) {
+            var self = this, o = self.options, el = self.element;
+            el.find('div.picSystem').each(function () { this.initSystem(data); });
         },
         _createCoversPanel: function (data) {
             var self = this, o = self.options, el = self.element;
@@ -168,6 +173,7 @@
                     self._createSchedulesPanel(data);
                     self._createFiltersPanel(data);
                     self._createValvesPanel(data);
+                    self._createSystemPanel(data);
                     self._createCoversPanel(data);
                     self._createWeatherPanel(data);
                     if (typeof data.equipment !== 'undefined' && typeof data.equipment.messages !== 'undefined') {
@@ -230,6 +236,7 @@
                     self._createSchedulesPanel(data);
                     self._createFiltersPanel(data);
                     self._createValvesPanel(data);
+                    self._createSystemPanel(data);
                     self._createCoversPanel(data);
                     self._createWeatherPanel(data);
                     self._initSockets();
@@ -276,6 +283,10 @@
                     $(':root').css('--picValves-order', getStorage('--picValves-order'));
                     if (typeof getStorage('--picValves-display') === 'undefined') setStorage('--picValves-display', $(':root').css('--picValves-display'));
                     $(':root').css('--picValves-display', getStorage('--picValves-display'));
+                    if (typeof getStorage('--picSystem-order') === 'undefined') setStorage('--picSystem-order', $(':root').css('--picSystem-order'));
+                    $(':root').css('--picSystem-order', getStorage('--picSystem-order'));
+                    if (typeof getStorage('--picSystem-display') === 'undefined') setStorage('--picSystem-display', $(':root').css('--picSystem-display'));
+                    $(':root').css('--picSystem-display', getStorage('--picSystem-display'));
                     if (typeof getStorage('--picCovers-order') === 'undefined') setStorage('--picCovers-order', $(':root').css('--picCovers-order'));
                     $(':root').css('--picCovers-order', getStorage('--picCovers-order'));
                     if (typeof getStorage('--picCovers-display') === 'undefined') setStorage('--picCovers-display', $(':root').css('--picCovers-display'));
@@ -289,7 +300,7 @@
                     $(':root').css('--show-time-remaining', getStorage('--show-time-remaining'));
 
                     // put elements in correct container div
-                    let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather'];
+                    let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather', 'picSystem'];
                     arr.forEach(id => {
                         console.log(id);
                         let el = $(`.${id}`);

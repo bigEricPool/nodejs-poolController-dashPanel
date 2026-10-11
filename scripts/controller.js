@@ -1378,7 +1378,7 @@
                     $(':root').css('--dashContainer3-display', 'none');
                 }
 
-                let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather'];
+                let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather', 'picSystem'];
 
                 arr.forEach(id => {
                     let el = $(`.${id}`);
