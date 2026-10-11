@@ -7,6 +7,7 @@
     "active": "in use",
     "legacy": "exists, being replaced by the planned branches",
     "planned": "not created yet",
+    "parked": "exists and is compiled, but is kept out of pool until it has been tested",
     "archive": "kept for history"
   },
   "branches": [
