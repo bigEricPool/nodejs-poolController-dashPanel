@@ -256,6 +256,27 @@
                 $('<input type="hidden" data-datatype="int"></input>').attr('data-bind', 'primingTime').appendTo(line);
                 $('<input type="hidden" data-datatype="int"></input>').attr('data-bind', 'primingSpeed').appendTo(line);
             }
+            // Relay pumps with more than one speed have no priming of their own: njsPC primes them when a schedule turns the pump on.
+            if (type.schedulePriming === true) {
+                var primeSpeeds = [{ val: 0, desc: 'None' }];
+                var primeCount = type.name === 'hwrly' ? (type.maxSpeeds || type.maxRelays) : type.maxRelays;
+                for (var ps = 1; ps <= primeCount; ps++) {
+                    let prly = type.name !== 'hwrly' && typeof type.relays !== 'undefined' ? type.relays.find(elem => elem.id === ps) : undefined;
+                    primeSpeeds.push({ val: ps, desc: typeof prly !== 'undefined' ? prly.name : `Speed #${ps}` });
+                }
+                line = $('<div></div>').appendTo(pnl).attr('title', 'When a schedule turns the pump on, it also runs at the priming speed, with the priming circuit on, for the priming time. Turning the pump on by hand does not prime it. A time of 0 turns priming off.');
+                $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Priming Time', binding: binding + 'primingMinutes', min: 0, max: 60, step: 1, units: 'min', style: { width: '17rem' }, inputAttrs: { maxlength: 5 }, labelAttrs: { style: lblStyle } });
+                $('<div></div>').appendTo(line).pickList({
+                    bindColumn: 0, displayColumn: 1, labelText: 'Priming Speed', binding: binding + 'primingRelay',
+                    columns: [{ binding: 'val', hidden: true, text: 'val', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'Speed', style: { whiteSpace: 'nowrap' } }],
+                    items: primeSpeeds, inputAttrs: { style: { width: '7rem' } }, labelAttrs: { style: { marginLeft: '.25rem' } }
+                });
+                $('<div></div>').appendTo(line).pickList({
+                    labelText: 'Priming Circuit', binding: binding + 'primingCircuit',
+                    columns: [{ binding: 'id', hidden: true, text: 'Id', style: { whiteSpace: 'nowrap' } }, { binding: 'name', text: 'Circuit', style: { whiteSpace: 'nowrap' } }],
+                    items: [{ id: 0, name: 'None' }].concat(o.circuits || []), inputAttrs: { style: { width: '9rem' } }, labelAttrs: { style: { marginLeft: '.25rem' } }
+                });
+            }
             line = $('<div></div>').appendTo(pnl).css({ margin: '3px' });
             if (typeof type.minSpeed !== 'undefined') 
                 $('<div></div>').appendTo(line).valueSpinner({ labelText: 'Minimum Speed', binding: binding + 'minSpeed', min: type.minSpeed, max: type.maxSpeed, step: speedStepSize, units: 'rpm', style: { width: '17rem' }, inputAttrs: { maxlength: 5 }, labelAttrs: { style: lblStyle }, canEdit: true });
