@@ -1153,7 +1153,7 @@
                     $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' }).text('No messages have been received from this chlorinator since njsPC started.').appendTo(wrap);
                     return;
                 }
-                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text('The most recent message of each kind received since njsPC started. Times are shown in this browser\'s time zone.').appendTo(wrap);
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text('The most recent message of each kind seen on the RS485 bus for this chlorinator since njsPC started, in either direction (commands sent to it and responses from it). Times are shown in this browser\'s time zone.').appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
                 ['Action', 'Received', 'Meaning', 'Packet'].forEach(function (t) { $('<th></th>').css({ textAlign: 'left', padding: '.2rem .4rem', borderBottom: '1px solid #999' }).text(t).appendTo(head); });
