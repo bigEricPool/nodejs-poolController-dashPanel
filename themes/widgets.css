@@ -499,6 +499,19 @@ span.picSchedTime {
     text-overflow:ellipsis;
     display:inline-block;
 }
+/* A sunrise or sunset start or end shows its offset on a second line below it. */
+span.picSchedTime > span {
+    vertical-align:top;
+}
+span.picSchedTime > span.picStartTime, span.picSchedTime > span.picEndTime {
+    display:inline-block;
+    text-align:center;
+}
+div.picTimeOffset {
+    font-size:.75em;
+    line-height:1.1;
+    opacity:.8;
+}
 
 
 label.picPumpName, label.picScheduleName {

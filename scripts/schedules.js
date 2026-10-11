@@ -145,8 +145,8 @@
                 var startTimeType = data.startTimeType || { val: 0, name: 'manual', desc: 'Manual' };
                 var endTimeType = data.endTimeType || { val: 0, name: 'manual', desc: 'Manual' };
                 var clockMode = typeof data.clockMode !== 'undefined' && data.clockMode.val !== 'undefined' ? data.clockMode.val : 12;
-                el.find('.picStartTime').text(startTimeType.name !== 'manual' ? data.startTimeType.desc : startTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
-                el.find('.picEndTime').text(endTimeType.name !== 'manual' ? data.endTimeType.desc : endTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
+                self._setTimeText(el.find('.picStartTime'), startTimeType, data.startTimeOffset, startTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
+                self._setTimeText(el.find('.picEndTime'), endTimeType, data.endTimeOffset, endTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
                 self._createDays(data).appendTo(el);
             } catch (err) { console.error({ m: 'Error setting schedule', err: err, schedule: data }); }
             if (pnl.find('div.picSchedule[data-active=true]').length > 0)
@@ -167,6 +167,23 @@
             $('<span></span>').appendTo(span).addClass('picEndTime');
             //$('<span class="picSchedTime picData"><span class="picStartTime" data-bind="startTime" data-fmttype="time" data-fmtmask="hh:mmtt" data=fmtempty="--:--"></span> - <span class="picEndTime" data-bind="endTime" data-fmttype="time" data-fmtmask="hh:mmtt" data=fmtempty="--:--"></span></span>').appendTo(el);
             self._createDays(o).appendTo(el);
+        },
+        // The before/after hours of a sunrise/sunset time, e.g. " +1h 30m" or " -45m" (signed
+        // minutes, as stored); nothing when there is no offset.
+        _fmtOffset: function (mins) {
+            mins = parseInt(mins);
+            if (isNaN(mins) || mins === 0) return '';
+            var abs = Math.abs(mins), h = Math.floor(abs / 60), m = abs % 60;
+            return ' ' + (mins < 0 ? '-' : '+') + (h > 0 ? h + 'h' : '') + (h > 0 && m > 0 ? ' ' : '') + (m > 0 ? m + 'm' : '');
+        },
+        // Fills a start or end time. A sunrise or sunset shows its name, with the before/after offset (when there is one) on a
+        // second line below it, so the time stays narrow enough for its column. A fixed time is just the text.
+        _setTimeText: function (span, type, offset, manualText) {
+            span.empty();
+            if (type.name === 'manual') { span.text(manualText); return; }
+            $('<div></div>').text(type.desc).appendTo(span);
+            var off = String(this._fmtOffset(offset)).trim();
+            if (off !== '') $('<div></div>').addClass('picTimeOffset').text(off).appendTo(span);
         },
         _isEveryDay: function (days) { return typeof days !== 'undefined' && days.val === 127; },
         _isWeekends: function (days) {
