@@ -8,6 +8,7 @@
     --picSchedules-order: 15;
     --picFilters-order: 17;
     --picValves-order: 20;
+    --picSystem-order: 26;
     --picCovers-order: 22;
     --picBodies-display: block;
     --picCircuits-display: block;
@@ -18,6 +19,7 @@
     --picSchedules-display: block;
     --picFilters-display: block;
     --picValves-display: block;
+    --picSystem-display: block;
     --picCovers-display: block;
     --number-of-columns: 2;
     --dashContainer2-display: block;
@@ -302,6 +304,174 @@ div.picFilters {
 div.picValves {
     order: var(--picValves-order);
     display: var(--picValves-display) !important;
+}
+div.picSystem {
+    order: var(--picSystem-order);
+    display: var(--picSystem-display) !important;
+}
+div.picSystem.picSystemOff {
+    display: none !important;
+}
+span.picSystemBadge {
+    font-size: .75rem;
+    font-weight: normal;
+    margin-left: .5rem;
+    padding: 0 .4rem;
+    border-radius: .6rem;
+    background-color: #d9822b;
+    color: white;
+}
+span.picSystemBadge.picSystemAlert {
+    background-color: #c23030;
+}
+span.picSystemTabs {
+    float: right;
+    font-size: .8rem;
+    font-weight: normal;
+}
+span.picSystemTab {
+    cursor: pointer;
+    padding: 0 .4rem;
+    border-radius: .6rem;
+    opacity: .7;
+}
+span.picSystemTab.selected {
+    opacity: 1;
+    font-weight: bold;
+    text-decoration: underline;
+}
+div.picSystemBody {
+    font-size: .9rem;
+}
+div.picSystemWarning {
+    margin: .2rem 0;
+    padding: .2rem .4rem;
+    border-left: 3px solid #d9822b;
+    font-size: .85rem;
+}
+div.picSystemWarning.picSystemAlert {
+    border-left-color: #c23030;
+}
+div.picSystemTiles {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .4rem;
+    margin: .3rem 0;
+}
+div.picSystemTiles.picSystemTiles3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+div.picSystemTile {
+    padding: .25rem .4rem;
+    border: 1px solid rgba(128, 128, 128, .35);
+    border-radius: .3rem;
+}
+div.picSystemTileLabel, div.picSystemTileExtra {
+    font-size: .75rem;
+    opacity: .8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+div.picSystemTileValue {
+    font-size: 1.3em;
+    font-weight: bold;
+}
+div.picSystemCharts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .4rem;
+    margin: .3rem 0;
+}
+div.picSystemCharts.picSystemChartsWide {
+    grid-template-columns: minmax(0, 1fr);
+}
+div.picSystemChartLabel {
+    font-size: .7rem;
+    opacity: .8;
+    display: flex;
+    justify-content: space-between;
+    gap: .3rem;
+    white-space: nowrap;
+    overflow: hidden;
+}
+svg.picSystemSvg {
+    display: block;
+    width: 100%;
+    height: 2.9rem;
+}
+svg.picSystemSvg path.picSystemLine {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+svg.picSystemSvg path.picSystemLine.picSystemLineMax {
+    stroke-width: 1;
+    opacity: .45;
+}
+svg.picSystemSvg line.picSystemMark {
+    stroke: #c23030;
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    vector-effect: non-scaling-stroke;
+}
+div.picSystemRows {
+    margin-top: .3rem;
+    padding-top: .3rem;
+    border-top: 1px solid rgba(128, 128, 128, .35);
+}
+div.picSystemRow {
+    display: flex;
+    justify-content: space-between;
+    gap: .6rem;
+    font-size: .85rem;
+    padding: .05rem 0;
+}
+div.picSystemRow > label {
+    opacity: .8;
+    white-space: nowrap;
+}
+div.picSystemRow > span {
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+div.picSystemRow > span.picSystemWarn {
+    color: #d9822b;
+    font-weight: bold;
+}
+div.picSystemRow > span.picSystemGood {
+    opacity: .85;
+}
+div.picSystemSub {
+    text-align: right;
+    font-size: .75rem;
+    opacity: .75;
+    overflow-wrap: anywhere;
+    margin-bottom: .15rem;
+}
+div.picSystemChips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem;
+    margin-top: .4rem;
+}
+span.picSystemChip {
+    font-size: .8rem;
+    padding: 0 .5rem;
+    border-radius: .6rem;
+    border: 1px solid rgba(128, 128, 128, .5);
+}
+span.picSystemChip.picSystemDown {
+    background-color: #c23030;
+    border-color: #c23030;
+    color: white;
+}
+div.picSystemNote {
+    font-size: .75rem;
+    font-style: italic;
+    opacity: .8;
+    padding-top: .15rem;
 }
 div.picCovers {
     order: var(--picCovers-order);
