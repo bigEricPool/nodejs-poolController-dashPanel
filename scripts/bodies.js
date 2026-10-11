@@ -163,7 +163,6 @@
             var bodyTemp = $('<div></div>').addClass('picBodyTemp');
             line = $('<div></div').appendTo(bodyTemp);
             $('<label></label>').attr('data-bind', 'name').appendTo(line);
-            $('<label></label>').text(' Temp').appendTo(line);
             line = $('<div></div>').addClass('body-temp').appendTo(bodyTemp);
             $('<span></span>').addClass('picTempData').attr('data-bind', 'temp').attr('data-fmttype', 'number').attr('data-fmtmask', tempFmt).attr('data-fmtempty', '--.-').appendTo(line);
             $('<label></label>').addClass('picUnitSymbol').html('&deg').css({ fontSize: '.4em', verticalAlign:'top', display:'inline-block', paddingTop:'.25em' }).appendTo(line);
