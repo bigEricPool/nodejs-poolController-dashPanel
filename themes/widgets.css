@@ -387,6 +387,9 @@ div.picSystemCharts.picSystemChartsWide {
     grid-template-columns: minmax(0, 1fr);
     --picSystemChart-height: 5.5rem;
 }
+div.picSystemCharts.picSystemChartsNow {
+    --picSystemChart-height: 3.8rem;
+}
 div.picSystemPlot {
     display: flex;
     margin-top: .3rem;
