@@ -6,6 +6,25 @@
             el[0].initSchedules = function (data) { self._initSchedules(data); };
             el[0].setScheduleData = function (data) { self.setScheduleData(data); };
             el[0].setVacationMode = function (vacation) { self.setVacationMode(vacation); };
+            el[0].setSunTimes = function (data) { self._updateSunTimes(data); };
+        },
+        // Today's sunrise/sunset, shown to the right of the title. The controller emits its
+        // state (including these) every minute, so this stays current and rolls over at midnight.
+        _updateSunTimes: function (data) {
+            var self = this, o = self.options, el = self.element;
+            var span = el.find('span.picSunTimes');
+            if (span.length === 0 || typeof data === 'undefined') return;
+            if (typeof data.clockMode !== 'undefined' && typeof data.clockMode.val !== 'undefined') o.clockMode = data.clockMode.val;
+            var fmt = o.clockMode === 24 ? 'HH:mm' : 'h:mmtt';
+            var fmtTime = function (iso) {
+                if (typeof iso !== 'string' || iso === '') return undefined;
+                var dt = new Date(iso);
+                if (isNaN(dt.getTime())) return undefined;
+                return (dt.getHours() * 60 + dt.getMinutes()).formatTime(fmt, '--:--');
+            };
+            var sr = fmtTime(data.sunrise), ss = fmtTime(data.sunset);
+            if (typeof sr === 'undefined' || typeof ss === 'undefined') span.text('');
+            else span.text('Sunrise ' + sr + '  Sunset ' + ss);
         },
         _initSchedules: function(data) {
             var self = this, o = self.options, el = self.element;
@@ -17,6 +36,8 @@
             let span = $('<span class="picCircuitTitle"></span>');
             span.appendTo(div);
             span.text(o.vacation ? 'Schedules - Vacation Mode' : 'Schedules');
+            $('<span class="picSunTimes"></span>').css({ marginLeft: '1rem', fontSize: '.75em', fontWeight: 'normal', opacity: .8, whiteSpace: 'pre' }).appendTo(div);
+            self._updateSunTimes(data);
             if (typeof data !== 'undefined' && typeof data.schedules !== 'undefined') {
                 var schedules = data.schedules.sort((a, b) => a.id - b.id);
                 for (var i = 0; i < schedules.length; i++) {

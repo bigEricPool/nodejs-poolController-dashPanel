@@ -480,6 +480,9 @@
                 $('div.picController').each(function () {
                     this.setControllerState(data);
                 });
+                $('div.picScheduleContainer').each(function () {
+                    this.setSunTimes(data);
+                });
                 if (typeof data.vacation !== 'undefined') {
                     $('div.picScheduleContainer').each(function () {
                         this.setVacationMode(data.vacation);
