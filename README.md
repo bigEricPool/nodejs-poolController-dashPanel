@@ -12,6 +12,7 @@ Base for new branches: master at a5e8c15.
 |---|---|---|---|---|
 | `master` | mirror | Untouched copy of the original project's master. Every module and fix branch is cut from it. | none | none |
 | `pool` | integration | Everything together; the branch the pool controller runs. To be built from the branches below, never edited directly. | all module and fix branches | none |
+| `pool-next` | integration | The rebuild of pool from the branches in this list; replaces pool once the remaining re-cut branches are in and it has been tested. | all module and fix branches | none |
 | `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. | none | none |
 | `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
@@ -25,7 +26,6 @@ Base for new branches: master at a5e8c15.
 
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
-| `pool-next` | integration | The rebuild of pool from this manifest; replaces pool once its content matches and the build check passes. | all module and fix branches | none |
 | `feature/swg-assist` | feature | feature/auto-swg plus the rename to SWG Assist (user-facing text only). | feature/auto-swg | none |
 
 ## Being replaced
