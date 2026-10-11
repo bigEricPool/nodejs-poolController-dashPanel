@@ -81,10 +81,17 @@
         _flagName: function (e) {
             return { underVoltage: 'Supply voltage too low', frequencyCapped: 'Processor speed capped', throttled: 'Processor slowed down', softTempLimit: 'Soft temperature limit' }[e] || e;
         },
-        // A small line chart of one or more series over the same times. A series is { values, cls }; a missing value breaks its line. `mark` draws a
-        // dashed line at that value when it is inside the range shown.
+        // The smallest of `steps` that needs no more than `most` marks over `span`.
+        _step: function (span, steps, most) {
+            for (var i = 0; i < steps.length; i++) if (span / steps[i] <= most) return steps[i];
+            return steps[steps.length - 1];
+        },
+        // A line chart of one or more series. A series is { values, cls }; a missing value breaks its line. Options: `times` (the time of each
+        // value, which places the values by time and adds a time scale), `gapMs` (a longer step between two times breaks the line), `axes` (a
+        // value scale at the left with round marks), `mark` (a dashed line at that value when it is inside the range shown).
         _chart: function (parent, label, series, opts) {
             opts = opts || {};
+            var self = this;
             var W = 200, H = 46, pad = 2;
             var min = Infinity, max = -Infinity, n = 0;
             series.forEach(function (s) {
@@ -97,8 +104,27 @@
             if (n < 2 || min === Infinity) { $('<div class="picSystemNote"></div>').text('Not enough readings yet.').appendTo(box); return box; }
             if (typeof opts.min === 'number') min = Math.min(min, opts.min);
             if (typeof opts.max === 'number') max = Math.max(max, opts.max);
+            $('<span class="picSystemChartRange"></span>').text(min.toFixed(opts.places || 0) + '–' + max.toFixed(opts.places || 0) + (opts.unit || '')).appendTo(head);
             if (max - min < (opts.span || 1)) { var mid = (max + min) / 2; min = mid - (opts.span || 1) / 2; max = mid + (opts.span || 1) / 2; }
-            $('<span class="picSystemChartRange"></span>').text(min.toFixed(opts.places || 0) + '\u2013' + max.toFixed(opts.places || 0) + (opts.unit || '')).appendTo(head);
+            var yTicks = [];
+            if (opts.axes) {
+                var ys = self._step(max - min, [1, 2, 5, 10, 20, 25, 50, 100], 4);
+                min = Math.floor(min / ys) * ys;
+                max = Math.ceil(max / ys) * ys;
+                for (var v = min; v <= max + 1e-9; v += ys) yTicks.push(v);
+            }
+            var times = opts.times && opts.times.length === n && opts.times[n - 1] > opts.times[0] ? opts.times : undefined;
+            var t0 = times ? times[0] : 0, t1 = times ? times[n - 1] : n - 1;
+            var xTicks = [], stepMin = 0;
+            if (times) {
+                stepMin = self._step((t1 - t0) / 60000, [5, 10, 15, 30, 60, 120, 180, 360, 720, 1440, 2880, 10080], opts.xTicks || 6);
+                // The marks fall on round local times: whole days at midnight, shorter steps counted from the start of the first day.
+                var d0 = new Date(t0), day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate());
+                if (stepMin >= 1440) {
+                    while (day.getTime() <= t1) { if (day.getTime() >= t0) xTicks.push(day.getTime()); day.setDate(day.getDate() + stepMin / 1440); }
+                }
+                else for (var t = day.getTime(); t <= t1; t += stepMin * 60000) { if (t >= t0) xTicks.push(t); }
+            }
             var ns = 'http://www.w3.org/2000/svg';
             var svg = document.createElementNS(ns, 'svg');
             svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
@@ -107,17 +133,21 @@
             svg.setAttribute('role', 'img');
             svg.setAttribute('aria-label', label);
             var y = function (v) { return pad + (H - 2 * pad) * (1 - (v - min) / (max - min)); };
-            var x = function (i) { return n === 1 ? W / 2 : W * i / (n - 1); };
-            if (typeof opts.mark === 'number' && opts.mark > min && opts.mark < max) {
+            var x = function (i) { return W * ((times ? times[i] : i) - t0) / (t1 - t0); };
+            var line = function (x1, y1, x2, y2, cls) {
                 var ln = document.createElementNS(ns, 'line');
-                ln.setAttribute('x1', 0); ln.setAttribute('x2', W); ln.setAttribute('y1', y(opts.mark)); ln.setAttribute('y2', y(opts.mark));
-                ln.setAttribute('class', 'picSystemMark');
+                ln.setAttribute('x1', x1); ln.setAttribute('x2', x2); ln.setAttribute('y1', y1); ln.setAttribute('y2', y2);
+                ln.setAttribute('class', cls);
                 svg.appendChild(ln);
-            }
+            };
+            yTicks.forEach(function (v) { line(0, y(v), W, y(v), 'picSystemGrid'); });
+            xTicks.forEach(function (t) { var xx = W * (t - t0) / (t1 - t0); line(xx, 0, xx, H, 'picSystemGrid'); });
+            if (typeof opts.mark === 'number' && opts.mark > min && opts.mark < max) line(0, y(opts.mark), W, y(opts.mark), 'picSystemMark');
             series.forEach(function (s) {
                 var d = '', pen = false;
                 s.values.forEach(function (v, i) {
                     if (typeof v !== 'number' || isNaN(v)) { pen = false; return; }
+                    if (pen && times && typeof opts.gapMs === 'number' && i > 0 && times[i] - times[i - 1] > opts.gapMs) pen = false;
                     d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1);
                     pen = true;
                 });
@@ -126,7 +156,24 @@
                 p.setAttribute('class', 'picSystemLine ' + (s.cls || ''));
                 svg.appendChild(p);
             });
-            box[0].appendChild(svg);
+            var plot = $('<div class="picSystemPlot"></div>').appendTo(box);
+            if (opts.axes) {
+                var ybox = $('<div class="picSystemY"></div>').appendTo(plot);
+                yTicks.forEach(function (v) { $('<span></span>').text(String(Math.round(v * 10) / 10)).css('top', (100 * y(v) / H) + '%').appendTo(ybox); });
+            }
+            var area = $('<div class="picSystemArea"></div>').appendTo(plot);
+            area[0].appendChild(svg);
+            if (xTicks.length > 0) {
+                var xbox = $('<div class="picSystemX"></div>').appendTo(area);
+                xTicks.forEach(function (t) {
+                    var frac = (t - t0) / (t1 - t0);
+                    // A mark at the very edge keeps its line but not its label, which would hang outside the chart.
+                    if (frac < 0.04 || frac > 0.96) return;
+                    var dt = new Date(t);
+                    var txt = stepMin >= 1440 || (dt.getHours() === 0 && dt.getMinutes() === 0) ? (dt.getMonth() + 1) + '/' + dt.getDate() : self._time(t);
+                    $('<span></span>').text(txt).css('left', (100 * frac) + '%').appendTo(xbox);
+                });
+            }
             return box;
         },
         _tile: function (parent, label, value, extra) {
@@ -197,9 +244,10 @@
             if (h && h.t && h.t.length > 1) {
                 var charts = $('<div class="picSystemCharts"></div>').appendTo(body);
                 var mins = Math.max(1, Math.round((h.t[h.t.length - 1] - h.t[0]) / 60000));
-                if (h.temp.some(function (v) { return typeof v === 'number'; })) self._chart(charts, 'Temp', [{ values: h.temp }], { unit: ' C', span: 4, mark: 60 });
-                self._chart(charts, 'Use', [{ values: h.cpu }], { unit: '%', min: 0, span: 10 });
-                self._chart(charts, 'Memory', [{ values: h.mem }], { unit: '%', span: 10 });
+                var gap = (h.sampleSeconds || 10) * 3000;
+                if (h.temp.some(function (v) { return typeof v === 'number'; })) self._chart(charts, 'Temp', [{ values: h.temp }], { unit: ' C', span: 4, mark: 60, times: h.t, xTicks: 3, gapMs: gap });
+                self._chart(charts, 'Use', [{ values: h.cpu }], { unit: '%', min: 0, span: 10, times: h.t, xTicks: 3, gapMs: gap });
+                self._chart(charts, 'Memory', [{ values: h.mem }], { unit: '%', span: 10, times: h.t, xTicks: 3, gapMs: gap });
                 $('<div class="picSystemNote"></div>').text('The last ' + (mins >= 60 ? Math.round(mins / 60) + ' h' : mins + ' min') + '. The dashed line is 60 C.').appendTo(body);
             }
             var rows = $('<div class="picSystemRows"></div>').appendTo(body);
@@ -248,9 +296,9 @@
                 self._tile(tiles, 'Average', tempN > 0 ? (tempSum / tempN).toFixed(1) + ' C' : '--', '');
                 self._tile(tiles, 'Longest pause', (lagMax / 1000).toFixed(1) + ' s', lagMax >= 1000 && lagMaxAt ? self._time(lagMaxAt, true) : '');
                 var charts = $('<div class="picSystemCharts picSystemChartsWide"></div>').appendTo(body);
-                var from = self._time(rows[0].t, true), to = self._time(rows[rows.length - 1].t, true);
-                self._chart(charts, 'Temperature, average and highest, ' + from + ' to ' + to, [{ values: rows.map(function (r) { return r.tempMax; }), cls: 'picSystemLineMax' }, { values: rows.map(function (r) { return r.temp; }) }], { unit: ' C', span: 4, mark: 60 });
-                self._chart(charts, 'Processor use, average and highest', [{ values: rows.map(function (r) { return r.cpuMax; }), cls: 'picSystemLineMax' }, { values: rows.map(function (r) { return r.cpu; }) }], { unit: '%', min: 0, span: 10 });
+                var times = rows.map(function (r) { return r.t; }), gap = (log.rowMinutes || 5) * 60000 * 2.5;
+                self._chart(charts, 'Temperature (C), average and highest', [{ values: rows.map(function (r) { return r.tempMax; }), cls: 'picSystemLineMax' }, { values: rows.map(function (r) { return r.temp; }) }], { unit: ' C', span: 4, mark: 60, axes: true, times: times, gapMs: gap });
+                self._chart(charts, 'Processor use (%), average and highest', [{ values: rows.map(function (r) { return r.cpuMax; }), cls: 'picSystemLineMax' }, { values: rows.map(function (r) { return r.cpu; }) }], { unit: '%', min: 0, span: 10, axes: true, times: times, gapMs: gap });
             }
             var periods = log.periods || [];
             var list = $('<div class="picSystemRows"></div>').appendTo(body);
@@ -269,7 +317,7 @@
                 var sw = $('<div class="picSystemRows picSystemSoftware"></div>').appendTo(body);
                 software.slice().reverse().slice(0, 8).forEach(function (x) { self._softwareRow(sw, self._time(x.t, true), x, '  ' + x.name); });
             }
-            $('<div class="picSystemNote"></div>').text('One reading ' + (log.rowMinutes >= 1440 ? 'a day' : log.rowMinutes >= 60 ? 'an hour' : 'every ' + log.rowMinutes + ' minutes') + '.').appendTo(body);
+            $('<div class="picSystemNote"></div>').text((rows.length > 0 ? self._time(rows[0].t, true) + ' to ' + self._time(rows[rows.length - 1].t, true) + '. ' : '') + 'One reading ' + (log.rowMinutes >= 1440 ? 'a day' : log.rowMinutes >= 60 ? 'an hour' : 'every ' + log.rowMinutes + ' minutes') + '.').appendTo(body);
         }
     });
 })(jQuery);
