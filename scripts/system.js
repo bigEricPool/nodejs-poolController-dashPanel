@@ -324,6 +324,7 @@
                 var times = rows.map(function (r) { return r.t; }), gap = (log.rowMinutes || 5) * 60000 * 2.5;
                 self._chart(charts, 'Temperature (C), average and highest', [{ values: rows.map(function (r) { return r.tempMax; }), cls: 'picSystemLineMax' }, { values: rows.map(function (r) { return r.temp; }) }], { unit: ' C', span: 4, mark: 60, axes: true, times: times, gapMs: gap });
                 self._chart(charts, 'Processor use (%), average and highest', [{ values: rows.map(function (r) { return r.cpuMax; }), cls: 'picSystemLineMax' }, { values: rows.map(function (r) { return r.cpu; }) }], { unit: '%', min: 0, span: 10, axes: true, times: times, gapMs: gap });
+                if (rows.some(function (r) { return typeof r.mem === 'number'; })) self._chart(charts, 'Memory in use (%), average', [{ values: rows.map(function (r) { return r.mem; }) }], { unit: '%', span: 10, axes: true, times: times, gapMs: gap });
             }
             var periods = log.periods || [];
             var list = $('<div class="picSystemRows"></div>').appendTo(body);
