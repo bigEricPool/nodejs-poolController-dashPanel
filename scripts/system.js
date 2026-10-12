@@ -106,6 +106,8 @@
             if (typeof opts.max === 'number') max = Math.max(max, opts.max);
             $('<span class="picSystemChartRange"></span>').text(min.toFixed(opts.places || 0) + '–' + max.toFixed(opts.places || 0) + (opts.unit || '')).appendTo(head);
             if (max - min < (opts.span || 1)) { var mid = (max + min) / 2; min = mid - (opts.span || 1) / 2; max = mid + (opts.span || 1) / 2; }
+            // Widening a narrow range does not take the scale below the lowest value the chart can have.
+            if (typeof opts.min === 'number' && min < opts.min) { max += opts.min - min; min = opts.min; }
             var yTicks = [];
             if (opts.axes) {
                 var ys = self._step(max - min, [1, 2, 5, 10, 20, 25, 50, 100], 4);
@@ -203,6 +205,29 @@
             if (typeof sw.modified === 'number' && sw.modified > 0) parts.push(sw.modified + ' modified file' + (sw.modified === 1 ? '' : 's'));
             else if (typeof sw.modified !== 'number' && typeof sw.changed === 'number' && sw.changed > 0) parts.push(sw.changed + ' changed or extra file' + (sw.changed === 1 ? '' : 's'));
             return parts.join(', ');
+        },
+        // Periods of one flag that follow each other within half an hour become one entry: a reading that hovers at its limit turns the flag on
+        // and off many times, and that is one event to the person reading it. The newest entry comes first.
+        _groupPeriods: function (periods) {
+            var groups = [], last = {};
+            periods.slice().sort(function (a, b) { return a.start - b.start; }).forEach(function (p) {
+                var end = typeof p.end === 'number' ? p.end : p.start;
+                var open = typeof p.end !== 'number' && !p.brief;
+                var g = last[p.e];
+                if (g && p.start - g.end <= 30 * 60000) {
+                    g.count++;
+                    g.end = Math.max(g.end, end);
+                    g.open = open;
+                    g.brief = g.brief && !!p.brief;
+                    if (typeof p.tempStart === 'number' && (typeof g.temp !== 'number' || p.tempStart > g.temp)) g.temp = p.tempStart;
+                }
+                else {
+                    g = { e: p.e, start: p.start, end: end, count: 1, temp: p.tempStart, brief: !!p.brief, open: open };
+                    last[p.e] = g;
+                    groups.push(g);
+                }
+            });
+            return groups.sort(function (a, b) { return b.start - a.start; });
         },
         _softwareRow: function (parent, label, sw, extra, cls) {
             var self = this;
@@ -304,13 +329,15 @@
             var list = $('<div class="picSystemRows"></div>').appendTo(body);
             if (periods.length === 0) self._row(list, 'Power and heat', 'No flag came on in this period', 'picSystemGood');
             else {
-                // The newest first, and no more than fit a panel.
-                periods.slice().reverse().slice(0, 12).forEach(function (p) {
-                    var when = self._time(p.start, true);
-                    var how = p.brief ? 'briefly' : typeof p.end === 'number' ? 'for ' + self._duration(Math.max(60, Math.round((p.end - p.start) / 1000))) : 'no end recorded';
-                    self._row(list, when, self._flagName(p.e) + ', ' + how + (typeof p.tempStart === 'number' ? ' (' + p.tempStart.toFixed(1) + ' C)' : ''), 'picSystemWarn');
+                // No more than fit a panel.
+                var groups = self._groupPeriods(periods);
+                groups.slice(0, 12).forEach(function (g) {
+                    var how;
+                    if (g.count > 1) how = g.count + ' times until ' + self._time(g.end, true) + (g.open ? ', the last with no end recorded' : '');
+                    else how = g.brief ? 'briefly' : g.open ? 'no end recorded' : 'for ' + self._duration(Math.max(60, Math.round((g.end - g.start) / 1000)));
+                    self._row(list, self._time(g.start, true), self._flagName(g.e) + ', ' + how + (typeof g.temp === 'number' ? ' (' + (g.count > 1 ? 'up to ' : '') + g.temp.toFixed(1) + ' C)' : ''), 'picSystemWarn');
                 });
-                if (periods.length > 12) $('<div class="picSystemNote"></div>').text((periods.length - 12) + ' earlier ones are not shown.').appendTo(body);
+                if (groups.length > 12) $('<div class="picSystemNote"></div>').text((groups.length - 12) + ' earlier ones are not shown.').appendTo(body);
             }
             var software = (log.software || []).filter(function (x) { return !x.start; });
             if (software.length > 0) {
