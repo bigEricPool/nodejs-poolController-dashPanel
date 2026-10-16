@@ -36,6 +36,7 @@
     <script type="text/javascript" src="scripts/system.js"></script>
     <script type="text/javascript" src="scripts/covers.js"></script>
     <script type="text/javascript" src="scripts/weather.js"></script>
+    <script type="text/javascript" src="scripts/water.js"></script>
     <script type="text/javascript" src="scripts/chemistry.js"></script>
     <script type="text/javascript" src="scripts/lightGroups.js"></script>
     <script type="text/javascript" src="scripts/schedules.js"></script>
@@ -99,6 +100,7 @@
                 <div class="picSystem picControlPanel control-panel"></div>
                 <div class="picCovers picControlPanel control-panel"></div>
                 <div class="picWeather picControlPanel control-panel"></div>
+                <div class="picWater picControlPanel control-panel"></div>
                 <div class="picVirtualCircuits picControlPanel control-panel"></div>
             </div>
             <div class="container2"></div>
@@ -129,6 +131,7 @@
             $('div.picSystem').systemStatus();
             $('div.picCovers').covers();
             $('div.picWeather').weather();
+            $('div.picWater').waterTemp();
         });
     </script>
 </body>

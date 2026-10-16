@@ -29,6 +29,8 @@
     --picSystem-display: block;
     --picCovers-display: block;
     --picWeather-display: block;
+    --picWater-order: 25;
+    --picWater-display: block;
     --number-of-columns: 2;
     --dashContainer2-display: block;
     --dashContainer3-display: block;
@@ -1907,4 +1909,119 @@ div.pic-waiticon > .wait-roller {
     100% {
         transform: rotate(360deg);
     }
+}
+
+/* The Water panel (scripts/water.js): the last 24 hours of each body's temperature. */
+div.picWater {
+    order: var(--picWater-order);
+    display: var(--picWater-display) !important;
+}
+div.picWater.picWaterOff {
+    display: none !important;
+}
+span.picWaterSpan {
+    float: right;
+    font-size: .75rem;
+    font-weight: normal;
+    opacity: .8;
+}
+div.picWaterRow {
+    font-size: .9rem;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    padding-top: .15rem;
+    padding-bottom: .15rem;
+}
+span.picWaterIcon {
+    display: inline-block;
+    min-width: 1.2rem;
+    text-align: center;
+}
+label.picWaterLabel {
+    min-width: 4.5rem;
+}
+span.picWaterValue {
+    font-weight: bold;
+    font-size: 1.4em;
+    white-space: nowrap;
+    min-width: 4.5rem;
+    text-align: center;
+}
+span.picWaterExtra {
+    flex: 1;
+    text-align: left;
+    font-size: .85em;
+    opacity: .85;
+}
+div.picWaterChart {
+    margin: .2rem 0 .3rem 0;
+}
+div.picWaterChartLabel {
+    font-size: .7rem;
+    opacity: .8;
+    display: flex;
+    justify-content: space-between;
+    gap: .3rem;
+    white-space: nowrap;
+    overflow: hidden;
+}
+div.picWaterPlot {
+    display: flex;
+    margin-top: .3rem;
+}
+div.picWaterArea {
+    flex: 1;
+    min-width: 0;
+}
+div.picWaterY {
+    position: relative;
+    flex: none;
+    width: 1.9rem;
+    height: 5.5rem;
+    font-size: .68rem;
+}
+div.picWaterY > span {
+    position: absolute;
+    right: .25rem;
+    transform: translateY(-50%);
+    opacity: .8;
+}
+div.picWaterX {
+    position: relative;
+    height: .95rem;
+    font-size: .68rem;
+}
+div.picWaterX > span {
+    position: absolute;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    opacity: .8;
+}
+svg.picWaterSvg {
+    display: block;
+    width: 100%;
+    height: 5.5rem;
+}
+svg.picWaterSvg line.picWaterGrid {
+    stroke: currentColor;
+    stroke-width: 1;
+    opacity: .15;
+    vector-effect: non-scaling-stroke;
+}
+svg.picWaterSvg path.picWaterLine {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
+}
+svg.picWaterSvg path.picWaterLine.picWaterLineLive {
+    stroke-width: 1;
+    opacity: .4;
+}
+div.picWaterNote {
+    font-size: .75rem;
+    font-style: italic;
+    opacity: .8;
+    padding-top: .15rem;
 }
