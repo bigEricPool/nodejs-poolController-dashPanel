@@ -340,11 +340,6 @@
                 });
                 if (groups.length > 12) $('<div class="picSystemNote"></div>').text((groups.length - 12) + ' earlier ones are not shown.').appendTo(body);
             }
-            var software = (log.software || []).filter(function (x) { return !x.start; });
-            if (software.length > 0) {
-                var sw = $('<div class="picSystemRows picSystemSoftware"></div>').appendTo(body);
-                software.slice().reverse().slice(0, 8).forEach(function (x) { self._softwareRow(sw, self._time(x.t, true), x, '  ' + x.name); });
-            }
             $('<div class="picSystemNote"></div>').text((rows.length > 0 ? self._time(rows[0].t, true) + ' to ' + self._time(rows[rows.length - 1].t, true) + '. ' : '') + 'One reading ' + (log.rowMinutes >= 1440 ? 'a day' : log.rowMinutes >= 60 ? 'an hour' : 'every ' + log.rowMinutes + ' minutes') + '.').appendTo(body);
         }
     });
