@@ -1627,19 +1627,25 @@ span.picWaterIcon {
     text-align: center;
 }
 label.picWaterLabel {
-    min-width: 4.5rem;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 span.picWaterValue {
+    flex: none;
     font-weight: bold;
     font-size: 1.4em;
     white-space: nowrap;
-    min-width: 4.5rem;
+    padding: 0 .3rem;
     text-align: center;
 }
 span.picWaterExtra {
-    flex: 1;
+    flex: 1 0 auto;
     text-align: left;
-    font-size: .85em;
+    font-size: .8em;
+    white-space: nowrap;
     opacity: .85;
 }
 div.picWaterChart {
