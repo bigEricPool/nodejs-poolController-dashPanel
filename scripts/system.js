@@ -292,7 +292,9 @@
                 var sw = $('<div class="picSystemRows picSystemSoftware"></div>').appendTo(body);
                 software.forEach(function (x) {
                     var stale = x.runningCommit && x.commit && x.runningCommit !== x.commit;
-                    self._softwareRow(sw, x.name, x, stale ? '  running ' + x.runningCommit.substring(0, 8) : '', stale ? 'picSystemWarn' : '');
+                    // What njsPC found about the build: the source changed after the last build, or (njsPC) it was built after it started.
+                    var extra = (stale ? '  running ' + x.runningCommit.substring(0, 8) : '') + (x.buildStale ? '  not built' : '') + (x.builtAfterStart ? '  built, not restarted' : '');
+                    self._softwareRow(sw, x.name, x, extra, extra ? 'picSystemWarn' : '');
                 });
             }
             var services = s.services || [];
