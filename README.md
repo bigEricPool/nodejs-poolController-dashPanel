@@ -13,6 +13,7 @@ Base for new branches: master at a5e8c15.
 | `master` | mirror | Untouched copy of the original project's master. Every module and fix branch is cut from it. | none | none |
 | `pool` | integration | Everything together; the branch the pool controller runs. To be built from the branches below, never edited directly. | all module and fix branches | none |
 | `pool-next` | integration | pool rebuilt from the branches in this list, in a fixed order. It is replaced at every rebuild; pool takes it over after testing. | all module and fix branches | none |
+| `fix/layout-editor-order` | fix | The layout editor lists the panels in their saved order, not a fixed built-in order. | none | not yet reported; upstream candidate |
 | `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. | none | none |
 | `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |

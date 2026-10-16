@@ -43,6 +43,15 @@
       "build": true
     },
     {
+      "name": "fix/layout-editor-order",
+      "kind": "fix",
+      "status": "active",
+      "purpose": "The layout editor lists the panels in their saved order, not a fixed built-in order.",
+      "depends": [],
+      "upstream": "not yet reported; upstream candidate",
+      "build": true
+    },
+    {
       "name": "fix/body-card-width",
       "kind": "fix",
       "status": "active",
