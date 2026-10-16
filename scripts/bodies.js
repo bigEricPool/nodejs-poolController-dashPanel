@@ -425,7 +425,8 @@
                     // The last 24 hours always end now, so these move on as time passes (not a calendar day).
                     var hasRange = typeof data.maxTemp24h === 'number' && typeof data.minTemp24h === 'number';
                     var atTime = function (iso) { var d = iso ? new Date(iso) : undefined; return d && !isNaN(d.getTime()) ? ' at ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; };
-                    tempAvg.text('24 h avg ' + data.avgTemp24h.toFixed(1) + (hasRange ? ' \u00B7 high ' + data.maxTemp24h.toFixed(1) + ' \u00B7 low ' + data.minTemp24h.toFixed(1) : '') + '\u00B0' + avgUnits).show();
+                    // The same order as the Weather and Water panels: high and low first, then the average.
+                    tempAvg.text('24 h ' + (hasRange ? 'high ' + data.maxTemp24h.toFixed(1) + ' / low ' + data.minTemp24h.toFixed(1) + ' \u00B7 ' : '') + 'avg ' + data.avgTemp24h.toFixed(1) + '\u00B0' + avgUnits).show();
                     var span = typeof data.avgTempHours === 'number' && data.avgTempHours < 24 ? 'the last ' + data.avgTempHours.toFixed(1) + ' hours of readings (njsPC has recorded this long so far)' : 'the last 24 hours of readings';
                     tempAvg.attr('title', 'Average of ' + span + (hasRange ? '. High ' + data.maxTemp24h.toFixed(1) + atTime(data.maxTemp24hAt) + ', low ' + data.minTemp24h.toFixed(1) + atTime(data.minTemp24hAt) : '') + '. Readings are taken while the body is on.');
                 }
