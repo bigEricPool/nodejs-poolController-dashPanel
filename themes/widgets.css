@@ -1741,6 +1741,13 @@ svg.picWaterSvg ellipse.picWaterDot {
 svg.picWaterSvg ellipse.picWaterDot.picWaterLineProjected {
     opacity: .5;
 }
+svg.picWaterSvg path.picWaterLine.picWaterLineOff {
+    stroke: #8a8a8a;
+    stroke-width: 1;
+}
+svg.picWaterSvg ellipse.picWaterDot.picWaterLineOff {
+    fill: #8a8a8a;
+}
 svg.picWaterSvg path.picWaterFcLine {
     fill: none;
     stroke: #2b8cbe;
