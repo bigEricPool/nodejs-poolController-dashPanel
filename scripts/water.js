@@ -194,19 +194,26 @@
             var head = $('<div class="picWaterChartLabel"></div>').appendTo(box);
             $('<span></span>').text(label).appendTo(head);
             var t0, t1, at = times;
-            if (mode === 'day') { t0 = times[0]; t1 = times[n - 1]; }
+            // The FC tests and projected values of the period (the last 24 hours for the day view) widen the span, so one taken while the
+            // pump was off, or on a day before the first temperature recorded, still shows.
+            var fcFrom = Date.now() - (opts.days || 1) * 86400000, fcMin = Infinity, fcMax = -Infinity;
+            if (opts.fc) (opts.fc.tests || []).concat(opts.fc.projection || []).forEach(function (p) {
+                if (p && typeof p.t === 'number' && typeof p.fc === 'number' && !isNaN(p.fc) && p.t >= fcFrom) { if (p.t < fcMin) fcMin = p.t; if (p.t > fcMax) fcMax = p.t; }
+            });
+            if (mode === 'day') { t0 = Math.min(times[0], fcMin); t1 = Math.max(times[n - 1], fcMax); }
             else if (mode === 'week') {
                 // Hourly rows, each placed at the middle of its hour, with the whole of the first and last hour shown.
                 at = times.map(function (t) { return t + 1800000; });
                 t1 = Math.max(Date.now(), times[n - 1] + 3600000);
-                t0 = Math.max(t1 - opts.days * 86400000, times[0]);
+                t0 = Math.max(t1 - opts.days * 86400000, Math.min(times[0], fcMin));
                 mode = (t1 - t0) / 86400000 <= 2 ? 'day' : 'week';
             }
             else {
                 // Daily rows (a row starts at midnight), each placed at noon of its day, with whole days shown.
                 at = times.map(function (t) { return t + 43200000; });
                 t1 = Math.max(Date.now(), times[n - 1] + 86400000);
-                t0 = Math.max(t1 - opts.days * 86400000, times[0]);
+                var fcDay = fcMin === Infinity ? Infinity : new Date(new Date(fcMin).getFullYear(), new Date(fcMin).getMonth(), new Date(fcMin).getDate()).getTime();
+                t0 = Math.max(t1 - opts.days * 86400000, Math.min(times[0], fcDay));
                 var spanDays = (t1 - t0) / 86400000;
                 mode = spanDays <= 10 ? 'dates' : spanDays <= 62 ? 'month' : 'year';
             }
