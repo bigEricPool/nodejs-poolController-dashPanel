@@ -1925,6 +1925,22 @@ span.picWaterSpan {
     font-weight: normal;
     opacity: .8;
 }
+span.picWaterTabs {
+    float: right;
+    font-size: .8rem;
+    font-weight: normal;
+}
+span.picWaterTab {
+    cursor: pointer;
+    padding: 0 .4rem;
+    border-radius: .6rem;
+    opacity: .7;
+}
+span.picWaterTab.selected {
+    opacity: 1;
+    font-weight: bold;
+    text-decoration: underline;
+}
 div.picWaterRow {
     font-size: .9rem;
     display: flex;
@@ -2029,6 +2045,11 @@ svg.picWaterSvg path.picWaterLine.picWaterLineProjected {
     stroke-width: 1.2;
     stroke-dasharray: 4 3;
     opacity: .75;
+}
+svg.picWaterSvg path.picWaterBand {
+    fill: currentColor;
+    stroke: none;
+    opacity: .15;
 }
 svg.picWaterSvg path.picWaterLine.picWaterLineLevel {
     stroke-width: 1;
