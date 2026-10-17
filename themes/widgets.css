@@ -1734,6 +1734,13 @@ svg.picWaterSvg path.picWaterLine.picWaterLineProjected {
     stroke-dasharray: 4 3;
     opacity: .75;
 }
+svg.picWaterSvg ellipse.picWaterDot {
+    fill: currentColor;
+    stroke: none;
+}
+svg.picWaterSvg ellipse.picWaterDot.picWaterLineProjected {
+    opacity: .5;
+}
 svg.picWaterSvg path.picWaterBand {
     fill: currentColor;
     stroke: none;
