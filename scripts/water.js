@@ -155,8 +155,9 @@
         },
         // A line chart of the readings, placed by time, with a value scale at the left and a time scale under it. A series is `values`
         // (a line; `step` holds each value until the next, for levels) or `band` (`hi` and `lo`, filled between). A missing value, or a
-        // step between readings longer than the view allows (the body was off), breaks the line. The day view spans the readings; the
-        // longer views span the whole period, so a short record sits at the right.
+        // step between readings longer than the view allows (the body was off), breaks the line. The chart spans the readings, up to the
+        // whole period, and the time scale suits the span shown, so a record shorter than the period is not squeezed against the right edge.
+        // A reading with none next to it is drawn as a dot.
         _chart: function (parent, label, series, times, opts) {
             var self = this;
             var mode = opts.mode;
@@ -171,8 +172,15 @@
             $('<span></span>').text(label).appendTo(head);
             var t0, t1;
             if (mode === 'day') { t0 = times[0]; t1 = times[n - 1]; }
-            else { t1 = Date.now(); t0 = t1 - opts.days * 86400000; }
-            if (n < 2 || min === Infinity || !(t1 > t0)) { $('<div class="picWaterNote"></div>').text('Not enough readings yet.').appendTo(box); return box; }
+            else {
+                // Half a row of room at each end (rows are an hour, or a day), so a lone row is not at the edge.
+                var half = (mode === 'week' ? 3600000 : 86400000) / 2;
+                t1 = Math.max(Date.now(), times[n - 1] + half);
+                t0 = Math.max(t1 - opts.days * 86400000, times[0] - half);
+                var spanDays = (t1 - t0) / 86400000;
+                mode = spanDays <= 2 ? 'day' : spanDays <= 10 ? 'week' : spanDays <= 62 ? 'month' : 'year';
+            }
+            if (n < (opts.mode === 'day' ? 2 : 1) || min === Infinity || !(t1 > t0)) { $('<div class="picWaterNote"></div>').text('Not enough readings yet.').appendTo(box); return box; }
             $('<span class="picWaterChartRange"></span>').text(min.toFixed(1) + '–' + max.toFixed(1) + '°').appendTo(head);
             if (max - min < 2) { var mid = (max + min) / 2; min = mid - 1; max = mid + 1; }
             var ys = self._step(max - min, [0.5, 1, 2, 5, 10, 20], 4);
@@ -227,7 +235,19 @@
                     return;
                 }
                 var d = '', pen = false, prev;
+                var alone = function (i) {
+                    var before = i > 0 && num(s.values[i - 1]) && times[i] - times[i - 1] <= gapMs;
+                    var after = i < n - 1 && num(s.values[i + 1]) && times[i + 1] - times[i] <= gapMs;
+                    return !before && !after;
+                };
                 s.values.forEach(function (v, i) {
+                    if (num(v) && !s.step && alone(i)) {
+                        var c = document.createElementNS(ns, 'ellipse');
+                        c.setAttribute('cx', x(i).toFixed(1)); c.setAttribute('cy', y(v).toFixed(1));
+                        c.setAttribute('rx', 1.5); c.setAttribute('ry', 1.5);
+                        c.setAttribute('class', 'picWaterDot ' + (s.cls || ''));
+                        svg.appendChild(c);
+                    }
                     if (!num(v)) { pen = false; return; }
                     if (pen && i > 0 && times[i] - times[i - 1] > gapMs) pen = false;
                     // A level holds until it changes, so a step line runs flat to the change and then jumps.
