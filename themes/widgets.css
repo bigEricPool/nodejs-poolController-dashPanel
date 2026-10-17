@@ -1741,6 +1741,12 @@ svg.picWaterSvg ellipse.picWaterDot {
 svg.picWaterSvg ellipse.picWaterDot.picWaterLineProjected {
     opacity: .5;
 }
+svg.picWaterSvg line.picWaterBandBar {
+    stroke: currentColor;
+    stroke-width: 6;
+    opacity: .15;
+    vector-effect: non-scaling-stroke;
+}
 svg.picWaterSvg path.picWaterBand {
     fill: currentColor;
     stroke: none;
