@@ -3,8 +3,8 @@
     // and a chart, over the last 24 hours (Day) or, from njsPC's hourly record, the last 7 days (Week, by hour), 30 days (Month, by day) or
     // year (Year, by day).
     // The periods always end now (they are not calendar periods). The panel stays hidden when njsPC does not have that route or has no
-    // readings yet. Where AutoSwg is set up (GET /state/autoSwg/fc), the pool's chart also shows the FC tests as dots and the FC AutoSwg
-    // projected as a line, on a scale at the right.
+    // readings yet. Where AutoSwg is set up (GET /state/autoSwg/fc), a Temp | FC switch shows instead the FC tests as dots and the FC
+    // AutoSwg projected as a line; the choice is remembered in this browser.
     $.widget('pic.waterTemp', {
         options: { refreshMs: 60 * 1000, fcRefreshMs: 10 * 60 * 1000, range: 'day' },
         _ranges: [['day', 'Day', 1], ['week', 'Week', 7], ['month', 'Month', 30], ['year', 'Year', 365]],
@@ -27,11 +27,24 @@
             if (typeof data === 'undefined') { el.addClass('picWaterOff'); return; }
             var title = $('<div class="picCircuitTitle control-panel-title"></div>').appendTo(el);
             $('<span class="picCircuitTitle">Water</span>').appendTo(title);
+            try { if (window.localStorage.getItem('picWaterView') === 'fc') o.view = 'fc'; } catch (err) { /* the temperature view */ }
+            var views = $('<span class="picWaterViews"></span>').appendTo(title).hide();
+            [['temp', 'Temp'], ['fc', 'FC']].forEach(function (v) {
+                $('<span class="picWaterTab picWaterView" role="button" tabindex="0"></span>').attr('data-view', v[0]).text(v[1]).appendTo(views);
+            });
+            views.on('click keydown', 'span.picWaterView', function (evt) {
+                if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
+                evt.preventDefault();
+                o.view = $(evt.currentTarget).attr('data-view');
+                try { window.localStorage.setItem('picWaterView', o.view); } catch (err) { /* not remembered */ }
+                self._showTabs();
+                self._render();
+            });
             var tabs = $('<span class="picWaterTabs"></span>').appendTo(title);
             self._ranges.forEach(function (r) {
                 $('<span class="picWaterTab" role="button" tabindex="0"></span>').attr('data-range', r[0]).text(r[1]).appendTo(tabs);
             });
-            tabs.on('click keydown', 'span.picWaterTab', function (evt) {
+            tabs.on('click keydown', 'span.picWaterTab:not(.picWaterView)', function (evt) {
                 if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
                 evt.preventDefault();
                 o.range = $(evt.currentTarget).attr('data-range');
@@ -45,7 +58,15 @@
         },
         _showTabs: function () {
             var self = this, o = self.options, el = self.element;
-            el.find('span.picWaterTab').each(function () { $(this).toggleClass('selected', $(this).attr('data-range') === o.range).attr('aria-pressed', $(this).attr('data-range') === o.range); });
+            el.find('span.picWaterTab:not(.picWaterView)').each(function () { $(this).toggleClass('selected', $(this).attr('data-range') === o.range).attr('aria-pressed', $(this).attr('data-range') === o.range); });
+            var fc = self._fcOn();
+            el.find('span.picWaterViews').toggle(!!o.fc);
+            el.find('span.picWaterView').each(function () { var on = $(this).attr('data-view') === (fc ? 'fc' : 'temp'); $(this).toggleClass('selected', on).attr('aria-pressed', on); });
+        },
+        // The FC view is shown when it was chosen and the FC can be read.
+        _fcOn: function () {
+            var o = this.options;
+            return o.view === 'fc' && !!o.fc && (Array.isArray(o.fc.tests) || Array.isArray(o.fc.projection));
         },
         // A request that stays quiet when it fails: an njsPC without the history answers 404, and that is not an error to show.
         _load: function () {
@@ -65,8 +86,8 @@
                 var fcPath = '/state/autoSwg/fc?days=' + days;
                 o.fcRange = range; o.fcAt = Date.now();
                 $.ajax({ url: useProxy ? 'njsPC' + fcPath : $('body').attr('data-apiserviceurl') + fcPath, type: 'get', dataType: 'json' })
-                    .done(function (data) { if (range !== o.range) return; o.fc = data; if (typeof o.history !== 'undefined') self._render(); })
-                    .fail(function () { if (range !== o.range) return; o.fc = null; });
+                    .done(function (data) { if (range !== o.range) return; o.fc = data; self._showTabs(); if (typeof o.history !== 'undefined') self._render(); })
+                    .fail(function () { if (range !== o.range) return; o.fc = null; self._showTabs(); if (typeof o.history !== 'undefined') self._render(); });
             }
         },
         _fmt: function (v, unit) {
@@ -101,6 +122,7 @@
             var body = el.find('div.picWaterBody').empty();
             var days = 1;
             self._ranges.forEach(function (r) { if (r[0] === o.range) days = r[2]; });
+            if (self._fcOn()) { self._renderFc(body, days); return; }
             var anyHeld = false, anyProjected = false, anyLevels = false, anyFc = false, anyOff = false, shortest;
             var has = function (arr) { return Array.isArray(arr) && arr.some(function (v) { return typeof v === 'number'; }); };
             bodies.forEach(function (b) {
@@ -139,8 +161,6 @@
                 series.push({ values: main });
                 if (held) series.push({ values: b.l, cls: 'picWaterLineLive' });
                 var copts = isDay ? { mode: 'day' } : { mode: o.range, days: days };
-                // FC is the pool's, so it goes on the first body's chart only.
-                if (b === bodies[0] && o.fc && (Array.isArray(o.fc.tests) || Array.isArray(o.fc.projection))) copts.fc = o.fc;
                 var c = self._chart(body, (b.name || 'Body') + ' temperature (' + deg + ')', series, b.t, copts);
                 if (c && c.attr('data-fc')) anyFc = true;
             });
@@ -153,6 +173,93 @@
             if (anyOff) note += ' The grey line is the sensor while the pump is off: the water standing in the pipes, not the pool, so it is left out of the high, low and average.';
             if (anyFc) note += ' FC is on the scale at the right (ppm): the dots are the tests, and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.';
             if (!isDay && typeof shortest === 'number' && shortest < days * 24 - 0.5) note += ' njsPC has recorded ' + (shortest < 48 ? shortest.toFixed(1) + ' hours' : (shortest / 24).toFixed(1) + ' days') + ' so far.';
+            $('<div class="picWaterNote"></div>').text(note).appendTo(body);
+        },
+        // The FC view: the latest test and the high, low and average of the tests in the period, and a chart of the tests as dots and the FC
+        // AutoSwg projected as a line through each value it calculated, one line for each calculation run (in the order given: the value
+        // it gave when applied, what it expected at each test, and what it expected when the next one replaced it).
+        _renderFc: function (body, days) {
+            var self = this, o = self.options;
+            var now = Date.now(), from = now - days * 86400000;
+            var num = function (v) { return typeof v === 'number' && !isNaN(v); };
+            var inView = function (p) { return p && num(p.fc) && typeof p.t === 'number' && p.t >= from; };
+            var tests = (o.fc.tests || []).filter(inView), proj = (o.fc.projection || []).filter(inView);
+            var row = $('<div class="picWaterRow"></div>').appendTo(body);
+            $('<span class="picWaterIcon"></span>').appendTo(row).append($('<i></i>').addClass('fas fa-vial'));
+            $('<label class="picWaterLabel"></label>').text('FC').appendTo(row);
+            var last = tests[tests.length - 1];
+            $('<span class="picWaterValue"></span>').text(last ? self._fmt(last.fc, ' ppm') : '--').appendTo(row);
+            if (tests.length > 0) {
+                var hi = tests[0], lo = tests[0], sum = 0;
+                tests.forEach(function (p) { if (p.fc >= hi.fc) hi = p; if (p.fc <= lo.fc) lo = p; sum += p.fc; });
+                $('<span class="picWaterExtra"></span>').text('high ' + self._fmt(hi.fc) + ' / low ' + self._fmt(lo.fc) + ' · avg ' + self._fmt(sum / tests.length))
+                    .attr('title', tests.length + ' test' + (tests.length === 1 ? '' : 's') + ' in the period; the latest at ' + self._when(last.t) + '. High at ' + self._when(hi.t) + ', low at ' + self._when(lo.t) + '.')
+                    .appendTo(row);
+            }
+            var box = $('<div class="picWaterChart"></div>').appendTo(body);
+            var head = $('<div class="picWaterChartLabel"></div>').appendTo(box);
+            $('<span></span>').text('FC (ppm)').appendTo(head);
+            var pts = tests.concat(proj);
+            if (pts.length === 0) { $('<div class="picWaterNote"></div>').text('No FC tests in this period.').appendTo(box); return; }
+            var tMin = Infinity, tMax = -Infinity, min = Infinity, max = -Infinity;
+            pts.forEach(function (p) { if (p.t < tMin) tMin = p.t; if (p.t > tMax) tMax = p.t; if (p.fc < min) min = p.fc; if (p.fc > max) max = p.fc; });
+            $('<span class="picWaterChartRange"></span>').text(min.toFixed(1) + '–' + max.toFixed(1)).appendTo(head);
+            // The period, from its first point (with half a day of room) to now; the day view is always its 24 hours.
+            var t1 = Math.max(now, tMax), t0 = days === 1 ? from : Math.max(from, tMin - 43200000);
+            var span = (t1 - t0) / 86400000;
+            var mode = span <= 2 ? 'day' : span <= 10 ? 'week' : span <= 62 ? 'month' : 'year';
+            if (max - min < 2) { var mid = (max + min) / 2; min = Math.max(0, mid - 1); max = min + 2; }
+            var ys = self._step(max - min, [0.5, 1, 2, 5, 10], 4);
+            min = Math.floor(min / ys) * ys;
+            max = Math.ceil(max / ys) * ys;
+            var yTicks = [];
+            for (var v = min; v <= max + 1e-9; v += ys) yTicks.push(v);
+            var xTicks = self._ticks(mode, t0, t1);
+            var W = 200, H = 46, pad = 2, ns = 'http://www.w3.org/2000/svg';
+            var svg = document.createElementNS(ns, 'svg');
+            svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            svg.setAttribute('class', 'picWaterSvg');
+            svg.setAttribute('role', 'img');
+            svg.setAttribute('aria-label', 'FC (ppm)');
+            var y = function (v) { return pad + (H - 2 * pad) * (1 - (v - min) / (max - min)); };
+            var x = function (t) { return W * (t - t0) / (t1 - t0); };
+            var line = function (x1, y1, x2, y2, cls) {
+                var ln = document.createElementNS(ns, 'line');
+                ln.setAttribute('x1', x1); ln.setAttribute('x2', x2); ln.setAttribute('y1', y1); ln.setAttribute('y2', y2);
+                ln.setAttribute('class', cls);
+                svg.appendChild(ln);
+            };
+            yTicks.forEach(function (v) { line(0, y(v), W, y(v), 'picWaterGrid'); });
+            xTicks.forEach(function (tk) { line(x(tk.t), 0, x(tk.t), H, 'picWaterGrid'); });
+            var runs = {}, order = [];
+            proj.forEach(function (p) { var k = String(p.run); if (!runs[k]) { runs[k] = []; order.push(k); } runs[k].push(p); });
+            order.forEach(function (k) {
+                if (runs[k].length < 2) return;
+                var path = document.createElementNS(ns, 'path');
+                path.setAttribute('d', runs[k].map(function (p, i) { return (i === 0 ? 'M' : 'L') + x(p.t).toFixed(1) + ' ' + y(p.fc).toFixed(1); }).join(''));
+                path.setAttribute('class', 'picWaterFcLine');
+                svg.appendChild(path);
+            });
+            tests.forEach(function (p) {
+                var c = document.createElementNS(ns, 'ellipse');
+                c.setAttribute('cx', x(p.t).toFixed(1)); c.setAttribute('cy', y(p.fc).toFixed(1));
+                c.setAttribute('rx', 1.8); c.setAttribute('ry', 1.8);
+                c.setAttribute('class', 'picWaterFcDot');
+                svg.appendChild(c);
+            });
+            var plot = $('<div class="picWaterPlot"></div>').appendTo(box);
+            var ybox = $('<div class="picWaterY"></div>').appendTo(plot);
+            yTicks.forEach(function (v) { $('<span></span>').text(String(Math.round(v * 10) / 10)).css('top', (100 * y(v) / H) + '%').appendTo(ybox); });
+            var area = $('<div class="picWaterArea"></div>').appendTo(plot);
+            area[0].appendChild(svg);
+            var xbox = $('<div class="picWaterX"></div>').appendTo(area);
+            xTicks.forEach(function (tk) {
+                var frac = (tk.t - t0) / (t1 - t0);
+                if (frac < 0.04 || frac > 0.96) return;
+                $('<span></span>').text(tk.text).css('left', (100 * frac) + '%').appendTo(xbox);
+            });
+            var note = 'The dots are the FC tests (from PoolMath)' + (proj.length > 0 ? ', and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.' : '. AutoSwg\'s projected FC appears after its next calculation.');
             $('<div class="picWaterNote"></div>').text(note).appendTo(body);
         },
         // The marks of the time scale between t0 and t1 for a view: their times and labels.

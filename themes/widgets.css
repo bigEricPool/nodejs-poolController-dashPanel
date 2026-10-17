@@ -1936,6 +1936,11 @@ span.picWaterTab {
     border-radius: .6rem;
     opacity: .7;
 }
+span.picWaterViews {
+    margin-left: .5rem;
+    font-size: .8rem;
+    font-weight: normal;
+}
 span.picWaterTab.selected {
     opacity: 1;
     font-weight: bold;
