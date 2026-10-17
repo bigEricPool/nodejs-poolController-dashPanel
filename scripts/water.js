@@ -3,9 +3,10 @@
     // and a chart, over the last 24 hours (Day) or, from njsPC's hourly record, the last 7 days (Week, by hour), 30 days (Month, by day) or
     // year (Year, by day).
     // The periods always end now (they are not calendar periods). The panel stays hidden when njsPC does not have that route or has no
-    // readings yet.
+    // readings yet. Where AutoSwg is set up (GET /state/autoSwg/fc), the pool's chart also shows the FC tests as dots and the FC AutoSwg
+    // projected as a line, on a scale at the right.
     $.widget('pic.waterTemp', {
-        options: { refreshMs: 60 * 1000, range: 'day' },
+        options: { refreshMs: 60 * 1000, fcRefreshMs: 10 * 60 * 1000, range: 'day' },
         _ranges: [['day', 'Day', 1], ['week', 'Week', 7], ['month', 'Month', 30], ['year', 'Year', 365]],
         _create: function () {
             var self = this, o = self.options, el = self.element;
@@ -56,6 +57,17 @@
             $.ajax({ url: url, type: 'get', dataType: 'json' })
                 .done(function (data) { if (range !== o.range) return; o.history = data; self._render(); })
                 .fail(function () { if (typeof o.history === 'undefined') el.addClass('picWaterOff'); });
+            // The FC tests and projection change a few times a day, so they are asked for when the view changes and every ten minutes.
+            // Without AutoSwg the route answers 404 and the chart has no FC.
+            if (o.fcRange !== range || !o.fcAt || Date.now() - o.fcAt > o.fcRefreshMs) {
+                var days = 1;
+                self._ranges.forEach(function (r) { if (r[0] === range) days = r[2]; });
+                var fcPath = '/state/autoSwg/fc?days=' + days;
+                o.fcRange = range; o.fcAt = Date.now();
+                $.ajax({ url: useProxy ? 'njsPC' + fcPath : $('body').attr('data-apiserviceurl') + fcPath, type: 'get', dataType: 'json' })
+                    .done(function (data) { if (range !== o.range) return; o.fc = data; if (typeof o.history !== 'undefined') self._render(); })
+                    .fail(function () { if (range !== o.range) return; o.fc = null; });
+            }
         },
         _fmt: function (v, unit) {
             if (typeof v !== 'number' || isNaN(v)) return '--';
@@ -89,7 +101,7 @@
             var body = el.find('div.picWaterBody').empty();
             var days = 1;
             self._ranges.forEach(function (r) { if (r[0] === o.range) days = r[2]; });
-            var anyHeld = false, anyProjected = false, anyLevels = false, shortest;
+            var anyHeld = false, anyProjected = false, anyLevels = false, anyFc = false, shortest;
             var has = function (arr) { return Array.isArray(arr) && arr.some(function (v) { return typeof v === 'number'; }); };
             bodies.forEach(function (b) {
                 var row = $('<div class="picWaterRow"></div>').appendTo(body);
@@ -119,7 +131,11 @@
                 if (has(b.p)) { anyProjected = true; series.push({ values: b.p, cls: 'picWaterLineProjected' }); }
                 series.push({ values: b.v });
                 if (held) series.push({ values: b.l, cls: 'picWaterLineLive' });
-                self._chart(body, (b.name || 'Body') + ' temperature (' + deg + ')', series, b.t, isDay ? { mode: 'day' } : { mode: o.range, days: days });
+                var copts = isDay ? { mode: 'day' } : { mode: o.range, days: days };
+                // FC is the pool's, so it goes on the first body's chart only.
+                if (b === bodies[0] && o.fc && (Array.isArray(o.fc.tests) || Array.isArray(o.fc.projection))) copts.fc = o.fc;
+                var c = self._chart(body, (b.name || 'Body') + ' temperature (' + deg + ')', series, b.t, copts);
+                if (c && c.attr('data-fc')) anyFc = true;
             });
             var note;
             if (isDay) note = 'One reading a minute while the body is on.';
@@ -127,6 +143,7 @@
             if (anyHeld) note += ' The faint line is the live reading where the temperature shown is the one taken at the solar pump speed.';
             if (anyProjected) note += ' The dashed line is ' + (isDay ? 'the reading' : 'the average reading') + ' a solar check is expected to see at the solar pump speed (the live reading plus the speed offset the last check measured).';
             if (anyLevels) note += ' The dotted lines are the setpoint plus and minus the solar hysteresis: solar stops at the upper one, and starts again below the lower one after it stopped there.';
+            if (anyFc) note += ' FC is on the scale at the right (ppm): the dots are the tests, and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.';
             if (!isDay && typeof shortest === 'number' && shortest < days * 24 - 0.5) note += ' njsPC has recorded ' + (shortest < 48 ? shortest.toFixed(1) + ' hours' : (shortest / 24).toFixed(1) + ' days') + ' so far.';
             $('<div class="picWaterNote"></div>').text(note).appendTo(body);
         },
@@ -272,11 +289,48 @@
                 });
                 addPath(d, 'picWaterLine ' + (s.cls || ''));
             });
+            // FC on its own scale at the right: the projection as a line for each calculation run (in the order given: the value it gave when
+            // applied, what it expected at each test, and what it expected when the next one replaced it), and the tests as dots.
+            var fcTicks = [], yf;
+            if (opts.fc) {
+                var inView = function (p) { return p && num(p.fc) && typeof p.t === 'number' && p.t >= t0 && p.t <= t1; };
+                var tests = (opts.fc.tests || []).filter(inView), proj = (opts.fc.projection || []).filter(inView);
+                if (tests.length + proj.length > 0) {
+                    var fmin = Infinity, fmax = -Infinity;
+                    tests.concat(proj).forEach(function (p) { if (p.fc < fmin) fmin = p.fc; if (p.fc > fmax) fmax = p.fc; });
+                    if (fmax - fmin < 2) { var fmid = (fmax + fmin) / 2; fmin = Math.max(0, fmid - 1); fmax = fmin + 2; }
+                    var fs = self._step(fmax - fmin, [0.5, 1, 2, 5, 10], 4);
+                    fmin = Math.floor(fmin / fs) * fs;
+                    fmax = Math.ceil(fmax / fs) * fs;
+                    for (var fv = fmin; fv <= fmax + 1e-9; fv += fs) fcTicks.push(fv);
+                    yf = function (v) { return pad + (H - 2 * pad) * (1 - (v - fmin) / (fmax - fmin)); };
+                    var runs = {}, order = [];
+                    proj.forEach(function (p) { var k = String(p.run); if (!runs[k]) { runs[k] = []; order.push(k); } runs[k].push(p); });
+                    order.forEach(function (k) {
+                        var pts = runs[k];
+                        if (pts.length === 1) return;
+                        addPath(pts.map(function (p, i) { return (i === 0 ? 'M' : 'L') + xt(p.t).toFixed(1) + ' ' + yf(p.fc).toFixed(1); }).join(''), 'picWaterFcLine');
+                    });
+                    tests.forEach(function (p) {
+                        var c = document.createElementNS(ns, 'ellipse');
+                        c.setAttribute('cx', xt(p.t).toFixed(1)); c.setAttribute('cy', yf(p.fc).toFixed(1));
+                        c.setAttribute('rx', 1.8); c.setAttribute('ry', 1.8);
+                        c.setAttribute('class', 'picWaterFcDot');
+                        svg.appendChild(c);
+                    });
+                    box.attr('data-fc', '1');
+                    head.find('span:first').append($('<span class="picWaterFcLabel"></span>').text(' · FC (ppm)'));
+                }
+            }
             var plot = $('<div class="picWaterPlot"></div>').appendTo(box);
             var ybox = $('<div class="picWaterY"></div>').appendTo(plot);
             yTicks.forEach(function (v) { $('<span></span>').text(String(Math.round(v * 10) / 10)).css('top', (100 * y(v) / H) + '%').appendTo(ybox); });
             var area = $('<div class="picWaterArea"></div>').appendTo(plot);
             area[0].appendChild(svg);
+            if (fcTicks.length > 0) {
+                var fbox = $('<div class="picWaterY picWaterYR"></div>').appendTo(plot);
+                fcTicks.forEach(function (v) { $('<span></span>').text(String(Math.round(v * 10) / 10)).css('top', (100 * yf(v) / H) + '%').appendTo(fbox); });
+            }
             var xbox = $('<div class="picWaterX"></div>').appendTo(area);
             xTicks.forEach(function (tk) {
                 var frac = (tk.t - t0) / (t1 - t0);
