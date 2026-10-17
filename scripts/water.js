@@ -141,6 +141,12 @@
                 var day = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate());
                 for (var t = day.getTime(); t <= t1; t += stepMin * 60000) { if (t >= t0) out.push({ t: t, text: self._time(t) }); }
             }
+            else if (mode === 'dates') {
+                // Each day, marked at its noon with its date.
+                for (var dn = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate(), 12); dn.getTime() <= t1; dn = new Date(dn.getFullYear(), dn.getMonth(), dn.getDate() + 1, 12)) {
+                    if (dn.getTime() >= t0) out.push({ t: dn.getTime(), text: (dn.getMonth() + 1) + '/' + dn.getDate() });
+                }
+            }
             else if (mode === 'year') {
                 for (var m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m.getTime() <= t1; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) out.push({ t: m.getTime(), text: names[m.getMonth()] });
             }
@@ -170,15 +176,22 @@
             var box = $('<div class="picWaterChart"></div>').appendTo(parent);
             var head = $('<div class="picWaterChartLabel"></div>').appendTo(box);
             $('<span></span>').text(label).appendTo(head);
-            var t0, t1;
+            var t0, t1, at = times;
             if (mode === 'day') { t0 = times[0]; t1 = times[n - 1]; }
+            else if (mode === 'week') {
+                // Hourly rows, each placed at the middle of its hour, with the whole of the first and last hour shown.
+                at = times.map(function (t) { return t + 1800000; });
+                t1 = Math.max(Date.now(), times[n - 1] + 3600000);
+                t0 = Math.max(t1 - opts.days * 86400000, times[0]);
+                mode = (t1 - t0) / 86400000 <= 2 ? 'day' : 'week';
+            }
             else {
-                // Half a row of room at each end (rows are an hour, or a day), so a lone row is not at the edge.
-                var half = (mode === 'week' ? 3600000 : 86400000) / 2;
-                t1 = Math.max(Date.now(), times[n - 1] + half);
-                t0 = Math.max(t1 - opts.days * 86400000, times[0] - half);
+                // Daily rows (a row starts at midnight), each placed at noon of its day, with whole days shown.
+                at = times.map(function (t) { return t + 43200000; });
+                t1 = Math.max(Date.now(), times[n - 1] + 86400000);
+                t0 = Math.max(t1 - opts.days * 86400000, times[0]);
                 var spanDays = (t1 - t0) / 86400000;
-                mode = spanDays <= 2 ? 'day' : spanDays <= 10 ? 'week' : spanDays <= 62 ? 'month' : 'year';
+                mode = spanDays <= 10 ? 'dates' : spanDays <= 62 ? 'month' : 'year';
             }
             if (n < (opts.mode === 'day' ? 2 : 1) || min === Infinity || !(t1 > t0)) { $('<div class="picWaterNote"></div>').text('Not enough readings yet.').appendTo(box); return box; }
             $('<span class="picWaterChartRange"></span>').text(min.toFixed(1) + '–' + max.toFixed(1) + '°').appendTo(head);
@@ -198,7 +211,7 @@
             svg.setAttribute('aria-label', label);
             var y = function (v) { return pad + (H - 2 * pad) * (1 - (v - min) / (max - min)); };
             var xt = function (t) { return W * (t - t0) / (t1 - t0); };
-            var x = function (i) { return xt(times[i]); };
+            var x = function (i) { return xt(at[i]); };
             var line = function (x1, y1, x2, y2, cls) {
                 var ln = document.createElementNS(ns, 'line');
                 ln.setAttribute('x1', x1); ln.setAttribute('x2', x2); ln.setAttribute('y1', y1); ln.setAttribute('y2', y2);
@@ -216,9 +229,10 @@
             var num = function (v) { return typeof v === 'number' && !isNaN(v); };
             series.forEach(function (s) {
                 if (s.band) {
-                    // One filled shape for each run of readings: along the highs, then back along the lows.
+                    // One filled shape for each run of readings: along the highs, then back along the lows. A lone row is a bar from its low to its high.
                     var run = [], d = '';
                     var flush = function () {
+                        if (run.length === 1) line(x(run[0]), y(s.band.hi[run[0]]), x(run[0]), y(s.band.lo[run[0]]), 'picWaterBandBar');
                         if (run.length > 1) {
                             d += 'M' + run.map(function (i) { return x(i).toFixed(1) + ' ' + y(s.band.hi[i]).toFixed(1); }).join('L')
                                 + 'L' + run.slice().reverse().map(function (i) { return x(i).toFixed(1) + ' ' + y(s.band.lo[i]).toFixed(1); }).join('L') + 'Z';
