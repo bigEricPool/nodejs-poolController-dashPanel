@@ -151,13 +151,14 @@
                     series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s - b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true });
                 }
                 if (has(b.p)) { anyProjected = true; series.push({ values: b.p, cls: 'picWaterLineProjected' }); }
-                // Readings taken while the body was off (the sensor in the still water of the pipes) are a grey line of their own.
+                // Readings taken while the body was off (the sensor in the still water of the pipes, which follows the air more than the pool)
+                // are recorded but not drawn, so the chart has a gap while the pump is off.
                 var main = b.v, off = isDay ? null : b.ov;
                 if (isDay && has(b.o)) {
                     off = b.v.map(function (v, i) { return b.o[i] ? v : null; });
                     main = b.v.map(function (v, i) { return b.o[i] ? null : v; });
                 }
-                if (has(off)) { anyOff = true; series.push({ values: off, cls: 'picWaterLineOff' }); }
+                if (has(off)) anyOff = true;
                 series.push({ values: main });
                 if (held) series.push({ values: b.l, cls: 'picWaterLineLive' });
                 var copts = isDay ? { mode: 'day' } : { mode: o.range, days: days };
@@ -170,7 +171,7 @@
             if (anyHeld) note += ' The faint line is the live reading where the temperature shown is the one taken at the solar pump speed.';
             if (anyProjected) note += ' The dashed line is ' + (isDay ? 'the reading' : 'the average reading') + ' a solar check is expected to see at the solar pump speed (the live reading plus the speed offset the last check measured).';
             if (anyLevels) note += ' The dotted lines are the setpoint plus and minus the solar hysteresis: solar stops at the upper one, and starts again below the lower one after it stopped there.';
-            if (anyOff) note += ' The grey line is the sensor while the pump is off: the water standing in the pipes, not the pool, so it is left out of the high, low and average.';
+            if (anyOff) note += ' Nothing is drawn while the pump is off: the sensor then reads the water standing in the pipes, not the pool.';
             if (anyFc) note += ' FC is on the scale at the right (ppm): the dots are the tests, and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.';
             if (!isDay && typeof shortest === 'number' && shortest < days * 24 - 0.5) note += ' njsPC has recorded ' + (shortest < 48 ? shortest.toFixed(1) + ' hours' : (shortest / 24).toFixed(1) + ' days') + ' so far.';
             $('<div class="picWaterNote"></div>').text(note).appendTo(body);
