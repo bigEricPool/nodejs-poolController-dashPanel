@@ -59,7 +59,7 @@
             var units = $('div.picBodies:first').attr('data-unitsname') || '';
             var deg = '°' + units;
             var body = el.find('div.picWaterBody').empty();
-            var anyHeld = false;
+            var anyHeld = false, anyProjected = false, anyLevels = false;
             bodies.forEach(function (b) {
                 var row = $('<div class="picWaterRow"></div>').appendTo(body);
                 $('<span class="picWaterIcon"></span>').appendTo(row).append($('<i></i>').addClass('fas fa-thermometer-half'));
@@ -70,14 +70,26 @@
                 var tip = (typeof b.avgTempHours === 'number' && b.avgTempHours < 24 ? 'The last ' + b.avgTempHours.toFixed(1) + ' hours (njsPC has recorded this long so far)' : 'The last 24 hours')
                     + (b.maxTemp24hAt ? '. High at ' + self._time(b.maxTemp24hAt) : '') + (b.minTemp24hAt ? ', low at ' + self._time(b.minTemp24hAt) : '') + '.';
                 $('<span class="picWaterExtra"></span>').text(extra).attr('title', tip).appendTo(row);
-                var held = b.l.some(function (v) { return typeof v === 'number'; });
+                var has = function (arr) { return Array.isArray(arr) && arr.some(function (v) { return typeof v === 'number'; }); };
+                var held = has(b.l);
                 if (held) anyHeld = true;
-                var series = [{ values: b.v }];
+                var series = [];
+                // The solar levels, from the setpoint of each minute, so they step where the setpoint was changed: solar stops at the upper one
+                // (and a check begins only with the projected reading below it), and after stopping there starts again below the lower one.
+                if (typeof b.hysteresis === 'number' && has(b.s)) {
+                    anyLevels = true;
+                    series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s + b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true });
+                    series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s - b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true });
+                }
+                if (has(b.p)) { anyProjected = true; series.push({ values: b.p, cls: 'picWaterLineProjected' }); }
+                series.push({ values: b.v });
                 if (held) series.push({ values: b.l, cls: 'picWaterLineLive' });
                 self._chart(body, (b.name || 'Body') + ' temperature (' + deg + ')', series, b.t);
             });
             var note = 'One reading a minute while the body is on.';
             if (anyHeld) note += ' The faint line is the live reading where the temperature shown is the one taken at the solar pump speed.';
+            if (anyProjected) note += ' The dashed line is the reading a solar check is expected to see at the solar pump speed (the live reading plus the speed offset the last check measured).';
+            if (anyLevels) note += ' The dotted lines are the setpoint plus and minus the solar hysteresis: solar stops at the upper one, and starts again below the lower one after it stopped there.';
             $('<div class="picWaterNote"></div>').text(note).appendTo(body);
         },
         // A line chart of the readings, placed by time, with a value scale at the left and a time scale under it. A missing value, or a
@@ -122,12 +134,15 @@
             yTicks.forEach(function (v) { line(0, y(v), W, y(v), 'picWaterGrid'); });
             xTicks.forEach(function (t) { var xx = W * (t - t0) / (t1 - t0); line(xx, 0, xx, H, 'picWaterGrid'); });
             series.forEach(function (s) {
-                var d = '', pen = false;
+                var d = '', pen = false, prev;
                 s.values.forEach(function (v, i) {
                     if (typeof v !== 'number' || isNaN(v)) { pen = false; return; }
                     if (pen && i > 0 && times[i] - times[i - 1] > gapMs) pen = false;
+                    // A level holds until it changes, so a step line runs flat to the change and then jumps.
+                    if (pen && s.step && v !== prev) d += 'L' + x(i).toFixed(1) + ' ' + y(prev).toFixed(1);
                     d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1);
                     pen = true;
+                    prev = v;
                 });
                 var p = document.createElementNS(ns, 'path');
                 p.setAttribute('d', d);

@@ -1713,6 +1713,16 @@ svg.picWaterSvg path.picWaterLine.picWaterLineLive {
     stroke-width: 1;
     opacity: .4;
 }
+svg.picWaterSvg path.picWaterLine.picWaterLineProjected {
+    stroke-width: 1.2;
+    stroke-dasharray: 4 3;
+    opacity: .75;
+}
+svg.picWaterSvg path.picWaterLine.picWaterLineLevel {
+    stroke-width: 1;
+    stroke-dasharray: 1 3;
+    opacity: .6;
+}
 div.picWaterNote {
     font-size: .75rem;
     font-style: italic;
