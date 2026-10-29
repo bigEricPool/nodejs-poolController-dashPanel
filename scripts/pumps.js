@@ -210,6 +210,14 @@
                         el.hide();
                         break;
                 }
+                // While njsPC primes the pump (its status says so), a note under the speed says so.
+                el.find('div.picPumpPriming').remove();
+                if (typeof data.status !== 'undefined' && data.status !== null && data.status.name === 'priming') {
+                    var primingCell = el.find('div.picRelay').filter(function () { return $(this).css('display') !== 'none'; }).first();
+                    if (primingCell.length === 0) primingCell = el.find('label.picPumpName').first();
+                    $('<div class="picPumpPriming"></div>').text('Priming').css({ fontStyle: 'italic', fontSize: '.8em' })
+                        .attr('title', 'The pump is running at its priming speed. Priming follows a schedule start, or a stop caused by a restart of njsPC or the relay manager.').appendTo(primingCell);
+                }
                 // Bind up any associated circuit speeds.
                 if (typeof data.circuits !== 'undefined') {
                     el.parent().find('div.picPopover.picPumpSettings[data-id=' + el.attr('data-id') + ']').each(function () {
