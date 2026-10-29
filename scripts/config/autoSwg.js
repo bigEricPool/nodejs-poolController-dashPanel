@@ -89,18 +89,6 @@
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Boost Over', binding: 'bandBoostPeriods', min: 0.5, max: 5, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only, so 1 is about a day) a boost takes to bring FC back to the middle of the range. 1 is a firm push; a larger number is gentler and longer. A boost only happens when FC is projected below FC Low.');
 
-            // These steer Away protection's glide to the vacation target (normal operation keeps FC inside the range). Which window applies depends on which side of the
-            // vacation target the projected FC is on -- the above one is listed first. Same label width so the two spinners line up.
-            var daysLabel = { style: { width: '27rem' } };   // wide enough for 'Away: Run Periods (days) to Target (FC above target)'
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Away: Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
-                .attr('title', 'Used by Away protection only (normal operation keeps FC inside the range). How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to the vacation target when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Away: Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
-                .attr('title', 'Used by Away protection only (normal operation keeps FC inside the range; see Boost Over). How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to the vacation target when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Away: Keep FC at the target through the night', binding: 'protectOvernightLow' })
-                .attr('title', 'Used by Away protection only. FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Aim Above Target as the Last Test Ages', binding: 'overshootPpmPerDay', min: 0, max: 0.5, step: 0.05, units: 'ppm per day (0 = aim at the target)', inputAttrs: { style: { width: '3.5rem' } } })
                 .attr('title', 'Used when boosting (it raises the aim above the middle of the range) and by Away protection. The older your last FC test, the less certain the projected FC is, and FC a little high is the safer miss than a little low. The SWG % that reaches the target is worked out for the target plus this many ppm for each day since the last test (at most 1 ppm). It does not change the maintenance %, the target date or the projection.');
@@ -119,12 +107,6 @@
             cbAutoApply.on('change', function (e) {
                 self._updateAutoApplyFields(cbAutoApply.find('input[type=checkbox]').is(':checked'));
             });
-
-            // Only used by Refresh and Apply and the periodic check, i.e. only while Auto-Apply is on.
-            line = $('<div></div>').appendTo(pnl);
-            self._elNewTargetRow = line;
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Away: New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', 'Used by Away protection only. If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoCheckRow = line;
@@ -173,6 +155,22 @@
             self._awayTipBase = self._cbAway.attr('title');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Storm or outage adds at most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How many points a storm (a sharp fall in the salt reading) or an outage may add to the SWG % your plan would have used without it. It does not limit the glide up to the vacation target you set. The SWG % never goes below the maintenance %.');
+            // These steer Away protection's glide to the vacation target (normal operation keeps FC inside the range, so they have no effect outside Away). Which window applies depends on which side of the
+            // vacation target the projected FC is on -- the above one is listed first. Same label width so the two spinners line up.
+            var daysLabel = { style: { width: '22rem' } };   // wide enough for 'Run Periods (days) to Target (FC above target)' (about 21 rem)
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to the vacation target when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to the vacation target when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep FC at the target through the night', binding: 'protectOvernightLow' })
+                .attr('title', 'FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'If the projected FC is MORE than this many ppm above or below the Vacation Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
+
             self._elAwayStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '.2rem 0' }).hide();
 
             // ---- Tuning options: model settings that rarely change once tuned (the Projection Accuracy and
@@ -494,7 +492,7 @@
                 self._cbAway.attr('title', lead + ' ' + self._awayTipBase);
             }
             var paused = status === 'active';
-            [self._elAutoApplyRow, self._elNewTargetRow, self._elAutoCheckRow, self._elAutoTune].forEach(function (el) {
+            [self._elAutoApplyRow, self._elAutoCheckRow, self._elAutoTune].forEach(function (el) {
                 if (el) el.css({ opacity: paused ? 0.45 : '', pointerEvents: paused ? 'none' : '' }).attr('title', paused ? 'Paused while Away protection is on.' : null);
             });
         },
@@ -660,7 +658,6 @@
             var available = self._automation !== false;
             autoApplyEnabled = available && !!autoApplyEnabled;
             if (self._elAutoApplyRow) self._elAutoApplyRow.toggle(available);
-            if (self._elNewTargetRow) self._elNewTargetRow.toggle(!!autoApplyEnabled);
             if (self._elAutoCheckRow) self._elAutoCheckRow.toggle(!!autoApplyEnabled);
             var autoCheckChecked = !!(self._cbAutoCheck && self._cbAutoCheck.find('input[type=checkbox]').is(':checked'));
             self._updateAutoCheckHoursField(autoApplyEnabled && autoCheckChecked);
