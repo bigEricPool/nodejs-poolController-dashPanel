@@ -76,46 +76,34 @@
             self._elSwgCapacity = $('<div></div>').appendTo(line).css({ fontSize: '.85em', color: '#666', margin: '.1rem 0 .3rem 0' }).hide();
             pnl.on('change keyup mouseup click', function () { setTimeout(function () { self._applySwgWindow(); }, 60); });
 
-            // How the SWG % is steered: keep FC inside a range (the default) or steer to one Target FC. Away protection always steers to its own Vacation Target FC.
-            line = $('<div></div>').appendTo(pnl);
-            self._ctlPick = $('<div></div>').appendTo(line).pickList({
-                required: true, bindColumn: 0, displayColumn: 1, labelText: 'FC Control', binding: 'controlMode',
-                columns: [{ binding: 'val', hidden: true, text: 'Id' }, { binding: 'desc', text: 'FC Control' }],
-                items: [{ val: 'band', desc: 'Keep FC inside a range' }, { val: 'target', desc: 'Steer to one Target FC' }], inputAttrs: { style: { width: '14rem' } }
-            }).attr('title', 'Keep FC inside a range: while the projected FC is between FC Low and FC High the SWG runs the maintenance %, nudged a little toward the middle; below the range it is raised to bring FC back to the middle; above the range it is held at 0% until FC has come down. The SWG % changes far less than when steering to one target. Steer to one Target FC: each check works out the % that reaches the Target FC by a deadline (the Run Periods settings below). Away protection always steers to its own Vacation Target FC.');
-            el.on('selchanged', 'div.picPickList[data-bind=controlMode]', function (evt) {
-                self._updateControlRows(evt.newItem && evt.newItem.val);
-            });
+            // Range control: keep FC inside a range. Away protection steers to its own Vacation Target FC (below).
             line = $('<div></div>').appendTo(pnl);
             self._elBandRow = line;
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC Low', binding: 'fcLow', min: 0, max: 28, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', 'The bottom of the range. When the projected FC (less an allowance that grows with the age of your last test) is below this, the SWG is raised to bring FC back to the middle of the range.');
+                .attr('title', 'The bottom of the range. When the projected FC (less an allowance that grows with the age of your last test) is below this, the SWG is raised to bring FC back to the middle of the range. While FC is inside the range the SWG runs the maintenance %, nudged a little toward the middle.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'FC High', binding: 'fcHigh', min: 2, max: 30, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'The top of the range. When the projected FC is above this the SWG is held at 0% until it is half a ppm below it (not for more than 2 days after your last test). Must be at least 2 ppm above FC Low: the projection is usually off by about 1.5 ppm, so a narrower range cannot be kept reliably.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Raise for an Old Test', binding: 'bandBiasPerDay', min: 0, max: 0.3, step: 0.05, units: 'per day beyond 2 days', inputAttrs: { style: { width: '3.5rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'When your last FC test is more than 2 days old the projection is less certain, so the SWG runs this much above the maintenance % for each further day (at most 40% above). 0 = no raise.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Boost Over', binding: 'bandBoostPeriods', min: 0.5, max: 5, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only, so 1 is about a day) a boost takes to bring FC back to the middle of the range. 1 is a firm push; a larger number is gentler and longer. A boost only happens when FC is projected below FC Low.');
 
+            // These steer Away protection's glide to the vacation target (normal operation keeps FC inside the range). Which window applies depends on which side of the
+            // vacation target the projected FC is on -- the above one is listed first. Same label width so the two spinners line up.
+            var daysLabel = { style: { width: '27rem' } };   // wide enough for 'Away: Run Periods (days) to Target (FC above target)'
             line = $('<div></div>').appendTo(pnl);
-            self._elTargetFcRow = line;
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Target FC', binding: 'targetFc', min: 0, max: 20, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'Used when FC Control is set to steer to one Target FC. In range control the target is the middle of the range, and Away protection has its own Vacation Target FC.');
-
-            // Which window applies depends on which side of Target FC the projected FC is on
-            // when a calculation runs -- the above-target one is listed first, above the
-            // below-target one. Same label width so the two spinners line up.
-            var daysLabel = { style: { width: '22rem' } };   // wide enough for 'Run Periods (days) to Target (FC above target)' (about 21 rem)
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Away: Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'Used by Away protection only (normal operation keeps FC inside the range). How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to the vacation target when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
-                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to Target FC when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Away: Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
+                .attr('title', 'Used by Away protection only (normal operation keeps FC inside the range; see Boost Over). How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to the vacation target when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
-                .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to Target FC when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep FC at the target through the night', binding: 'protectOvernightLow' })
-                .attr('title', 'FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Away: Keep FC at the target through the night', binding: 'protectOvernightLow' })
+                .attr('title', 'Used by Away protection only. FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Aim Above Target as the Last Test Ages', binding: 'overshootPpmPerDay', min: 0, max: 0.5, step: 0.05, units: 'ppm per day (0 = aim at the target)', inputAttrs: { style: { width: '3.5rem' } } })
-                .attr('title', 'The older your last FC test, the less certain the projected FC is, and FC a little high is the safer miss than a little low. The SWG % that reaches the target is worked out for the target plus this many ppm for each day since the last test (at most 1 ppm). It does not change the maintenance %, the target date or the projection.');
+                .attr('title', 'Used when boosting (it raises the aim above the middle of the range) and by Away protection. The older your last FC test, the less certain the projected FC is, and FC a little high is the safer miss than a little low. The SWG % that reaches the target is worked out for the target plus this many ppm for each day since the last test (at most 1 ppm). It does not change the maintenance %, the target date or the projection.');
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
@@ -135,8 +123,8 @@
             // Only used by Refresh and Apply and the periodic check, i.e. only while Auto-Apply is on.
             line = $('<div></div>').appendTo(pnl);
             self._elNewTargetRow = line;
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', 'Used by Refresh and Apply (and the periodic check). If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Away: New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'Used by Away protection only. If the projected FC is MORE than this many ppm above or below Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoCheckRow = line;
@@ -765,14 +753,6 @@
         dataBind: function (obj) {
             var self = this;
             dataBinder.bind(self._pnl, obj);
-            self._updateControlRows(obj && obj.controlMode);
-        },
-        // The range rows show for 'band' (also when the mode is not known yet), the single Target FC row for 'target'.
-        _updateControlRows: function (mode) {
-            var self = this;
-            var band = mode !== 'target';
-            if (self._elBandRow) self._elBandRow.toggle(band);
-            if (self._elTargetFcRow) self._elTargetFcRow.toggle(!band);
         },
         _checkNow: function () {
             var self = this;
@@ -1016,7 +996,7 @@
         // What kind of row a combined-history entry is, and its main value as shown in the dialog.
         // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
         _settingsChangeText: function (e) {
-            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
             var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
             return (e.changes || []).map(function (c) {
                 var name = labels[c.setting] || c.setting;
