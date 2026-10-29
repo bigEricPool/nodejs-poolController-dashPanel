@@ -23,7 +23,7 @@
             var acc = $('<div></div>').appendTo(el).accordian({
                 columns: [{ binding: 'title', glyph: 'fas fa-tint', style: { width: '20rem' } }]
             });
-            acc[0].columns()[0].elText().text('AutoSwg % (PoolMath)');
+            acc[0].columns()[0].elText().text('SWG Assist % (PoolMath)');
             var pnl = acc.find('div.picAccordian-contents');
             self._pnl = pnl;
 
@@ -98,13 +98,13 @@
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
-                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Run Periods to Target", above or below target as it applied to that calculation -- has passed. This is the only change AutoSwg makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Run Periods to Target", above or below target as it applied to that calculation -- has passed. This is the only change SWG Assist makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
 
             line = $('<div></div>').appendTo(pnl);
             self._elAutoApplyRow = line;       // hidden until the server says the automation is available (see _updateAutoApplyFields)
             var cbAutoApply = $('<div></div>').appendTo(line).checkbox({ labelText: 'Auto-Apply Recommendations', binding: 'autoApplyEnabled' })
-                .attr('title', 'Applies a recommendation with NO manual review whenever one is produced -- from the Refresh and Apply button (which replaces Check Now and Refresh while this is saved as on), or (if also enabled below) the periodic automatic check. Every other AutoSwg action requires you to look at a number before it reaches the chlorinator -- this one does not.');
+                .attr('title', 'Applies a recommendation with NO manual review whenever one is produced -- from the Refresh and Apply button (which replaces Check Now and Refresh while this is saved as on), or (if also enabled below) the periodic automatic check. Every other SWG Assist action requires you to look at a number before it reaches the chlorinator -- this one does not.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Warning Threshold', binding: 'autoApplyWarnThresholdPct', min: 1, max: 100, step: 1, units: 'pts', labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'If an automatic check moves the SWG % by at least this many percentage points, it\'s flagged prominently on the dashboard, since nobody reviewed it before it took effect. A check you start yourself with a button (Check Now, Refresh, Refresh and Apply) is your own action and never raises the warning.');
             cbAutoApply.on('change', function (e) {
@@ -148,7 +148,7 @@
             self._elAutoCheckStart = $('<div></div>').appendTo(line).inputField({ labelText: 'Starting At', binding: 'autoCheckStartTime', inputAttrs: { maxlength: 8, placeholder: 'any time', style: { width: '4.5rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', "Optional time of day (e.g. '06:00' or '6am', in the Time Zone above) to pin the automatic checks to. Checks then run every \"Check Every\" hours counting from that time, and start over at it each day -- e.g. 06:00 every 12 hours checks at 6am and 6pm -- so restarts and settings saves don't shift them. Leave blank to count the interval from when njsPC starts, settings are saved, or the last check finishes. Only applies to intervals under 24 hours.");
 
-            // Vacation: Away protection. While it is on, AutoSwg checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
+            // Vacation: Away protection. While it is on, SWG Assist checks PoolMath every 12 hours and may raise the SWG % to make up for dilution (a fall in
             // the chlorinator's salt reading) or an outage (njsPC not running), never below the maintenance % and never more than the limit above it. It
             // needs the return to the maintenance %, so each boost ends by itself. Available in every mode. It pauses Auto-Apply, the automatic check and
             // auto tune (their settings are kept, shown grayed out) and ends when it is unchecked and saved, or by itself when a new FC reading is logged.
@@ -160,7 +160,7 @@
                 .attr('title', 'The FC to aim for while Away protection is on (higher than your normal Target FC, so FC is a little high when you are back). Your normal Target FC above is not changed and applies again when Away protection ends.');
             line = $('<div></div>').appendTo(pnl);
             self._cbAway = $('<div></div>').appendTo(line).checkbox({ labelText: 'Away protection: keep FC safe while I am away', binding: 'awayEnabled' })
-                .attr('title', 'Set the Vacation Target FC, check this and save the settings to start. AutoSwg then checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: it applies the glide up to the Vacation Target FC you set (not limited), it never goes below the maintenance %, a storm or outage adds at most the points at right to that, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). While it is on, Auto-Apply, the automatic check and auto tune are paused (their settings are kept, shown grayed out). At each check it also looks in PoolMath for a new FC reading: when one has been logged since you turned this on, Away protection turns itself off, this box clears, and Auto-Apply, the automatic check and auto tune go back to the settings you had, working from the new reading. Your normal Target FC is never changed: the plan uses it again as soon as Away protection ends. It also ends when you uncheck it and save. Log your last test before you turn it on, since a test logged afterward ends it.');
+                .attr('title', 'Set the Vacation Target FC, check this and save the settings to start. SWG Assist then checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: it applies the glide up to the Vacation Target FC you set (not limited), it never goes below the maintenance %, a storm or outage adds at most the points at right to that, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). While it is on, Auto-Apply, the automatic check and auto tune are paused (their settings are kept, shown grayed out). At each check it also looks in PoolMath for a new FC reading: when one has been logged since you turned this on, Away protection turns itself off, this box clears, and Auto-Apply, the automatic check and auto tune go back to the settings you had, working from the new reading. Your normal Target FC is never changed: the plan uses it again as soon as Away protection ends. It also ends when you uncheck it and save. Log your last test before you turn it on, since a test logged afterward ends it.');
             self._awayTipBase = self._cbAway.attr('title');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Storm or outage adds at most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How many points a storm (a sharp fall in the salt reading) or an outage may add to the SWG % your plan would have used without it. It does not limit the glide up to the vacation target you set. The SWG % never goes below the maintenance %.');
@@ -262,7 +262,7 @@
                 if (btnSave.hasClass('disabled')) return;
                 if (dataBinder.checkRequired(pnl, true)) {
                     var v = dataBinder.fromElement(pnl);
-                    $.putApiService('/config/autoSwg', v, 'Saving AutoSwg Settings...', function (c) {
+                    $.putApiService('/config/autoSwg', v, 'Saving SWG Assist Settings...', function (c) {
                         self.dataBind(c);
                         self._updateTuningBadge();
                         self._updateActionButtons(c && c.autoApplyEnabled && c.awayStatus !== 'active');
@@ -1068,7 +1068,7 @@
                     { text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showWhatIf(); } },
                     { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
                 ];
-                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgTune', { width: '640px', height: 'auto', title: 'Tune AutoSwg', buttons: buttons });
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgTune', { width: '640px', height: 'auto', title: 'Tune SWG Assist', buttons: buttons });
                 var wrap = $('<div></div>').css({ maxHeight: '30rem', overflowY: 'auto', padding: '.25rem .5rem', fontSize: '.9em', lineHeight: '1.35' }).appendTo(dlg);
                 var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
                 var n2 = function (v, d) { return typeof v === 'number' ? v.toFixed(d) : '--'; };
@@ -1163,7 +1163,7 @@
         // A short guide to tuning: what the two reports are for, the order to use them in, and how to check the result.
         _showTuningHelp: function () {
             var self = this;
-            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgTuningHelp', { width: '640px', height: 'auto', title: 'How to Tune AutoSwg',
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgTuningHelp', { width: '640px', height: 'auto', title: 'How to Tune SWG Assist',
                 buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
             var wrap = $('<div></div>').css({ maxHeight: '30rem', overflowY: 'auto', padding: '.25rem .5rem', fontSize: '.9em', lineHeight: '1.35' }).appendTo(dlg);
             var para = function (text, style) { return $('<div></div>').css($.extend({ padding: '.2rem 0' }, style || {})).text(text).appendTo(wrap); };
@@ -1172,7 +1172,7 @@
                 var ul = $('<ul></ul>').css({ margin: '.1rem 0 .3rem 0', paddingLeft: '1.2rem' }).appendTo(wrap);
                 items.forEach(function (t) { $('<li></li>').appendTo(ul).text(t); });
             };
-            para('AutoSwg works from your PoolMath log. For it to work at all, log your FC tests and every change to the SWG % in the PoolMath app, and turn on sharing for the pool (enter its share code in Settings). More frequent FC tests and promptly logged SWG changes give better results.');
+            para('SWG Assist works from your PoolMath log. For it to work at all, log your FC tests and every change to the SWG % in the PoolMath app, and turn on sharing for the pool (enter its share code in Settings). More frequent FC tests and promptly logged SWG changes give better results.');
             var stages = ['First, run in manual mode for a while: use Check Now, read each recommendation and apply it yourself.'];
             if (self._automation !== false) {
                 stages.push('Then turn on Auto-Apply Recommendations for a while and tune with your real history (the Tune button below). Auto-Apply changes the SWG % with no review, so watch the dashboard warnings.');
@@ -1414,7 +1414,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
-                    + 'Changes to the AutoSwg settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
+                    + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
                     + 'The local SWG % log is kept for 18 months.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);

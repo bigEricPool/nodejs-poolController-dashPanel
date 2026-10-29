@@ -67,7 +67,7 @@
             el[0].setChemControllerData = function (data) { self.setChemControllerData(data); };
             el[0].setChemDoserData = function (data) { self.setChemDoserData(data); };
             el[0].setAutoSwgData = function (data) { self.setAutoSwgData(data); };
-            // The countdown in the AutoSwg summary is worked out when it is drawn, so draw it again once a minute (the page only gets a new update when something changes).
+            // The countdown in the SWG Assist summary is worked out when it is drawn, so draw it again once a minute (the page only gets a new update when something changes).
             self._autoSwgTick = setInterval(function () {
                 if (el.closest('body').length === 0) { clearInterval(self._autoSwgTick); self._autoSwgTick = undefined; return; }
                 if (self._lastAutoSwgData) self._renderAutoSwgSummary(self._lastAutoSwgData);
@@ -144,7 +144,7 @@
             }
         },
         // Live updates arrive over the 'autoSwg' socket event (emitted whenever
-        // njsPC's AutoSwg state changes -- e.g. after Check Now or Apply on the
+        // njsPC's SWG Assist state changes -- e.g. after Check Now or Apply on the
         // config panel). A full page (re)load gets the last known values instead
         // via _initChemistry's /state/all payload above.
         setAutoSwgData: function (data) {
@@ -389,7 +389,7 @@
             }
         },
         // Opens Settings (if not already open), switches to the Chemistry tab,
-        // and expands/scrolls to the AutoSwg panel's "Check Now" section. The
+        // and expands/scrolls to the SWG Assist panel's "Check Now" section. The
         // config page loads its tabs asynchronously (from /config/all) and each
         // tab's contents are built the first time it's selected, so this polls
         // briefly for each step to appear rather than assuming exact timing.
@@ -513,7 +513,7 @@
             $.putApiService('config/chlorinator', { id: parseInt(el.attr('data-id'), 10), superChlorHours: o.superChlorHoursTarget, poolSetpoint: o.poolSetpointTarget, spaSetpoint: o.spaSetpointTarget }, function () { });
         },
         // Debounces a Pool/Spa Setpoint edit same as before, but routes it through
-        // _confirmManualSwgChange rather than straight to putChlorValues, so a pending AutoSwg
+        // _confirmManualSwgChange rather than straight to putChlorValues, so a pending SWG Assist
         // step gets a chance to warn before it's cancelled out from under the user.
         _scheduleChlorValuesSave: function (data) {
             var self = this, o = self.options;
@@ -523,7 +523,7 @@
             }
             o.putChlorValuesTimer = setTimeout(function () { self._confirmManualSwgChange(data); }, 1500);
         },
-        // A manual Pool/Spa Setpoint change cancels any pending AutoSwg step (see
+        // A manual Pool/Spa Setpoint change cancels any pending SWG Assist step (see
         // ChlorinatorState.onPoolSetpointChanged in njsPC) -- warn before actually submitting so
         // the user isn't surprised the pending step just disappeared, and let them back out.
         // `data` is the chlorinator state fetched when this popover opened, used to revert the
@@ -533,8 +533,8 @@
             $.getApiService('/state/autoSwg', null, function (result) {
                 if (result && result.stepAt) {
                     $.pic.modalDialog.createConfirm('dlgConfirmManualSwgOverride', {
-                        message: 'AutoSwg has a pending step (' + describeAutoSwgStep(result, true) + '). Changing the SWG % now will cancel it. Continue?',
-                        width: '420px', height: 'auto', title: 'Cancel Pending AutoSwg Step?',
+                        message: 'SWG Assist has a pending step (' + describeAutoSwgStep(result, true) + '). Changing the SWG % now will cancel it. Continue?',
+                        width: '420px', height: 'auto', title: 'Cancel Pending SWG Assist Step?',
                         buttons: [
                             {
                                 text: 'Continue', icon: '<i class="fas fa-check"></i>',

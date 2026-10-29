@@ -289,7 +289,7 @@
                 }
             });
 
-            // AutoSwg: companion panel that recommends (and, on confirmation, applies)
+            // SWG Assist: companion panel that recommends (and, on confirmation, applies)
             // a SWG% from PoolMath logs. Independent of the Chlorinator/ChemController/
             // ChemDoser panels above -- it does not replace or disable any of them.
             $('<div></div>').appendTo(el).pnlAutoSwgConfig({});
@@ -1133,7 +1133,7 @@
             });
         },
         // If the Pool/Spa Setpoint being saved differs from what's currently in effect, and
-        // AutoSwg has a pending step queued, saving cancels it (see
+        // SWG Assist has a pending step queued, saving cancels it (see
         // ChlorinatorState.onPoolSetpointChanged in njsPC) -- warn before actually submitting,
         // mirroring the same guard on the dashboard's quick-setpoint popover.
         _confirmAndSaveChlorinator: function (v) {
@@ -1145,10 +1145,10 @@
             $.getApiService('/state/autoSwg', null, function (result) {
                 if (result && result.stepAt) {
                     $.pic.modalDialog.createConfirm('dlgConfirmManualSwgOverrideCfg', {
-                        message: 'AutoSwg has a pending step to change the SWG % to ' + result.stepPct + '% on '
+                        message: 'SWG Assist has a pending step to change the SWG % to ' + result.stepPct + '% on '
                             + new Date(result.stepAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
                             + '. Changing the SWG % now will cancel it. Continue?',
-                        width: '420px', height: 'auto', title: 'Cancel Pending AutoSwg Step?',
+                        width: '420px', height: 'auto', title: 'Cancel Pending SWG Assist Step?',
                         buttons: [
                             { text: 'Continue', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._saveChlorinator(v); } },
                             { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
