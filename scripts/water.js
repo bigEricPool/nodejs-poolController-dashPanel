@@ -3,8 +3,9 @@
     // and a chart, over the last 24 hours (Day) or, from njsPC's hourly record, the last 7 days (Week, by hour), 30 days (Month, by day) or
     // year (Year, by day).
     // The periods always end now (they are not calendar periods). The panel stays hidden when njsPC does not have that route or has no
-    // readings yet. Where AutoSwg is set up (GET /state/autoSwg/fc), a Temp | FC switch shows instead the FC tests as dots and the FC
-    // AutoSwg projected as a line; the choice is remembered in this browser.
+    // readings yet. Where AutoSwg is set up (GET /state/autoSwg/fc), a Temp | FC switch shows instead the FC tests as dots, the FC
+    // AutoSwg projected as a line and, where the route sends them, the FC range or target in force at each time; the choice is
+    // remembered in this browser.
     $.widget('pic.waterTemp', {
         options: { refreshMs: 60 * 1000, fcRefreshMs: 10 * 60 * 1000, range: 'day' },
         _ranges: [['day', 'Day', 1], ['week', 'Week', 7], ['month', 'Month', 30], ['year', 'Year', 365]],
@@ -207,6 +208,16 @@
             $('<span class="picWaterChartRange"></span>').text(min.toFixed(1) + '–' + max.toFixed(1)).appendTo(head);
             // The period, from its first point (with half a day of room) to now; the day view is always its 24 hours.
             var t1 = Math.max(now, tMax), t0 = days === 1 ? from : Math.max(from, tMin - 43200000);
+            // The FC range (low and high) or single target in force over the period: each step holds from its time until the next one's.
+            // The scale is widened to take them in.
+            var steps = [], allSteps = (o.fc.steps || []).filter(function (s) { return s && typeof s.t === 'number'; });
+            allSteps.forEach(function (s, i) {
+                var a = Math.max(s.t, t0), b = i + 1 < allSteps.length ? Math.min(allSteps[i + 1].t, t1) : t1;
+                if (b <= a) return;
+                if (num(s.low) && num(s.high)) steps.push({ a: a, b: b, low: Math.min(s.low, s.high), high: Math.max(s.low, s.high) });
+                else if (num(s.target)) steps.push({ a: a, b: b, low: s.target, high: s.target });
+            });
+            steps.forEach(function (s) { if (s.low < min) min = s.low; if (s.high > max) max = s.high; });
             var span = (t1 - t0) / 86400000;
             var mode = span <= 2 ? 'day' : span <= 10 ? 'week' : span <= 62 ? 'month' : 'year';
             if (max - min < 2) { var mid = (max + min) / 2; min = Math.max(0, mid - 1); max = min + 2; }
@@ -233,6 +244,23 @@
             };
             yTicks.forEach(function (v) { line(0, y(v), W, y(v), 'picWaterGrid'); });
             xTicks.forEach(function (tk) { line(x(tk.t), 0, x(tk.t), H, 'picWaterGrid'); });
+            // The range as a shaded band with dotted edges, a single target as one dotted line; the edges step where a setting changed.
+            if (steps.length > 0) {
+                var band = '', edges = '';
+                steps.forEach(function (s) {
+                    var xa = x(s.a).toFixed(1), xb = x(s.b).toFixed(1), yl = y(s.low).toFixed(1), yh = y(s.high).toFixed(1);
+                    if (s.high > s.low) band += 'M' + xa + ' ' + yh + 'L' + xb + ' ' + yh + 'L' + xb + ' ' + yl + 'L' + xa + ' ' + yl + 'Z';
+                    edges += 'M' + xa + ' ' + yh + 'L' + xb + ' ' + yh;
+                    if (s.high > s.low) edges += 'M' + xa + ' ' + yl + 'L' + xb + ' ' + yl;
+                });
+                [[band, 'picWaterFcBand'], [edges, 'picWaterFcEdge']].forEach(function (d) {
+                    if (!d[0]) return;
+                    var path = document.createElementNS(ns, 'path');
+                    path.setAttribute('d', d[0]);
+                    path.setAttribute('class', d[1]);
+                    svg.appendChild(path);
+                });
+            }
             var runs = {}, order = [];
             proj.forEach(function (p) { var k = String(p.run); if (!runs[k]) { runs[k] = []; order.push(k); } runs[k].push(p); });
             order.forEach(function (k) {
@@ -261,6 +289,7 @@
                 $('<span></span>').text(tk.text).css('left', (100 * frac) + '%').appendTo(xbox);
             });
             var note = 'The dots are the FC tests (from PoolMath)' + (proj.length > 0 ? ', and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.' : '. AutoSwg\'s projected FC appears after its next calculation.');
+            if (steps.length > 0) note += ' The shaded band is the FC range in force at the time (FC Low to FC High), and a single dotted line a single target FC (the Target FC, or the Vacation Target FC while Away protection is on); they step where a setting changed.';
             $('<div class="picWaterNote"></div>').text(note).appendTo(body);
         },
         // The marks of the time scale between t0 and t1 for a view: their times and labels.
