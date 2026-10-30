@@ -1380,6 +1380,13 @@
 
                 let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather', 'picSystem', 'picWater'];
 
+                // List the items in the saved order: sort by the stored order value so each column shows
+                // what was saved last. Ties keep the list order; an item without a value goes last.
+                arr = arr.map((id, ndx) => {
+                    let order = parseInt(getStorage(`--${id}-order`, parseInt($(':root').css(`--${id}-order`))), 10);
+                    return { id: id, ndx: ndx, order: isNaN(order) ? Number.MAX_SAFE_INTEGER : order };
+                }).sort((a, b) => a.order - b.order || a.ndx - b.ndx).map(item => item.id);
+
                 arr.forEach(id => {
                     let el = $(`.${id}`);
                     let elVarName = '';
