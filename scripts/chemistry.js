@@ -1,6 +1,63 @@
 ﻿
 
 (function ($) {
+    // "2d 6h", "6h 5m", or "due now" -- kept to 2 units for brevity.
+    function fmtAutoSwgCountdown(ms) {
+        if (ms <= 0) return 'due now';
+        var mins = Math.floor(ms / 60000);
+        var days = Math.floor(mins / 1440); mins -= days * 1440;
+        var hours = Math.floor(mins / 60); mins -= hours * 60;
+        var parts = [];
+        if (days > 0) parts.push(days + 'd');
+        if (days > 0 || hours > 0) parts.push(hours + 'h');
+        if (days === 0) parts.push(mins + 'm');
+        return parts.join(' ');
+    }
+    // How the automatic change that tripped the warning reads: "from 15% to 30% (+15 points; the threshold is 10) by the automatic check at 10:00 AM".
+    // The earlier percent and the threshold come from njsPC; an older njsPC that does not send them gets "to 30%".
+    function autoSwgLargeChangeText(data) {
+        var to = data.lastAppliedPct, from = data.lastAutoApplyPreviousPct, text;
+        if (typeof from === 'number' && typeof to === 'number') {
+            var moved = to - from;
+            text = 'from ' + from + '% to ' + to + '% (' + (moved > 0 ? '+' : '') + moved + ' points' + (typeof data.lastAutoApplyThresholdPct === 'number' ? '; the threshold is ' + data.lastAutoApplyThresholdPct : '') + ')';
+        }
+        else text = 'to ' + to + '%';
+        if (data.lastAppliedAt) {
+            var at = new Date(data.lastAppliedAt);
+            if (!isNaN(at.getTime())) text += ' by the automatic check at ' + at.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+        }
+        return text;
+    }
+    // The warning that even 100% SWG can't reach the target within the window the last
+    // apply was aiming for -- only while that deadline is still ahead (afterward there's
+    // no longer a target being missed). Empty string when there's nothing to warn about.
+    function autoSwgTargetWarning(data) {
+        if (!data || !data.lastAppliedTargetWarning || !data.lastAppliedTargetDate) return '';
+        return new Date(data.lastAppliedTargetDate).getTime() > Date.now() ? data.lastAppliedTargetWarning : '';
+    }
+    // The informational counterpart: FC is so far above target that consumption alone (SWG
+    // at 0%) won't bring it down by the deadline. Same window as the warning above.
+    function autoSwgTargetInfo(data) {
+        if (!data || !data.lastAppliedTargetInfo || !data.lastAppliedTargetDate) return '';
+        return new Date(data.lastAppliedTargetDate).getTime() > Date.now() ? data.lastAppliedTargetInfo : '';
+    }
+    // Direction arrow, target %, time remaining, and the target FC that step is chasing --
+    // e.g. "↓ to 45% in 2d 6h for target FC of 5 ppm", optionally with the target date/time
+    // appended. lastAppliedTargetFc is whatever targetFc was in effect at the apply that
+    // scheduled this step, not necessarily today's config (which may have changed since).
+    function describeAutoSwgStep(data, withDate) {
+        // lastAppliedPct, not currentPct -- currentPct is only refreshed by a Check Now, so
+        // right after an Apply it can still hold the pre-apply value.
+        var verb = data.stepPct > data.lastAppliedPct ? 'rises to ' : 'drops to ';
+        var target = new Date(data.stepAt);
+        // "at the end of the target period (target FC 8.5 ppm) SWG drops to 15% in 1d 15h (10/7/26, 6:41 AM)": a later change from what is running now, not the recommendation.
+        var s = 'at the end of the target period' + (data.controlMode === 'band' && data.awayStatus !== 'active' && typeof data.fcLow === 'number' && typeof data.fcHigh === 'number' ? ' (FC range ' + data.fcLow + ' to ' + data.fcHigh + ' ppm)' : typeof data.lastAppliedTargetFc === 'number' ? ' (target FC ' + data.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + data.stepPct + '% in ' + fmtAutoSwgCountdown(target.getTime() - Date.now());
+        if (withDate) s += ' (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+        // the period can end while the SWG is off, and the step is then set for one minute after it next starts: say when the period ends
+        var end = data.lastAppliedTargetDate ? new Date(data.lastAppliedTargetDate) : null;
+        if (end && !isNaN(end.getTime()) && Math.abs(target.getTime() - end.getTime()) > 10 * 60000) s += '; the target period ends ' + end.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' with the SWG off';
+        return s;
+    }
     $.widget("pic.chemistry", {
         options: {},
         _create: function () {
@@ -9,6 +66,12 @@
             el[0].setChlorinatorData = function (data) { self.setChlorinatorData(data); };
             el[0].setChemControllerData = function (data) { self.setChemControllerData(data); };
             el[0].setChemDoserData = function (data) { self.setChemDoserData(data); };
+            el[0].setAutoSwgData = function (data) { self.setAutoSwgData(data); };
+            // The countdown in the SWG Assist summary is worked out when it is drawn, so draw it again once a minute (the page only gets a new update when something changes).
+            self._autoSwgTick = setInterval(function () {
+                if (el.closest('body').length === 0) { clearInterval(self._autoSwgTick); self._autoSwgTick = undefined; return; }
+                if (self._lastAutoSwgData) self._renderAutoSwgSummary(self._lastAutoSwgData);
+            }, 60000);
         },
         setChlorinatorData: function (data) {
             var self = this, o = self.options, el = self.element;
@@ -47,6 +110,7 @@
                 this.stopCountdownSuperChlor();
             });
             el.empty();
+            self._elAutoSwgSummary = undefined;
 
             let div = $('<div class="picCircuitTitle control-panel-title"></div>');
             div.appendTo(el);
@@ -76,7 +140,291 @@
                         $('<div></div>').appendTo(el).chemDoser(data.chemDosers[i]);
                     }
                 }
+                self._renderAutoSwgSummary(data.autoSwg);
             }
+        },
+        // Live updates arrive over the 'autoSwg' socket event (emitted whenever
+        // njsPC's SWG Assist state changes -- e.g. after Check Now or Apply on the
+        // config panel). A full page (re)load gets the last known values instead
+        // via _initChemistry's /state/all payload above.
+        setAutoSwgData: function (data) {
+            var self = this, o = self.options, el = self.element;
+            self._renderAutoSwgSummary(data);
+        },
+        // Small companion block: shows the last applied change and, if one is pending, the
+        // step direction/countdown -- so that status is visible on the dashboard without
+        // opening config. The current SWG % itself isn't repeated here -- that's already
+        // shown live on the Chlorinator widget above. Sourced from the last-known state
+        // (page load, or the live 'autoSwg' socket event after an Apply/step happens
+        // elsewhere). Deliberately shows nothing from an unapplied calculation
+        // (recommendedPct, maintenancePct, projectedCurrentFc, the live rationale) --
+        // that preview belongs on the calculation screen only, never here, until it's
+        // actually been applied. Only shown once something has actually been applied
+        // (lastAppliedAt is unset until then). Clicking it opens the full status popup.
+        _renderAutoSwgSummary: function (data) {
+            var self = this, el = self.element;
+            self._lastAutoSwgData = data;
+            // Shown once something has been applied, or while the periodic automatic check is
+            // running (so its next due time is visible even before the first apply).
+            if (!data || (!data.lastAppliedAt && !data.nextAutoCheckAt)) {
+                if (self._elAutoSwgSummary) self._elAutoSwgSummary.hide();
+                if (self._elAutoSwgAwayBadge) self._elAutoSwgAwayBadge.hide();
+                if (self._elAutoSwgDetailsToggle) { self._elAutoSwgDetailsToggle.hide(); self._elAutoSwgDetails.hide(); }
+                return;
+            }
+            if (!self._elAutoSwgSummary || self._elAutoSwgSummary.closest('body').length === 0) {
+                self._elAutoSwgSummary = $('<div class="picAutoSwgSummary"></div>')
+                    .css({
+                        cursor: 'pointer', padding: '.4rem 0', margin: '.25rem 0',
+                        fontSize: '.85em', color: '#666'
+                    })
+                    .attr('title', 'Click for Automatic SWG % status')
+                    .on('click', function () { self._showAutoSwgPopup(); })
+                    .appendTo(el);
+                // Shown while Away protection is on, above everything else here, so it is plain at a glance that the vacation settings are in place.
+                self._elAutoSwgAwayBadge = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#117a8b',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.25rem 0', textAlign: 'center', cursor: 'pointer'
+                }).attr('title', 'Click for Automatic SWG % status').on('click', function () { self._showAutoSwgPopup(); }).hide().insertBefore(self._elAutoSwgSummary);
+                // The controller's name -- leftmost and larger than the status text that follows.
+                $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.05em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
+                    .text('Auto SWG %').appendTo(self._elAutoSwgSummary);
+                self._elAutoSwgSummary.append($('<span></span>'));
+                // Fully-automatic mode applies changes with no human review -- flag it loudly
+                // here if the most recent one moved the % by more than the configured warning
+                // threshold, since the dashboard summary is the one place most likely to be
+                // seen without deliberately going looking for it.
+                self._elAutoSwgWarning = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#c0392b',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // What the njsPC watch found (the chlorinator reports a fault or no output in its run window, the automatic check stopped, a step did not
+                // happen): the SWG may not be holding FC, which no recommendation can fix. Red for an alarm, orange for a warning.
+                self._elAutoSwgAlerts = $('<div></div>').hide().appendTo(self._elAutoSwgSummary.parent());
+                // A fall in the chlorinator's salt reading: the pool was probably diluted (rain, or water removed and refilled).
+                self._elAutoSwgSaltNote = $('<div></div>').css({
+                    fontSize: '1em', color: '#0b3d5c', background: '#d6ecfa',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // Separate from the one above (a different problem, and both can apply): the
+                // applied % is already maxed out and still won't reach the target in time.
+                self._elAutoSwgTargetWarning = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#d35400',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // FC readings that don't add up (an unlogged chlorine addition or a wrong reading): the
+                // calculation left those intervals out until PoolMath is corrected.
+                self._elAutoSwgAnomaly = $('<div></div>').css({
+                    fontSize: '1em', color: '#fff', background: '#d35400',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // The SWG Rating disagrees with what PoolMath's recent SWG entries imply (a swapped cell?).
+                self._elAutoSwgRating = $('<div></div>').css({
+                    fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#d35400',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // Informational (not a warning): FC is high enough that even 0% SWG won't reach
+                // the target by the deadline.
+                self._elAutoSwgTargetInfo = $('<div></div>').css({
+                    fontSize: '1em', color: '#fff', background: '#2a6fa8',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // What the check made when you turned Away protection on or off did to the SWG %: a change you caused on purpose, so a plain note, not the red warning.
+                self._elAutoSwgAwayNote = $('<div></div>').css({
+                    fontSize: '1em', color: '#fff', background: '#2a6fa8',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // The calculation details (the reasoning behind what was applied) expand and collapse,
+                // collapsed by default; what was applied, the pending step and every warning/info message
+                // above stay visible either way.
+                self._autoSwgDetailsOpen = false;
+                self._elAutoSwgDetailsToggle = $('<div class="picAutoSwgDetailsToggle"></div>')
+                    .css({ cursor: 'pointer', fontSize: '.85em', color: '#666', marginTop: '.3rem', userSelect: 'none' })
+                    .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
+                    .append($('<span></span>').text('Calculation details'))
+                    .attr('title', 'Open the reasoning behind the last applied SWG %')
+                    // Opens in the wide status popup (with the details expanded) instead of expanding inside this narrow card, where the long lines wrapped into a tall list.
+                    .on('click', function () { self._showAutoSwgPopup({ openDetails: true }); })
+                    .hide().appendTo(self._elAutoSwgSummary.parent());
+                self._elAutoSwgDetails = $('<div></div>').css({ fontSize: '.8em', color: '#666', padding: '.15rem 0 .15rem 1rem' })
+                    .hide().appendTo(self._elAutoSwgSummary.parent());
+            }
+            var parts = [];
+            if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+            if (data.stepAt) parts.push('Pending step: ' + describeAutoSwgStep(data, false));
+            // Only present while the periodic automatic check is armed (Auto-Apply + automatic checking on).
+            if (data.awayStatus === 'active') {
+                var awayLine = 'Away Mode Active';
+                if (typeof data.awayTargetFc === 'number') awayLine += ' -- vacation target ' + data.awayTargetFc + ' ppm';
+                if (data.awayStartedAt) awayLine += ' (since ' + new Date(data.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')';
+                self._elAutoSwgAwayBadge.text(awayLine).show();
+            }
+            else self._elAutoSwgAwayBadge.hide();
+            if (data.awayChangeNote) self._elAutoSwgAwayNote.text('ℹ ' + data.awayChangeNote).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgAwayNote.hide();
+            if (data.nextAutoCheckAt) parts.push('Next auto check: ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+            // One fact to a line (what is applied, what happens next, when the next check is), not one run-on line that wraps on a narrow card.
+            self._elAutoSwgSummary.find('span:last').html(parts.join('<br>'));
+            self._elAutoSwgSummary.show();
+            if (data.lastAutoApplyLargeChange) {
+                // Tapping the banner opens the calculation details; Dismiss clears it once you have seen the change (applying a reviewed result or changing the % by hand also clears it).
+                self._elAutoSwgWarning.empty()
+                    .append($('<span></span>').text('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: SWG % was changed ' + autoSwgLargeChangeText(data) + ' with no manual review -- tap to review.'))
+                    .append($('<span></span>').text('Dismiss').css({ display: 'inline-block', marginLeft: '.6rem', padding: '.1rem .5rem', border: '1px solid #fff', borderRadius: '.25rem', cursor: 'pointer', fontSize: '.8em' })
+                        .on('click', function (e) { e.stopPropagation(); $.putApiService('state/autoSwg/acknowledge', {}, function () { }); }))
+                    .off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            }
+            else self._elAutoSwgWarning.hide();
+            self._elAutoSwgAlerts.empty();
+            var swgAlerts = Array.isArray(data.alerts) ? data.alerts : [];
+            swgAlerts.forEach(function (a) {
+                var alarm = a.level === 'alarm';
+                var elAlert = $('<div></div>').css({ fontWeight: 'bold', fontSize: '1em', color: '#fff', background: alarm ? '#c0392b' : '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem' })
+                    .text('⚠ ' + a.text + (a.since ? ' (since ' + new Date(a.since).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ')' : '')).appendTo(self._elAutoSwgAlerts);
+                // "njsPC was not running" is a notice, not a condition that clears itself: Dismiss hides it (applying a result you asked for does too). The outage still counts in the calculation.
+                if (String(a.id || '').indexOf('outage-') === 0) {
+                    $('<span></span>').text('Dismiss').css({ display: 'inline-block', marginLeft: '.6rem', padding: '.1rem .5rem', border: '1px solid #fff', borderRadius: '.25rem', cursor: 'pointer', fontSize: '.8em', fontWeight: 'normal' })
+                        .on('click', function (e) { e.stopPropagation(); $.putApiService('state/autoSwg/dismissOutages', { id: a.id }, function () { }); }).appendTo(elAlert);
+                }
+            });
+            self._elAutoSwgAlerts.toggle(swgAlerts.length > 0);
+            if (data.saltNote) self._elAutoSwgSaltNote.text('ℹ ' + String(data.saltNote).split('. ')[0] + '.').attr('title', data.saltNote).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgSaltNote.hide();
+            var targetWarning = autoSwgTargetWarning(data);
+            if (targetWarning) self._elAutoSwgTargetWarning.text('⚠ ' + targetWarning).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgTargetWarning.hide();
+            if (data.lastAppliedFcAnomalyNote) self._elAutoSwgAnomaly.text('⚠ Check PoolMath: an FC reading or chlorine addition may be missing -- tap for details.').off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgAnomaly.hide();
+            if (data.lastAppliedRatingNote) self._elAutoSwgRating.text('⚠ SWG Rating may be out of date: PoolMath\'s recent SWG entries imply a different rated output -- tap for details.').off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgRating.hide();
+            var targetInfo = autoSwgTargetInfo(data);
+            if (targetInfo) self._elAutoSwgTargetInfo.text('ℹ ' + targetInfo).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgTargetInfo.hide();
+            // Calculation details: the rationale behind what was applied (never an unapplied preview).
+            var rationale = Array.isArray(data.lastAppliedRationale) ? data.lastAppliedRationale : [];
+            self._elAutoSwgDetails.empty();
+            self._autoSwgHasDetails = !!(data.lastAppliedAt && rationale.length > 0);
+            if (self._autoSwgHasDetails) {
+                $('<div></div>').text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(self._elAutoSwgDetails);
+                var detailsUl = $('<ul></ul>').css({ margin: '.15rem 0' }).appendTo(self._elAutoSwgDetails);
+                rationale.forEach(function (line) { $('<li></li>').appendTo(detailsUl).text(line); });
+            }
+            self._applyAutoSwgDetailsState();
+        },
+        // Shows the calculation details only while expanded (and there are details to show).
+        _applyAutoSwgDetailsState: function () {
+            var self = this;
+            if (!self._elAutoSwgDetailsToggle) return;
+            var has = !!self._autoSwgHasDetails, open = !!self._autoSwgDetailsOpen;
+            self._elAutoSwgDetailsToggle.toggle(has);
+            self._elAutoSwgDetailsToggle.find('i').removeClass('fa-chevron-right fa-chevron-down').addClass(open ? 'fa-chevron-down' : 'fa-chevron-right');
+            self._elAutoSwgDetails.toggle(has && open);
+        },
+        // Full status -- the pending step (if any) with its target date/time, the last
+        // applied change, and the rationale text behind it. Like the summary line, this
+        // only ever reflects what's actually applied, and doesn't repeat the current SWG %
+        // shown live on the Chlorinator widget.
+        _showAutoSwgPopup: function (opts) {
+            var self = this;
+            var data = self._lastAutoSwgData || {};
+            var buttons = [
+                { text: 'Open Settings', icon: '<i class="fas fa-cog"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._goToAutoSwgCheck(); } },
+                { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+            ];
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: Math.min(780, Math.max(300, (window.innerWidth || 780) - 24)) + 'px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });   // wide, so the long calculation lines wrap less and the popup is not as tall; narrower than the screen on a phone
+            var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
+            if (data.awayStatus === 'active') {
+                addLine('Away Mode Active' + (typeof data.awayTargetFc === 'number' ? ' -- vacation target ' + data.awayTargetFc + ' ppm' : ''), { fontWeight: 'bold', color: '#fff', background: '#117a8b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            if (data.awayChangeNote) addLine('ℹ ' + data.awayChangeNote, { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            if (data.lastAutoApplyLargeChange) {
+                addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved ' + autoSwgLargeChangeText(data) + ' with no manual review.',
+                    { fontWeight: 'bold', color: '#fff', background: '#c0392b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            var targetWarning = autoSwgTargetWarning(data);
+            if (targetWarning) {
+                addLine('⚠ ' + targetWarning, { fontWeight: 'bold', color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            // Only in this popup, not as a dashboard banner -- it's a caution about how reliable
+            // the last apply's projection was, not something that needs attention.
+            if (data.lastAppliedRatingNote) {
+                addLine('⚠ ' + data.lastAppliedRatingNote, { fontWeight: 'bold', color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            if (data.lastAppliedFcAnomalyNote) {
+                addLine('⚠ ' + data.lastAppliedFcAnomalyNote, { color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            if (data.lastAppliedStaleFcNote) {
+                addLine('ℹ ' + data.lastAppliedStaleFcNote, { color: '#5a4300', background: '#ffe9a8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            }
+            var targetInfo = autoSwgTargetInfo(data);
+            if (targetInfo) addLine('ℹ ' + targetInfo, { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
+            if (data.stepAt) addLine('Pending step: ' + describeAutoSwgStep(data, true), { fontWeight: 'bold', color: '#a60' });
+            if (data.nextAutoCheckAt) addLine('Next automatic check: ' + new Date(data.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
+            if (data.lastAppliedAt) addLine('Last applied: ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), { fontSize: '.85em', color: '#666' });
+            // The reasoning behind what was applied expands and collapses (collapsed each time the popup
+            // opens); the warnings, the pending step and what was last applied above stay visible.
+            if (Array.isArray(data.lastAppliedRationale) && data.lastAppliedRationale.length) {
+                var detailsOpen = !!(opts && opts.openDetails);   // opened from the card's Calculation details: show them expanded
+                var chevron = $('<i class="fas ' + (detailsOpen ? 'fa-chevron-down' : 'fa-chevron-right') + '"></i>').css({ width: '1rem', display: 'inline-block' });
+                var detailsBody = $('<div></div>').css({ padding: '.15rem 0 .15rem 1rem' }).toggle(detailsOpen);
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', marginTop: '.4rem', cursor: 'pointer', userSelect: 'none' })
+                    .append(chevron).append($('<span></span>').text('Calculation details'))
+                    .attr('title', 'Show or hide the reasoning behind the last applied SWG %')
+                    .on('click', function () {
+                        detailsOpen = !detailsOpen;
+                        chevron.removeClass('fa-chevron-right fa-chevron-down').addClass(detailsOpen ? 'fa-chevron-down' : 'fa-chevron-right');
+                        detailsBody.toggle(detailsOpen);
+                    })
+                    .appendTo(dlg);
+                detailsBody.appendTo(dlg);
+                $('<div></div>').css({ fontSize: '.8em', color: '#666' }).text('From the ' + data.lastAppliedPct + '% applied on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ':').appendTo(detailsBody);
+                var appliedUl = $('<ul></ul>').css({ fontSize: '.8em', color: '#666', margin: '.15rem 0' }).appendTo(detailsBody);
+                data.lastAppliedRationale.forEach(function (line) { $('<li></li>').appendTo(appliedUl).text(line); });
+            }
+            // The "Refresh & Adjust to Target" recalculation only lives on the calculation
+            // screen (previews never show here on the dashboard) -- point there when it's
+            // actually actionable, i.e. while a glide-to-target is still in flight.
+            if (data.lastAppliedTargetDate && new Date(data.lastAppliedTargetDate).getTime() > Date.now()) {
+                $('<div></div>').css({ fontSize: '.8em', color: '#666', marginTop: '.4rem', fontStyle: 'italic' }).text('Open Settings to refresh with the latest PoolMath data.').appendTo(dlg);
+            }
+        },
+        // Opens Settings (if not already open), switches to the Chemistry tab,
+        // and expands/scrolls to the SWG Assist panel's "Check Now" section. The
+        // config page loads its tabs asynchronously (from /config/all) and each
+        // tab's contents are built the first time it's selected, so this polls
+        // briefly for each step to appear rather than assuming exact timing.
+        _goToAutoSwgCheck: function () {
+            var deadline = Date.now() + 6000;
+            function poll(test, action) {
+                var found = test();
+                if (found && found.length) { action(found); return; }
+                if (Date.now() > deadline) return;
+                setTimeout(function () { poll(test, action); }, 150);
+            }
+            function selectChemistryTab() {
+                poll(
+                    function () { return $('div.configContainer div.picTabPanel'); },
+                    function (tabs) {
+                        poll(
+                            function () { var t = tabs.find('div.picTab[data-tabid=tabChemistry]'); return t.length ? tabs : null; },
+                            function (tabs) { tabs[0].selectTabById('tabChemistry'); scrollToAutoSwgPanel(); }
+                        );
+                    }
+                );
+            }
+            function scrollToAutoSwgPanel() {
+                poll(
+                    function () { return $('div.cfgAutoSwg div.picAccordian'); },
+                    function (acc) {
+                        if (typeof acc[0].expanded === 'function') acc[0].expanded(true);
+                        acc[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                );
+            }
+            if ($('div.dashOuter').attr('data-panel') !== 'configuration') {
+                $('div.picConfigIcon').trigger('click');
+            }
+            selectChemistryTab();
         }
     });
     $.widget('pic.chlorinator', {
@@ -164,6 +512,52 @@
             var self = this, o = self.options, el = self.element;
             $.putApiService('config/chlorinator', { id: parseInt(el.attr('data-id'), 10), superChlorHours: o.superChlorHoursTarget, poolSetpoint: o.poolSetpointTarget, spaSetpoint: o.spaSetpointTarget }, function () { });
         },
+        // Debounces a Pool/Spa Setpoint edit same as before, but routes it through
+        // _confirmManualSwgChange rather than straight to putChlorValues, so a pending SWG Assist
+        // step gets a chance to warn before it's cancelled out from under the user.
+        _scheduleChlorValuesSave: function (data) {
+            var self = this, o = self.options;
+            if (typeof o.putChlorValuesTimer !== 'undefined' && o.putChlorValuesTimer) {
+                clearTimeout(o.putChlorValuesTimer);
+                o.putChlorValuesTimer = null;
+            }
+            o.putChlorValuesTimer = setTimeout(function () { self._confirmManualSwgChange(data); }, 1500);
+        },
+        // A manual Pool/Spa Setpoint change cancels any pending SWG Assist step (see
+        // ChlorinatorState.onPoolSetpointChanged in njsPC) -- warn before actually submitting so
+        // the user isn't surprised the pending step just disappeared, and let them back out.
+        // `data` is the chlorinator state fetched when this popover opened, used to revert the
+        // spinners to their pre-edit values on Cancel.
+        _confirmManualSwgChange: function (data) {
+            var self = this, o = self.options, el = self.element;
+            $.getApiService('/state/autoSwg', null, function (result) {
+                if (result && result.stepAt) {
+                    $.pic.modalDialog.createConfirm('dlgConfirmManualSwgOverride', {
+                        message: 'SWG Assist has a pending step (' + describeAutoSwgStep(result, true) + '). Changing the SWG % now will cancel it. Continue?',
+                        width: '420px', height: 'auto', title: 'Cancel Pending SWG Assist Step?',
+                        buttons: [
+                            {
+                                text: 'Continue', icon: '<i class="fas fa-check"></i>',
+                                click: function () { $.pic.modalDialog.closeDialog(this); self.putChlorValues(); }
+                            },
+                            {
+                                text: 'Cancel', icon: '<i class="far fa-window-close"></i>',
+                                click: function () {
+                                    $.pic.modalDialog.closeDialog(this);
+                                    o.poolSetpointTarget = data.poolSetpoint;
+                                    o.spaSetpointTarget = data.spaSetpoint;
+                                    let poolSpinner = el.find('div.picValueSpinner[data-bind="poolSetpoint"]')[0];
+                                    let spaSpinner = el.find('div.picValueSpinner[data-bind="spaSetpoint"]')[0];
+                                    if (poolSpinner) poolSpinner.val(data.poolSetpoint);
+                                    if (spaSpinner) spaSpinner.val(data.spaSetpoint);
+                                }
+                            }
+                        ]
+                    });
+                }
+                else self.putChlorValues();
+            });
+        },
         putSuperChlorinate: function (bSet) {
             var self = this, o = self.options, el = self.element;
             if (!bSet) el.find('label.picSuperChlor').text('Cancelling...');
@@ -197,11 +591,7 @@
                                 labelAttrs: { style: { width: '7rem' } }
                             }).on('change', function (e) {
                                 o.poolSetpointTarget = e.value;
-                                if (typeof o.putChlorValuesTimer !== 'undefined') {
-                                    clearTimeout(o.putChlorValuesTimer);
-                                    o.putChlorValuesTimer = null;
-                                }
-                                o.putChlorValuesTimer = setTimeout(function () { self.putChlorValues() }, 1500);
+                                self._scheduleChlorValuesSave(data);
                             });
                             if (data.lockSetpoints) { $('div.picValueSpinner[data-bind="poolSetpoint"]').addClass('disabled'); }
                         }
@@ -219,11 +609,7 @@
                                 labelAttrs: { style: { width: '7rem' } }
                             }).on('change', function (e) {
                                 o.spaSetpointTarget = e.value;
-                                if (typeof o.putChlorValuesTimer !== 'undefined') {
-                                    clearTimeout(o.putChlorValuesTimer);
-                                    o.putChlorValuesTimer = null;
-                                }
-                                o.putChlorValuesTimer = setTimeout(function () { self.putChlorValues() }, 1500);
+                                self._scheduleChlorValuesSave(data);
                             });
                             if (data.lockSetpoints) { $('div.picValueSpinner[data-bind="spaSetpoint"]').addClass('disabled'); }
                         }
