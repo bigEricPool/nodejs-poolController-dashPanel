@@ -475,15 +475,16 @@
             self._elSwgCapacity.text('The SWG can make up to ' + ppm.toFixed(2) + ' ppm/day of FC at its 100% setting over ' + (Math.round(w.hours * 100) / 100) + ' h (' + w.start + '-' + w.stop + src + ').')
                 .attr('title', 'The rated lbs/day scaled to the run window, for this pool volume. The recommended SWG % is the share of this that is needed.').show();
         },
-        // What the cell has made, under its in-service date: pounds of chlorine (output % x the rated lbs/day x the time, from the hourly output log) and the
-        // same output as hours at 100% (an hour at 50% is half an hour), which is how much work the cell has done and not how long it was on.
+        // What the cell has made, under its in-service date: pounds of chlorine (output % x the rated lbs/day x the time, from the hourly output log), the same
+        // output as hours at 100% (an hour at 50% is half an hour: the work the cell has done), and the hours it was producing at all (how long it was on).
         _applyCellUsage: function (cfg) {
             var self = this, u = cfg && cfg.cellUsage;
             if (!self._elCellUsage) return;
             if (!u || !(u.pounds > 0 || u.hours > 0)) { self._elCellUsage.hide(); return; }
             var since = u.since ? new Date(u.since).toLocaleDateString([], { dateStyle: 'medium' }) : '';
-            self._elCellUsage.text('Cell has made ' + u.pounds.toFixed(2) + ' lb of chlorine (' + u.hours.toFixed(1) + ' full-output hours)' + (since ? ', counted since ' + since : '') + '.')
-                .attr('title', 'Full-output hours are the hours the cell would have needed at 100% output to make this much chlorine: an hour at 50% counts as half an hour, so this is a measure of work done and not of how long the cell was running. Hours when the chlorinator had stopped reporting are not counted.').show();
+            var run = typeof u.runHours === 'number' ? ', ' + u.runHours.toFixed(1) + ' h running' : '';
+            self._elCellUsage.text('Cell has made ' + u.pounds.toFixed(2) + ' lb of chlorine (' + u.hours.toFixed(1) + ' full-output hours' + run + ')' + (since ? ', counted since ' + since : '') + '.')
+                .attr('title', 'Full-output hours are the hours the cell would have needed at 100% output to make this much chlorine: an hour at 50% counts as half an hour, so this is a measure of work done. Hours running is how long the cell was producing at all, at any output. Hours when the chlorinator had stopped reporting are not counted in either.').show();
         },
         // The Away protection status line under its settings; while it is on, the settings it pauses are grayed out.
         _applyAwayStatus: function (cfg) {
