@@ -1378,7 +1378,7 @@
                     $(':root').css('--dashContainer3-display', 'none');
                 }
 
-                let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather', 'picSystem', 'picWater'];
+                let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWeather', 'picSystem', 'picWater', 'picPower'];
 
                 // List the items in the saved order: sort by the stored order value so each column shows
                 // what was saved last. Ties keep the list order; an item without a value goes last.

@@ -32,6 +32,7 @@
     <script type="text/javascript" src="scripts/bodies.js"></script>
     <script type="text/javascript" src="scripts/circuits.js"></script>
     <script type="text/javascript" src="scripts/pumps.js"></script>
+    <script type="text/javascript" src="scripts/pumppower.js"></script>
     <script type="text/javascript" src="scripts/valves.js"></script>
     <script type="text/javascript" src="scripts/system.js"></script>
     <script type="text/javascript" src="scripts/covers.js"></script>
@@ -101,6 +102,7 @@
                 <div class="picCovers picControlPanel control-panel"></div>
                 <div class="picWeather picControlPanel control-panel"></div>
                 <div class="picWater picControlPanel control-panel"></div>
+                <div class="picPower picControlPanel control-panel"></div>
                 <div class="picVirtualCircuits picControlPanel control-panel"></div>
             </div>
             <div class="container2"></div>
@@ -129,6 +131,7 @@
             $('div.picFilters').bodyFilters();
             $('div.picValves').valves();
             $('div.picSystem').systemStatus();
+            $('div.picPower').pumpPower();
             $('div.picCovers').covers();
             $('div.picWeather').weather();
             $('div.picWater').waterTemp();
