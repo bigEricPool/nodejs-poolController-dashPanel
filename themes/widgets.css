@@ -1,4 +1,10 @@
 :root {
+    /* The heat settings box on a body card: its text size and the width of its labels (a longer body name needs the room). */
+    --picBodySetpoints-font-size: .8rem;
+    --picBodySetpoints-label-width: 5.4em;
+    /* The size of the body temperature, and the height of the green on/off box beside it. */
+    --picBodyTemp-font-size: 1.8em;
+    --picBodyIcon-height: 2em;
     --picBodies-order: 0;
     --picCircuits-order: 100;
     --picLights-order: 105;
@@ -400,18 +406,31 @@ label {
 }
 div.picBodySetpoints {
     cursor:pointer;
+    font-size:var(--picBodySetpoints-font-size);
 }
 div.picBodySetpoints label.picInline-label {
-    min-width:7em;
+    min-width:var(--picBodySetpoints-label-width);
     display:inline-block;
 }
 div.picBodyIcon {
     text-align:center;
 }
 div.picBodyIcon div.picIndicator {
-    height:2.5em;
+    height:var(--picBodyIcon-height);
     width:2.5em;
     cursor:pointer;
+}
+/* The theme moves the on/off text of an indicator with a fixed offset made for a taller box. For this box, center the text in the box instead,
+   so it stays centered whatever its height is. */
+div.picBodyIcon div.picIndicator {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+}
+div.picBodyIcon div.picIndicator::before {
+    position:static;
+    top:auto;
+    left:auto;
 }
 div.picPumps {
     order:var(--picPumps-order);
