@@ -144,7 +144,7 @@
             var self = this, o = self.options, el = self.element;
             var settings = data.settings || {}, pumps = data.pumps || [], servers = data.servers || [];
             var dlg = $.pic.modalDialog.createDialog('dlgPumpPower', {
-                width: '900px',
+                width: '1010px',
                 height: 'auto',
                 title: 'Pump Power Settings',
                 position: { my: 'center top', at: 'center top', of: window },
@@ -170,7 +170,7 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Track pump power', binding: 'enabled' });
             line = $('<div></div>').appendTo(general);
             $('<div></div>').appendTo(line).valueSpinner({ labelText: 'Rate', binding: 'ratePerKwh', min: 0, max: 10, step: .01, fmtMask: '#,##0.00', units: '$ per kWh (0 for no cost)', labelAttrs: { style: { width: '4rem' } }, inputAttrs: { maxlength: 5 } });
-            $('<div class="picPowerNote"></div>').text('Each speed names the relay that selects it, the same connection and device as a pump relay or circuit. Leave one speed with No Connection as the default: it counts whenever the pump is on. When several apply, the one with the most watts counts.').appendTo(dlg);
+            $('<div class="picPowerNote"></div>').text('Each speed names the relay that selects it, the same connection and device as a pump relay or circuit. A speed with No Connection counts whenever the pump is on. When several apply, the best priority counts: 1 is first, and 0 means not set.').appendTo(dlg);
             dataBinder.bind(general, { enabled: settings.enabled === true, ratePerKwh: settings.ratePerKwh || 0 });
             if (pumps.length === 0) $('<div class="picPowerNote"></div>').text('There are no pumps set up.').appendTo(dlg);
             pumps.forEach(function (p) {
@@ -192,9 +192,10 @@
             $('<div></div>').appendTo(row).inputField({ labelText: 'Name', binding: 'name', inputAttrs: { maxlength: 20, style: { width: '5rem' } }, labelAttrs: { style: { width: '2.7rem' } } });
             $('<div></div>').appendTo(row).valueSpinner({ labelText: 'RPM', binding: 'rpm', min: 0, max: 10000, step: 50, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 5 } });
             $('<div></div>').appendTo(row).valueSpinner({ labelText: 'Watts', binding: 'watts', min: 0, max: 20000, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 5 } });
+            $('<div></div>').appendTo(row).valueSpinner({ labelText: 'Priority', binding: 'priority', min: 0, max: 8, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 1 } });
             $('<div></div>').appendTo(row).REMBinding({ binding: '', servers: servers, horizontal: true, showLabel: false }).css({ marginLeft: '.5rem', display: 'inline-block' });
             $('<span class="picPowerRemove" role="button" tabindex="0" title="Remove this speed"><i class="fas fa-trash"></i></span>').appendTo(row).on('click', function () { row.remove(); });
-            dataBinder.bind(row, { name: s.name || '', rpm: s.rpm || 0, watts: s.watts || 0 });
+            dataBinder.bind(row, { name: s.name || '', rpm: s.rpm || 0, watts: s.watts || 0, priority: s.priority || 0 });
             row.find('div[data-bind$=connectionId]').each(function () { this.val(s.connectionId || ''); });
             row.find('div[data-bind$=deviceBinding]').each(function () { this.val(s.deviceBinding || ''); });
         },
