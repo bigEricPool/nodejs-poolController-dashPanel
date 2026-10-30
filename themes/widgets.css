@@ -377,6 +377,40 @@ div.picPowerWarn {
     font-size: .8rem;
     color: #d9822b;
 }
+span.picPowerDetails {
+    cursor: pointer;
+    text-decoration: underline;
+}
+div.picPowerDetailTotal {
+    margin-bottom: .25rem;
+}
+div.picPowerDetailBars {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+}
+div.picPowerDetailCol {
+    flex: 1 0 2.3rem;
+    min-width: 2.3rem;
+    text-align: center;
+    font-size: .7rem;
+}
+div.picPowerDetailStack {
+    display: flex;
+    flex-direction: column-reverse;
+    height: 14rem;
+}
+div.picPowerDetailAmount {
+    font-weight: bold;
+    white-space: nowrap;
+}
+div.picPowerDetailDate {
+    opacity: .8;
+    white-space: nowrap;
+}
+span.picPowerDetailKey {
+    margin-right: 1rem;
+}
 div.picPowerPump {
     margin-top: .5rem;
 }

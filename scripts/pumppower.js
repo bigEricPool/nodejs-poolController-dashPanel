@@ -1,7 +1,8 @@
 (function ($) {
     // The electricity a relay driven pump uses (njsPC's /state/pumpPower): the speed it is at, today and this month, and a chart of the energy
     // by speed. A pump on relays reports no power, so the figures are the time at each speed times the watts set for that speed. The gear in the
-    // title opens the settings. The panel stays hidden when njsPC does not have this.
+    // title opens the settings, and Details under the chart opens it wider with the amount under each bar. The panel stays hidden when njsPC does
+    // not have this.
     $.widget('pic.pumpPower', {
         options: { refreshMs: 60 * 1000, range: 'week' },
         _create: function () {
@@ -118,6 +119,11 @@
             $('<span></span>').text('Total ' + self._kwh(r.total.kwh) + self._money(r.total.cost)).appendTo(head);
             if (!(max > 0)) { $('<div class="picPowerNote"></div>').text('Nothing recorded for this period yet.').appendTo(box); return; }
             $('<span class="picPowerChartRange"></span>').text('peak ' + self._kwh(max)).appendTo(head);
+            $('<span class="picPowerDetails" role="button" tabindex="0">Details</span>').appendTo(head).on('click keydown', function (evt) {
+                if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
+                evt.preventDefault();
+                self._openDetails();
+            });
             var n = r.buckets.length, step = W / n, gap = Math.min(1, step * 0.15), svg = '';
             var esc = function (t) { return $('<div></div>').text(t).html(); };
             r.buckets.forEach(function (b, i) {
@@ -135,6 +141,46 @@
             $('<span></span>').text(self._periodLabel(r.buckets[0].t, r.range)).appendTo(scale);
             $('<span></span>').text(self._periodLabel(r.buckets[n - 1].t, r.range)).appendTo(scale);
         },
+        // What goes under a bar: the cost, or the energy when no rate is set.
+        _amount: function (b) { return typeof b.cost === 'number' ? '$' + b.cost.toFixed(2) : b.kwh.toFixed(1) + ' kWh'; },
+        // The chart at the width of the window, with each period's amount and date under its bar. Thirty days fit on a wide screen, and it
+        // scrolls sideways on a narrow one.
+        _openDetails: function () {
+            var self = this, o = self.options, r = o.report;
+            var dlg = $.pic.modalDialog.createDialog('dlgPumpPowerDetails', {
+                width: Math.min(1200, $(window).width() - 20) + 'px',
+                height: 'auto',
+                title: 'Pump Power by ' + (r.range === 'day' ? 'Hour' : r.range === 'year' ? 'Month' : 'Day'),
+                position: { my: 'center top', at: 'center top+40', of: window },
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }]
+            });
+            dlg.empty();
+            var colors = self._colors(r.speeds), max = 0;
+            r.buckets.forEach(function (b) { if (b.kwh > max) max = b.kwh; });
+            $('<div class="picPowerDetailTotal"></div>').text('Total ' + self._kwh(r.total.kwh) + self._money(r.total.cost)).appendTo(dlg);
+            var bars = $('<div class="picPowerDetailBars"></div>').appendTo(dlg);
+            r.buckets.forEach(function (b) {
+                var col = $('<div class="picPowerDetailCol"></div>').appendTo(bars);
+                var tip = self._periodLabel(b.t, r.range) + ': ' + self._kwh(b.kwh) + self._money(b.cost);
+                var stack = $('<div class="picPowerDetailStack"></div>').appendTo(col);
+                r.speeds.forEach(function (s) {
+                    var kwh = (b.seconds[s.key] || 0) * s.watts / 3600000;
+                    if (!(kwh > 0)) return;
+                    tip += '\n' + s.name + ': ' + self._hours(b.seconds[s.key]) + ', ' + self._kwh(kwh);
+                    $('<div></div>').css({ height: (kwh / max * 100) + '%', backgroundColor: colors[s.key] }).appendTo(stack);
+                });
+                col.attr('title', tip);
+                if (b.kwh > 0) $('<div class="picPowerDetailAmount"></div>').text(self._amount(b)).appendTo(col);
+                $('<div class="picPowerDetailDate"></div>').text(r.range === 'year' ? new Date(b.t).toLocaleString(undefined, { month: 'short' }) : self._periodLabel(b.t, r.range)).appendTo(col);
+            });
+            var legend = $('<div class="picPowerLegend"></div>').appendTo(dlg);
+            r.speeds.forEach(function (s) {
+                var line = $('<span class="picPowerDetailKey"></span>').appendTo(legend);
+                $('<span class="picPowerSwatch"></span>').css({ backgroundColor: colors[s.key] }).appendTo(line);
+                $('<span></span>').text(s.name).appendTo(line);
+            });
+            dlg.css({ overflow: 'visible' });
+        },
         _openSettings: function () {
             var self = this;
             $.getApiService('/config/pumpPower/settings', null, function (data) { self._settingsDialog(data); });
@@ -144,7 +190,7 @@
             var self = this, o = self.options, el = self.element;
             var settings = data.settings || {}, pumps = data.pumps || [], servers = data.servers || [];
             var dlg = $.pic.modalDialog.createDialog('dlgPumpPower', {
-                width: '1010px',
+                width: '1050px',
                 height: 'auto',
                 title: 'Pump Power Settings',
                 position: { my: 'center top', at: 'center top', of: window },
@@ -189,7 +235,7 @@
         },
         _speedRow: function (rows, s, servers) {
             var row = $('<div class="picPowerSpeed"></div>').attr('data-id', s.id).appendTo(rows);
-            $('<div></div>').appendTo(row).inputField({ labelText: 'Name', binding: 'name', inputAttrs: { maxlength: 20, style: { width: '5rem' } }, labelAttrs: { style: { width: '2.7rem' } } });
+            $('<div></div>').appendTo(row).inputField({ labelText: 'Name', binding: 'name', inputAttrs: { maxlength: 20, style: { width: '7rem' } }, labelAttrs: { style: { width: '2.7rem' } } });
             $('<div></div>').appendTo(row).valueSpinner({ labelText: 'RPM', binding: 'rpm', min: 0, max: 10000, step: 50, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 5 } });
             $('<div></div>').appendTo(row).valueSpinner({ labelText: 'Watts', binding: 'watts', min: 0, max: 20000, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 5 } });
             $('<div></div>').appendTo(row).valueSpinner({ labelText: 'Priority', binding: 'priority', min: 0, max: 8, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 1 } });
