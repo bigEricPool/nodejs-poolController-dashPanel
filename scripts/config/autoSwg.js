@@ -64,6 +64,11 @@
                 .attr('title', "SWG's manufacturer-rated chlorine production per 24-hour day at 100% output (the spec-sheet figure). Only the portion that fits in the run window below is counted as available.");
 
             line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).inputField({ labelText: 'Cell In Service Since', binding: 'cellInstalledDate', inputAttrs: { maxlength: 10, placeholder: 'YYYY-MM-DD', style: { width: '6.5rem' } } })
+                .attr('title', 'The date the salt cell now in the chlorinator went into service, as YYYY-MM-DD. Saving it counts the chlorine the cell has made from that date, out of the chlorinator output log (which only goes back as far as it was kept; the line below says where it starts). Leave blank to leave the totals as they are.');
+            self._elCellUsage = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.2rem 0 .5rem 0' }).hide();
+
+            line = $('<div></div>').appendTo(pnl);
             self._elSwgStartTime = $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Start', binding: 'swgStartTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } } })
                 .attr('title', "e.g. '07:00' or '7am'. Ignored while a SWG Schedule above is selected -- that schedule's own start time is used instead.");
             self._elSwgStopTime = $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Stop', binding: 'swgStopTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
@@ -275,6 +280,7 @@
                         self._updateActionButtons(c && c.autoApplyEnabled && c.awayStatus !== 'active');
                         self._applyAwayStatus(c);
                         self._applySwgWindow(c);
+                        self._applyCellUsage(c);
                         self._markSaved();
                         // Turning Away protection on (or off) makes a check a few seconds after the save: pick up its calculation when it is done.
                         setTimeout(function () { self._refreshFromServer(); }, 8000);
@@ -469,6 +475,17 @@
             self._elSwgCapacity.text('The SWG can make up to ' + ppm.toFixed(2) + ' ppm/day of FC at its 100% setting over ' + (Math.round(w.hours * 100) / 100) + ' h (' + w.start + '-' + w.stop + src + ').')
                 .attr('title', 'The rated lbs/day scaled to the run window, for this pool volume. The recommended SWG % is the share of this that is needed.').show();
         },
+        // What the cell has made, under its in-service date: pounds of chlorine (output % x the rated lbs/day x the time, from the hourly output log), the same
+        // output as hours at 100% (an hour at 50% is half an hour: the work the cell has done), and the hours it was producing at all (how long it was on).
+        _applyCellUsage: function (cfg) {
+            var self = this, u = cfg && cfg.cellUsage;
+            if (!self._elCellUsage) return;
+            if (!u || !(u.pounds > 0 || u.hours > 0)) { self._elCellUsage.hide(); return; }
+            var since = u.since ? new Date(u.since).toLocaleDateString([], { dateStyle: 'medium' }) : '';
+            var run = typeof u.runHours === 'number' ? ', ' + u.runHours.toFixed(1) + ' h running' : '';
+            self._elCellUsage.text('Cell has made ' + u.pounds.toFixed(2) + ' lb of chlorine (' + u.hours.toFixed(1) + ' full-output hours' + run + ')' + (since ? ', counted since ' + since : '') + '.')
+                .attr('title', 'Full-output hours are the hours the cell would have needed at 100% output to make this much chlorine: an hour at 50% counts as half an hour, so this is a measure of work done. Hours running is how long the cell was producing at all, at any output. Hours when the chlorinator had stopped reporting are not counted in either.').show();
+        },
         // The Away protection status line under its settings; while it is on, the settings it pauses are grayed out.
         _applyAwayStatus: function (cfg) {
             var self = this;
@@ -521,6 +538,7 @@
                 self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
                 self._applyAwayStatus(cfg);
                 self._applySwgWindow(cfg);
+                self._applyCellUsage(cfg);
                 self._applyGateNote();
                 self._applyTuningState();
             });
@@ -730,6 +748,7 @@
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
                         self._applyAwayStatus(cfg);
                         self._applySwgWindow(cfg);
+                        self._applyCellUsage(cfg);
                         self._applyGateNote();
                         self._applyTuningState();
                         self._updateTuningBadge();
