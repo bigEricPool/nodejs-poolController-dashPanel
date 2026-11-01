@@ -2242,3 +2242,14 @@ div.picWaterNote {
     opacity: .8;
     padding-top: .15rem;
 }
+div.picWaterNoteToggle {
+    cursor: pointer;
+    font-size: .75rem;
+    opacity: .8;
+    padding-top: .15rem;
+}
+div.picWaterNoteToggle i {
+    font-size: .65rem;
+    margin-right: .3rem;
+    width: .7rem;
+}
