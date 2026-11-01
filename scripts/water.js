@@ -175,7 +175,32 @@
             if (anyOff) note += ' Nothing is drawn while the pump is off: the sensor then reads the water standing in the pipes, not the pool.';
             if (anyFc) note += ' FC is on the scale at the right (ppm): the dots are the tests, and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.';
             if (!isDay && typeof shortest === 'number' && shortest < days * 24 - 0.5) note += ' njsPC has recorded ' + (shortest < 48 ? shortest.toFixed(1) + ' hours' : (shortest / 24).toFixed(1) + ' days') + ' so far.';
-            $('<div class="picWaterNote"></div>').text(note).appendTo(body);
+            self._note(body, note);
+        },
+        // The explanation under a chart, closed until the viewer opens it; the choice is remembered in this browser and survives the redraws.
+        _note: function (body, text) {
+            var self = this, o = self.options;
+            if (typeof o.noteOpen === 'undefined') {
+                o.noteOpen = false;
+                try { o.noteOpen = window.localStorage.getItem('picWaterNote') === 'open'; } catch (err) { /* closed */ }
+            }
+            var toggle = $('<div class="picWaterNoteToggle" role="button" tabindex="0"></div>').appendTo(body);
+            var icon = $('<i class="fas"></i>').appendTo(toggle);
+            $('<span></span>').text('About this chart').appendTo(toggle);
+            var note = $('<div class="picWaterNote"></div>').text(text).appendTo(body);
+            var show = function () {
+                icon.toggleClass('fa-chevron-right', !o.noteOpen).toggleClass('fa-chevron-down', o.noteOpen);
+                toggle.attr('aria-expanded', o.noteOpen ? 'true' : 'false');
+                note.toggle(o.noteOpen);
+            };
+            toggle.on('click keydown', function (evt) {
+                if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
+                evt.preventDefault();
+                o.noteOpen = !o.noteOpen;
+                try { window.localStorage.setItem('picWaterNote', o.noteOpen ? 'open' : 'closed'); } catch (err) { /* not remembered */ }
+                show();
+            });
+            show();
         },
         // The FC view: the latest test and the high, low and average of the tests in the period, and a chart of the tests as dots and the FC
         // AutoSwg projected as a line through each value it calculated, one line for each calculation run (in the order given: the value
@@ -290,7 +315,7 @@
             });
             var note = 'The dots are the FC tests (from PoolMath)' + (proj.length > 0 ? ', and the line is the FC AutoSwg projected, through each value it calculated; each new calculation starts a new line.' : '. AutoSwg\'s projected FC appears after its next calculation.');
             if (steps.length > 0) note += ' The shaded band is the FC range in force at the time (FC Low to FC High), and a single dotted line a single target FC (the Target FC, or the Vacation Target FC while Away protection is on); they step where a setting changed.';
-            $('<div class="picWaterNote"></div>').text(note).appendTo(body);
+            self._note(body, note);
         },
         // The marks of the time scale between t0 and t1 for a view: their times and labels.
         _ticks: function (mode, t0, t1) {
