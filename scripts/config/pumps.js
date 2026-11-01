@@ -256,7 +256,7 @@
                 $('<input type="hidden" data-datatype="int"></input>').attr('data-bind', 'primingTime').appendTo(line);
                 $('<input type="hidden" data-datatype="int"></input>').attr('data-bind', 'primingSpeed').appendTo(line);
             }
-            // Relay pumps with more than one speed have no priming of their own: njsPC primes them when a schedule turns the pump on.
+            // Relay pumps with more than one speed have no priming of their own: njsPC primes them when the pump starts after being off for a while.
             if (type.schedulePriming === true) {
                 var primeSpeeds = [{ val: 0, desc: 'None' }];
                 var primeCount = type.name === 'hwrly' ? (type.maxSpeeds || type.maxRelays) : type.maxRelays;
@@ -264,7 +264,7 @@
                     let prly = type.name !== 'hwrly' && typeof type.relays !== 'undefined' ? type.relays.find(elem => elem.id === ps) : undefined;
                     primeSpeeds.push({ val: ps, desc: typeof prly !== 'undefined' ? prly.name : `Speed #${ps}` });
                 }
-                line = $('<div></div>').appendTo(pnl).attr('title', 'When a schedule turns the pump on, or the pump stopped because njsPC or the relay manager was restarted or could not be reached, it also runs at the priming speed, with the priming circuit on, for the priming time. Turning the pump on by hand does not prime it. Priming is off unless the box is checked.');
+                line = $('<div></div>').appendTo(pnl).attr('title', 'When a schedule turns the pump on, or the pump stopped because njsPC or the relay manager was restarted or could not be reached, it also runs at the priming speed, with the priming circuit on, for the priming time. So does any other start, by hand for instance, after the pump has been off for more than 30 seconds. Priming is off unless the box is checked.');
                 $('<div></div>').appendTo(line).checkbox({ labelText: 'Priming', binding: binding + 'primingEnabled' });
                 $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Priming Time', binding: binding + 'primingMinutes', min: 0, max: 60, step: 1, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } });
                 // The speed and the circuit go on a line of their own.

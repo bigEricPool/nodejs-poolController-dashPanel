@@ -216,7 +216,7 @@
                     var primingCell = el.find('div.picRelay').filter(function () { return $(this).css('display') !== 'none'; }).first();
                     if (primingCell.length === 0) primingCell = el.find('label.picPumpName').first();
                     $('<div class="picPumpPriming"></div>').text('Priming').css({ fontStyle: 'italic', fontSize: '.8em' })
-                        .attr('title', 'The pump is running at its priming speed. Priming follows a schedule start, or a stop caused by a restart of njsPC or the relay manager.').appendTo(primingCell);
+                        .attr('title', 'The pump is running at its priming speed. Priming follows a schedule start, a start after more than 30 seconds off, or a stop caused by a restart of njsPC or the relay manager.').appendTo(primingCell);
                 }
                 // Bind up any associated circuit speeds.
                 if (typeof data.circuits !== 'undefined') {
