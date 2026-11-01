@@ -960,6 +960,9 @@
             var verb = result.stepPct > result.lastAppliedPct ? 'rises to ' : 'drops to ';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
+            // Under range control the automatic checks decide the %, and every apply sets this step a day ahead again, so it is no forecast of when the SWG resumes: it is what happens if the checks stop.
+            if (result.controlMode === 'band' && result.awayStatus !== 'active' && typeof result.fcLow === 'number' && typeof result.fcHigh === 'number')
+                return 'if no automatic check has run by then (FC range ' + result.fcLow + ' to ' + result.fcHigh + ' ppm), SWG ' + verb + result.stepPct + '% (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', in ' + remaining + ')';
             // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
             // this step -- not necessarily today's config, which may have changed since.
             var s = 'at the end of the target period' + (typeof result.lastAppliedTargetFc === 'number' ? ' (target FC ' + result.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + result.stepPct + '%';
