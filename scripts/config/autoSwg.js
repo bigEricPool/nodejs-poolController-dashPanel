@@ -842,7 +842,9 @@
             else self._elSaltNote.hide();
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
             self._elCalcHeader.toggle(hasCalc).text(result.pending ? 'Latest calculation (not applied yet):' : 'Latest calculation (applied):');
-            self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (to reach target FC by the deadline and stay at or above it)');
+            // Under range control there is no target or deadline to reach: the % keeps FC between the low and the high (Away protection still steers to its target).
+            var inRange = result.controlMode === 'band' && result.awayStatus !== 'active' && typeof result.fcLow === 'number' && typeof result.fcHigh === 'number';
+            self._elRecommendedPct.toggle(hasCalc).text('Recommended SWG %: ' + result.recommendedPct + '% (' + (inRange ? 'keeping FC between ' + result.fcLow + ' and ' + result.fcHigh + ' ppm' : 'to reach target FC by the deadline and stay at or above it') + ')');
             self._elMaintenancePct.toggle(hasCalc).text('Steady-state maintenance would only need: ' + result.maintenancePct + '%');
             self._elAvgConsumption.toggle(hasCalc).text('Average FC consumption: ' + result.avgConsumptionPpmPerDay + ' ppm/day');
             self._elAvgWindow.toggle(hasCalc).text(self._describeAvgWindow(result));
