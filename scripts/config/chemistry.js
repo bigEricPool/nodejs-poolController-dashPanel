@@ -1082,6 +1082,13 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Ignore Salt Reading', binding: binding + 'ignoreSaltReading' }).attr('title', `Check this box if you are feeding the salt display reading from a source other than the onboard conductivity probe for the cell.`).css({ marginLeft: '1.7rem' });
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Salt Target', binding: binding + 'saltTarget', min: 1500, max: 5000, step: 10, units: 'ppm', inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '4rem', width: '5.9rem', marginRight: '.25rem' } } });
+            // The cell: its rating and the day it went into service, from which njsPC counts how much chlorine it has made.
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Cell Rating', binding: binding + 'cellLbsPerDay', min: 0, max: 20, step: 0.01, units: 'lb/day', inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '4rem', width: '5.9rem', marginRight: '.25rem' } } })
+                .attr('title', 'Pounds of chlorine a day the cell makes at 100% output. Leave it at the default unless you know your cell differs: the default is the rating PoolMath has for your pool when a share code is set, otherwise the model\'s rating.');
+            $('<div></div>').appendTo(line).inputField({ labelText: 'In Service Since', binding: binding + 'cellInstalledDate', inputAttrs: { maxlength: 10, placeholder: 'YYYY-MM-DD', style: { width: '6.5rem' } }, labelAttrs: { style: { marginLeft: '1rem', marginRight: '.25rem' } } })
+                .attr('title', 'The day the current cell went into service. Changing it, or the rating, counts the cell usage again from this day.');
+            self._elCellUsage = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.2rem 0 .3rem 4rem' }).hide();
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Chlorinator', icon: '<i class="fas fa-save"></i>' });
 
@@ -1090,6 +1097,11 @@
                 var v = dataBinder.fromElement(p);
                 if (isIntelliCenter && typeof v.name === 'string') v.name = v.name.substring(0, 15);
                 if (dataBinder.checkRequired(p, true)) {
+                    var d = typeof v.cellInstalledDate === 'string' ? v.cellInstalledDate.trim() : '';
+                    if (d !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+                        $.pic.modalDialog.createConfirm('dlgChlorCellDate', { message: 'Enter the In Service Since date as YYYY-MM-DD, or leave it empty.', width: '350px', height: 'auto', title: 'Cell Date', buttons: [{ text: 'OK', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+                        return;
+                    }
                     $.putApiService('/config/chlorinator', v, 'Saving Chlorinator...', function (c, status, xhr) {
                         console.log(c);
                         self.dataBind(c);
@@ -1144,6 +1156,25 @@
                 obj.portId = 0; // Force the port id to be the OCP.
             }
             dataBinder.bind(el, obj);
+            self._loadCellUsage(obj);
+        },
+        // The cell's rating in effect (the default when none is set) and what the cell has made, from njsPC. Hidden when njsPC does not have them.
+        _loadCellUsage: function (obj) {
+            var self = this, el = self.element;
+            if (!self._elCellUsage) return;
+            self._elCellUsage.hide();
+            if (!obj || !(obj.id > 0)) return;
+            $.getApiService('/state/chlorinator/usage?id=' + obj.id, null, function (u, status, xhr) {
+                if (!u || typeof u !== 'object') return;
+                if (!(obj.cellLbsPerDay > 0) && u.lbsPerDay > 0) dataBinder.bind(el, { cellLbsPerDay: u.lbsPerDay });
+                if (!(u.pounds > 0 || u.hours > 0)) return;
+                var d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(u.installedDate || '');
+                var since = d ? new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])).toLocaleDateString([], { dateStyle: 'medium' }) : (u.since ? new Date(u.since).toLocaleDateString([], { dateStyle: 'medium' }) : '');
+                var run = typeof u.runHours === 'number' ? ', ' + u.runHours.toFixed(1) + ' h enabled' : '';
+                var est = u.estimatedPounds > 0 ? ' About ' + u.estimatedPounds.toFixed(2) + ' lb of that is an estimate from the SWG entries in your PoolMath log, for the time before the output log began.' : '';
+                self._elCellUsage.text('Cell has made ' + u.pounds.toFixed(2) + ' lb of chlorine (' + u.hours.toFixed(1) + ' full-output hours' + run + ')' + (since ? ', counted since ' + since : '') + '.' + est)
+                    .attr('title', 'Full-output hours are the hours the cell would have needed at 100% output to make this much chlorine: an hour at 50% counts as half an hour, so this is a measure of work done. Hours enabled is how long the setting was above 0: the cell makes its chlorine in bursts, on for the set % of each cycle, so it is energized for only part of that time. Hours when the chlorinator had stopped reporting, or reported low flow, very low salt, high current, low voltage or low water temperature, are not counted in either.').show();
+            });
         }
     });
     $.widget('pic.pnlChemControllerConfig', {
