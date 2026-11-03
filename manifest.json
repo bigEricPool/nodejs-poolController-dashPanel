@@ -70,6 +70,15 @@
       "build": true
     },
     {
+      "name": "feature/chlorinator-log",
+      "kind": "feature",
+      "status": "active",
+      "purpose": "Chlorinator logging UI: the chlorinator panel's cell usage and log settings. Pairs with njsPC feature/chlorinator-log. Cut from upstream master, intended for upstream; SWG Assist builds on it.",
+      "depends": [],
+      "upstream": "",
+      "build": true
+    },
+    {
       "name": "feature/dashboard-sun-times",
       "kind": "feature",
       "status": "active",

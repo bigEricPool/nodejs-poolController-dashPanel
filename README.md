@@ -16,6 +16,7 @@ Base for new branches: master at a5e8c15.
 | `fix/layout-editor-order` | fix | The layout editor lists the panels in their saved order, not a fixed built-in order. | none | not yet reported; upstream candidate |
 | `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. | none | none |
 | `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
+| `feature/chlorinator-log` | feature | Chlorinator logging UI: the chlorinator panel's cell usage and log settings. Pairs with njsPC feature/chlorinator-log. Cut from upstream master, intended for upstream; SWG Assist builds on it. | none | none |
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
 | `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. | none | none |
 | `feature/pump-priming` | feature | Priming for relay driven pumps (two speed, relay switched variable speed); off by default. | none | none |
