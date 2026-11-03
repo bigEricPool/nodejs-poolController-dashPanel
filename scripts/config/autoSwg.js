@@ -59,8 +59,8 @@
             // The PoolMath share code and pool name are the pool's, set under PoolMath History above (they are no longer part of these settings).
             $('<div></div>').appendTo(pnl).text('PoolMath share code and pool name: see PoolMath History above.').css({ fontSize: '.85em', color: '#666', margin: '.2rem 0' });
 
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Pool Volume', binding: 'gallons', min: 500, max: 200000, step: 100, units: 'gal', inputAttrs: { style: { width: '5rem' } } });
+            // The pool volume is PoolMath's too (the largest body's capacity when PoolMath has none): shown here, set in neither place.
+            self._elPoolVolume = $('<div></div>').appendTo(pnl).text('Pool volume: see PoolMath History above.').css({ fontSize: '.85em', color: '#666', margin: '.2rem 0' });
             // The cell's rating (lbs/day) is the chlorinator's: set it in the Chlorinator panel above.
 
             line = $('<div></div>').appendTo(pnl);
@@ -453,9 +453,15 @@
             self._applyAutoTuneState();
         },
         // "SWG can make up to 4.74 ppm/day at its 100% setting over 7.75 h (09:21-17:06, from schedule #2)". The window comes from the server (it knows the
-        // schedule); the volume and capacity are read from the form, so editing them updates the number before saving.
+        // schedule); the volume and the cell's rating are the saved ones (PoolMath's and the chlorinator's).
         _applySwgWindow: function (cfg) {
             var self = this;
+            if (cfg && typeof cfg.gallons === 'number') { self._gallons = cfg.gallons; self._gallonsSource = cfg.gallonsSource; }
+            if (self._elPoolVolume && typeof self._gallons === 'number') {
+                self._elPoolVolume.text(self._gallons > 0
+                    ? 'Pool volume ' + Math.round(self._gallons).toLocaleString() + ' gal (' + (self._gallonsSource === 'poolmath' ? 'from PoolMath History' : 'from the body capacity; PoolMath History has none yet') + ').'
+                    : 'Pool volume: not known yet (set up PoolMath History above).');
+            }
             if (!self._elSwgCapacity) return;
             if (cfg && cfg.swgWindow) self._swgWindow = cfg.swgWindow;
             if (cfg && typeof cfg.swgLbsPerDay === 'number') self._swgLbsPerDay = cfg.swgLbsPerDay;
@@ -463,7 +469,7 @@
             if (!w || !(w.hours > 0)) { self._elSwgCapacity.hide(); return; }
             var v = {};
             try { v = dataBinder.fromElement(self._pnl) || {}; } catch (e) { v = {}; }
-            var gal = Number(v.gallons), lbs = Number(self._swgLbsPerDay);
+            var gal = Number(self._gallons), lbs = Number(self._swgLbsPerDay);
             var ppm = gal > 0 && lbs > 0 ? (lbs * 1000000) / (gal * 8.34) * (w.hours / 24) : w.ppmPerDayAtFull;
             if (!(ppm > 0)) { self._elSwgCapacity.hide(); return; }
             var src = w.note && /schedule #/.test(w.note) ? ', from ' + /schedule #\d+/.exec(w.note)[0] : '';
