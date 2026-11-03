@@ -288,7 +288,68 @@
                     $('<div></div>').appendTo(pnl).pnlChemDoserConfig(opts)[0].dataBind(opts.dosers[i]);
                 }
             });
-
+            // The pool's PoolMath share: njsPC reads the pool's log history from it (cell usage before the output log began, the pool volume).
+            $('<div></div>').appendTo(el).pnlPoolMathConfig({});
+        }
+    });
+    $.widget('pic.pnlPoolMathConfig', {
+        options: {},
+        _create: function () {
+            var self = this, o = self.options, el = self.element;
+            self._buildControls();
+            $.getApiService('/config/poolMath', null, function (cfg, status, xhr) {
+                if (cfg && typeof cfg === 'object') self.dataBind(cfg);
+            });
+        },
+        _buildControls: function () {
+            var self = this, o = self.options, el = self.element;
+            el.empty();
+            el.addClass('picConfigCategory cfgPoolMath');
+            var acc = $('<div></div>').appendTo(el).accordian({
+                columns: [{ binding: 'title', glyph: 'fas fa-book', style: { width: '14rem' } }, { binding: 'status', glyph: '', style: {} }]
+            });
+            var cols = acc[0].columns();
+            cols[0].elText().text('PoolMath History');
+            var pnl = acc.find('div.picAccordian-contents');
+            var line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).inputField({ labelText: 'Share Code', binding: 'shareCode', inputAttrs: { maxlength: 200, style: { width: '12rem' } }, labelAttrs: { style: { width: '5.9rem' } } })
+                .attr('title', 'The code from your PoolMath share link (poolmath.app/share/<code>). Leave it empty to read nothing from PoolMath.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).inputField({ labelText: 'Pool Name', binding: 'poolName', inputAttrs: { maxlength: 60, style: { width: '12rem' } }, labelAttrs: { style: { width: '5.9rem' } } })
+                .attr('title', 'The pool\'s name in PoolMath, when the share has more than one pool. Empty means the first pool.');
+            self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 6.2rem' }).hide();
+            var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
+            var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save PoolMath', icon: '<i class="fas fa-save"></i>' });
+            btnSave.on('click', function (e) {
+                var v = dataBinder.fromElement(pnl);
+                $.putApiService('/config/poolMath', { shareCode: v.shareCode || '', poolName: v.poolName || '' }, 'Saving PoolMath...', function (c, status, xhr) {
+                    self.dataBind(c);
+                });
+            });
+        },
+        dataBind: function (obj) {
+            var self = this, el = self.element;
+            dataBinder.bind(el.find('div.picAccordian-contents:first'), { shareCode: obj.shareCode || '', poolName: obj.poolName || '' });
+            self._loadStatus(obj);
+        },
+        // What has been read from PoolMath so far: the archive's size and age, and the pool details taken from it.
+        _loadStatus: function (cfg) {
+            var self = this;
+            if (!self._elStatus) return;
+            var hasCode = !!(cfg && cfg.shareCode);
+            var cols = self.element.find('div.picAccordian:first')[0].columns();
+            cols[1].elText().text(hasCode ? 'On' : 'Off');
+            if (!hasCode) { self._elStatus.hide(); return; }
+            $.getApiService('/state/poolMath', null, function (st, status, xhr) {
+                if (!st || typeof st !== 'object') return;
+                var parts = [];
+                var fmt = function (iso) { return new Date(iso).toLocaleDateString([], { dateStyle: 'medium' }); };
+                if (st.syncedAt) parts.push(st.count + ' log entries archived' + (st.oldest ? ', back to ' + fmt(st.oldest) : '') + '; read ' + fmt(st.toppedUpAt || st.syncedAt) + '.');
+                else parts.push('Not read yet; the first read starts a few minutes after saving or starting njsPC.');
+                if (st.pool && st.pool.gallons > 0) parts.push('Volume ' + st.pool.gallons.toLocaleString() + ' gal' + (st.pool.swgLbsPerDay > 0 ? ', SWG rating ' + st.pool.swgLbsPerDay + ' lb/day' : '') + '.');
+                if (st.error) parts.push('Last error: ' + st.error);
+                self._elStatus.text(parts.join(' ')).show();
+            });
         }
     });
     $.widget('pic.pnlChemSetpoints', {
