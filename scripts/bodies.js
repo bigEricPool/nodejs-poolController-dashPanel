@@ -163,7 +163,6 @@
             var bodyTemp = $('<div></div>').addClass('picBodyTemp');
             line = $('<div></div').appendTo(bodyTemp);
             $('<label></label>').attr('data-bind', 'name').appendTo(line);
-            $('<label></label>').text(' Temp').appendTo(line);
             line = $('<div></div>').addClass('body-temp').appendTo(bodyTemp);
             $('<span></span>').addClass('picTempData').attr('data-bind', 'temp').attr('data-fmttype', 'number').attr('data-fmtmask', tempFmt).attr('data-fmtempty', '--.-').appendTo(line);
             $('<label></label>').addClass('picUnitSymbol').html('&deg').css({ fontSize: '.4em', verticalAlign:'top', display:'inline-block', paddingTop:'.25em' }).appendTo(line);
@@ -188,7 +187,7 @@
             $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Heat Mode').appendTo(line);
             $('<span></span>').addClass('picModeData').css({ maxWidth: '5.1rem', display: 'inline-block'}).attr('data-bind', 'heatMode.desc').text('----').appendTo(line);
             line = $('<div></div>').appendTo(setpoints);
-            $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Heater Status').appendTo(line);
+            $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Status').appendTo(line);
             $('<span></span>').addClass('picStatusData').attr('data-bind', 'heatStatus.desc').text('----').css({ maxWidth: '5.1rem', display: 'inline-block' }).appendTo(line);
             setpoints.appendTo(setpointsWrapper);
             line = $('<div></div>').attr('data-circuitid', o.circuit).addClass('outerBodyEndTime').appendTo(setpointsWrapper).css('display', 'none');
