@@ -43,6 +43,6 @@ Base for new branches: master at a5e8c15.
 |---|---|---|---|---|
 | `audit-fix-pi` | archive | Snapshot of an earlier install; fully contained in pool. | none | none |
 | `archive/2026-10-11/*` | archive | Tips of branches as they were before being re-cut on current master on 2026-10-11. | none | none |
-| `archive/2026-11-03/*` | archive | Old AutoSwg branch names (feature/auto-swg, -automation, -clean), moved here on 2026-11-03; their content is in feature/swg-assist and pool. | none | none |
+| `archive/2026-11-03/*` | archive | Old AutoSwg branch names (feature/auto-swg, -automation, -clean), moved here on 2026-11-03, and feature/swg-cell-usage, whose content moved to feature/chlorinator-log and feature/swg-assist; their content is in feature/swg-assist and pool. | none | none |
 
 The code in this fork and this page are written with the help of an AI assistant (Claude) and reviewed and run by the owner.
