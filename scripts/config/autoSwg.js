@@ -33,11 +33,11 @@
 
             var line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).css({ padding: '.25rem .25rem .75rem .25rem', fontStyle: 'italic' })
-                .text('Recommends a salt cell duty cycle from your PoolMath chlorine log, as a companion to the Chlorinator settings above. It never changes anything on its own -- review the recommendation below, then choose Apply.');
+                .text('Recommends a salt cell duty cycle from your PoolMath chlorine log, as a companion to the Chlorinator settings above. By default it only recommends: review the recommendation below, then choose Apply. If you turn on Auto-Apply Recommendations (with the automatic check) or Away protection, it applies recommendations to the SWG % itself, within its limits.');
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Enabled', binding: 'enabled' })
-                .attr('title', 'Turns this panel\'s checks on/off. Applying a recommendation always requires a separate confirmation regardless of this setting.');
+                .attr('title', 'Turns this panel\'s checks on/off. Turning it on does not by itself apply anything: a recommendation is applied only when you press Apply and confirm, or when Auto-Apply Recommendations or Away protection is on.');
 
             line = $('<div></div>').appendTo(pnl);
             self._chlorPick = $('<div></div>').appendTo(line).pickList({
@@ -95,7 +95,7 @@
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Return to the maintenance % when the target period ends', binding: 'autoStepEnabled' })
-                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Run Periods to Target", above or below target as it applied to that calculation -- has passed. This is the only change SWG Assist makes by itself, and only a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
+                .attr('title', 'After you apply a recommendation that differs from the maintenance %, automatically move the SWG % to the maintenance % (up or down, whichever way it needs to go) when the target period -- "Run Periods to Target", above or below target as it applied to that calculation -- has passed. SWG Assist makes this change by itself, even with Auto-Apply off, and only as a convenience: a target period often ends between your FC tests, and this keeps the SWG % you applied from carrying FC past the target (or leaving it short) in the meantime. It is off until you check it. Applying anything yourself, or changing the SWG % by hand, cancels the pending return.');
 
 
             line = $('<div></div>').appendTo(pnl);
