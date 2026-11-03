@@ -181,17 +181,17 @@
                         cursor: 'pointer', padding: '.4rem 0', margin: '.25rem 0',
                         fontSize: '.85em', color: '#666'
                     })
-                    .attr('title', 'Click for Automatic SWG % status')
+                    .attr('title', 'Click for SWG Assist status')
                     .on('click', function () { self._showAutoSwgPopup(); })
                     .appendTo(el);
                 // Shown while Away protection is on, above everything else here, so it is plain at a glance that the vacation settings are in place.
                 self._elAutoSwgAwayBadge = $('<div></div>').css({
                     fontWeight: 'bold', fontSize: '1em', color: '#fff', background: '#117a8b',
                     padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.25rem 0', textAlign: 'center', cursor: 'pointer'
-                }).attr('title', 'Click for Automatic SWG % status').on('click', function () { self._showAutoSwgPopup(); }).hide().insertBefore(self._elAutoSwgSummary);
+                }).attr('title', 'Click for SWG Assist status').on('click', function () { self._showAutoSwgPopup(); }).hide().insertBefore(self._elAutoSwgSummary);
                 // The controller's name -- leftmost and larger than the status text that follows.
                 $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.05em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
-                    .text('Auto SWG %').appendTo(self._elAutoSwgSummary);
+                    .text('SWG Assist %').appendTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
                 // Fully-automatic mode applies changes with no human review -- flag it loudly
                 // here if the most recent one moved the % by more than the configured warning
@@ -334,7 +334,7 @@
                 { text: 'Open Settings', icon: '<i class="fas fa-cog"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._goToAutoSwgCheck(); } },
                 { text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
             ];
-            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: Math.min(780, Math.max(300, (window.innerWidth || 780) - 24)) + 'px', height: 'auto', title: 'Automatic SWG % Status', buttons: buttons });   // wide, so the long calculation lines wrap less and the popup is not as tall; narrower than the screen on a phone
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgStatus', { width: Math.min(780, Math.max(300, (window.innerWidth || 780) - 24)) + 'px', height: 'auto', title: 'SWG Assist Status', buttons: buttons });   // wide, so the long calculation lines wrap less and the popup is not as tall; narrower than the screen on a phone
             var addLine = function (text, style) { $('<div></div>').css($.extend({ padding: '.15rem 0' }, style || {})).text(text).appendTo(dlg); };
             if (data.awayStatus === 'active') {
                 addLine('Away Mode Active' + (typeof data.awayTargetFc === 'number' ? ' -- vacation target ' + data.awayTargetFc + ' ppm' : ''), { fontWeight: 'bold', color: '#fff', background: '#117a8b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
