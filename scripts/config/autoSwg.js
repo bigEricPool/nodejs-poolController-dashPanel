@@ -1,3 +1,7 @@
+// AutoSwg is the internal name of SWG Assist. The class and file names, the `autoSwg` config key, the data/autoSwg*.json(l) files,
+// the /config/autoSwg and /state/autoSwg routes, the 'autoSwg' socket event and the browser storage keys keep the old name on purpose, so stored
+// settings and history need no migration. Text the user sees says SWG Assist.
+//
 // pic.pnlAutoSwgConfig
 // Companion panel to the Chlorinator config above: reads a PoolMath share page,
 // recommends a SWG duty-cycle %, and -- only after the user clicks Apply and
