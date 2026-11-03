@@ -191,7 +191,7 @@
                 }).attr('title', 'Click for SWG Assist status').on('click', function () { self._showAutoSwgPopup(); }).hide().insertBefore(self._elAutoSwgSummary);
                 // The controller's name -- leftmost and larger than the status text that follows.
                 $('<span class="picAutoSwgLabel"></span>').css({ fontSize: '1.05em', fontWeight: 'bold', color: '#333', marginRight: '.4rem' })
-                    .text('SWG Assist %').appendTo(self._elAutoSwgSummary);
+                    .text('SWG Assist').appendTo(self._elAutoSwgSummary);
                 self._elAutoSwgSummary.append($('<span></span>'));
                 // Fully-automatic mode applies changes with no human review -- flag it loudly
                 // here if the most recent one moved the % by more than the configured warning

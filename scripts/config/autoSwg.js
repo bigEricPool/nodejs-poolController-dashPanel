@@ -27,7 +27,7 @@
             var acc = $('<div></div>').appendTo(el).accordian({
                 columns: [{ binding: 'title', glyph: 'fas fa-tint', style: { width: '20rem' } }]
             });
-            acc[0].columns()[0].elText().text('SWG Assist % (PoolMath)');
+            acc[0].columns()[0].elText().text('SWG Assist (PoolMath)');
             var pnl = acc.find('div.picAccordian-contents');
             self._pnl = pnl;
 
