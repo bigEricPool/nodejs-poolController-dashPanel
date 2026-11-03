@@ -56,16 +56,12 @@
                 self._updateManualTimeFields(evt.newItem && evt.newItem.val);
             });
 
-            line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).inputField({ required: true, labelText: 'PoolMath Share Code', binding: 'shareCode', inputAttrs: { maxlength: 60, style: { width: '10rem' } } })
-                .attr('title', "e.g. 'tfp-452124', or a full share URL");
-            $('<div></div>').appendTo(line).inputField({ labelText: 'Pool/Body Name', binding: 'poolName', inputAttrs: { maxlength: 40, style: { width: '8rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', 'Restricts parsing to this water body\'s section on a multi-body PoolMath page (leave blank if you only have one).');
+            // The PoolMath share code and pool name are the pool's, set under PoolMath History above (they are no longer part of these settings).
+            $('<div></div>').appendTo(pnl).text('PoolMath share code and pool name: see PoolMath History above.').css({ fontSize: '.85em', color: '#666', margin: '.2rem 0' });
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Pool Volume', binding: 'gallons', min: 500, max: 200000, step: 100, units: 'gal', inputAttrs: { style: { width: '5rem' } } });
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'SWG Capacity', binding: 'swgLbsPerDay', min: 0.10, max: 10, step: 0.01, units: 'lbs/day', inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                .attr('title', "SWG's manufacturer-rated chlorine production per 24-hour day at 100% output (the spec-sheet figure). Only the portion that fits in the run window below is counted as available.");
+            // The cell's rating (lbs/day) is the chlorinator's: set it in the Chlorinator panel above.
 
             line = $('<div></div>').appendTo(pnl);
             self._elSwgStartTime = $('<div></div>').appendTo(line).inputField({ labelText: 'SWG Run Start', binding: 'swgStartTime', inputAttrs: { maxlength: 8, style: { width: '4rem' } } })
@@ -462,11 +458,12 @@
             var self = this;
             if (!self._elSwgCapacity) return;
             if (cfg && cfg.swgWindow) self._swgWindow = cfg.swgWindow;
+            if (cfg && typeof cfg.swgLbsPerDay === 'number') self._swgLbsPerDay = cfg.swgLbsPerDay;
             var w = self._swgWindow;
             if (!w || !(w.hours > 0)) { self._elSwgCapacity.hide(); return; }
             var v = {};
             try { v = dataBinder.fromElement(self._pnl) || {}; } catch (e) { v = {}; }
-            var gal = Number(v.gallons), lbs = Number(v.swgLbsPerDay);
+            var gal = Number(v.gallons), lbs = Number(self._swgLbsPerDay);
             var ppm = gal > 0 && lbs > 0 ? (lbs * 1000000) / (gal * 8.34) * (w.hours / 24) : w.ppmPerDayAtFull;
             if (!(ppm > 0)) { self._elSwgCapacity.hide(); return; }
             var src = w.note && /schedule #/.test(w.note) ? ', from ' + /schedule #\d+/.exec(w.note)[0] : '';
