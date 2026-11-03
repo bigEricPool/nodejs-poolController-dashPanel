@@ -167,6 +167,9 @@
             $('<span></span>').addClass('picTempData').attr('data-bind', 'temp').attr('data-fmttype', 'number').attr('data-fmtmask', tempFmt).attr('data-fmtempty', '--.-').appendTo(line);
             $('<label></label>').addClass('picUnitSymbol').html('&deg').css({ fontSize: '.4em', verticalAlign:'top', display:'inline-block', paddingTop:'.25em' }).appendTo(line);
             $('<span></span>').addClass('picTempUnits').text('-').css({ fontSize: '.4em', verticalAlign: 'top', display: 'inline-block', paddingTop: '.25em'}).appendTo(line);
+            // The time the temperature above is as of: when njsPC was last fed it, or, marked with an asterisk, when it was read at the solar pump
+            // speed (see setEquipmentData).
+            $('<div></div>').addClass('picTempAsOf').css({ fontSize: '.7rem', whiteSpace: 'nowrap' }).hide().appendTo(bodyTemp);
             // The average, high and low of the last 24 hours of readings, from what njsPC publishes on the body.
             $('<div></div>').addClass('picTempAvg').css({ display: 'none', fontSize: '0.65rem', lineHeight: '1.1', marginTop: '.25em', whiteSpace: 'normal' }).appendTo(bodyTemp);
             bodyTemp.appendTo(el);
@@ -192,6 +195,12 @@
             $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Status').appendTo(line);
             $('<span></span>').addClass('picStatusData').attr('data-bind', 'heatStatus.desc').text('----').css({ maxWidth: '5.1rem', display: 'inline-block' }).appendTo(line);
             setpoints.appendTo(setpointsWrapper);
+            // The water coming back from the solar collector, and its gain over the pool water while solar runs, when njsPC has a return sensor.
+            line = $('<div></div>').addClass('picSolarReturn').css({ display: 'none' }).appendTo(setpoints);
+            $('<label></label>').addClass('picInline-label').addClass('picSetpointText').text('Solar Return').appendTo(line);
+            $('<span></span>').addClass('picSolarReturnData').appendTo(line);
+            // Why solar is waiting (a settle delay, a hysteresis, the reheat guard), from the heatNote njsPC publishes on the body.
+            $('<div></div>').addClass('picHeatNote').css({ display: 'none', fontSize: '0.65rem', fontStyle: 'italic', lineHeight: '1.1', maxWidth: '12rem', marginTop: '.25rem' }).appendTo(setpointsWrapper);
             line = $('<div></div>').attr('data-circuitid', o.circuit).addClass('outerBodyEndTime').appendTo(setpointsWrapper).css('display', 'none');
             $('<label></label>').addClass('picInline-label').attr('data-circuitid', o.circuit).addClass('picSetpointText').text('Time to off').appendTo(line);
             $('<span class="bodyCircuitEndTime"></span>').appendTo(line);
@@ -268,8 +277,10 @@
                     heatMode: parseInt(body.attr('data-heatmode'), 10),
                     setPoint: parseInt(body.attr('data-setpoint'), 10),
                     coolSetpoint: parseInt(body.attr('data-coolsetpoint'), 10),
-                    hasCooling: makeBool(body.attr('data-hascooling'))
+                    hasCooling: makeBool(body.attr('data-hascooling')),
+                    solarOnly: makeBool(body.attr('data-solaronly'))
                 };
+                var openPopover = function (solarHeaters) {
                 $.getApiService('/v2/config/body/' + el.attr('data-id') + '/heatModes', null, function (data, status, xhr) {
                     console.log(data);
                     var units = el.parents('div.picBodies:first').attr('data-unitsname');
@@ -289,6 +300,9 @@
                             }
                             return false;
                         };
+                        // The Cool Point must be above the Heat Point, except on a Nixie body heated by solar only, where nocturnal cooling is a separate
+                        // control that does not conflict with heating (a heat pump or UltraTemp would switch between heating and cooling).
+                        var coolMin = function (heat) { return settings.solarOnly ? (units === "F" ? 40 : 5) : heat + 1; };
                         var syncCoolVis = function (modeVal) {
                             var canCool = modeCanCool(modeVal);
                             divPopover.find('div[data-bind="coolSetpoint"]').toggle(canCool);
@@ -297,10 +311,11 @@
                             $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Heat Point', val: settings.setPoint, min: units === "F" ? 40 : 5, max: units === "F" ? 104 : 41, step: 1, binding: 'heatSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
                                 .on('change', function (e) {
                                     var coolSetpoint;
-                                    divPopover.find('div[data-bind="coolSetpoint"]').each(function () { this.minVal(e.value + 1); coolSetpoint = this.val(); });
+                                    divPopover.find('div[data-bind="coolSetpoint"]').each(function () { this.minVal(coolMin(e.value)); coolSetpoint = this.val(); });
                                     self.putSetpoints(e.value, undefined);
                                 });
-                            $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: settings.coolSetpoint || settings.setPoint + 1, min: settings.setPoint + 1, max: units === "F" ? 104 : 41, step: 1, binding: 'coolSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
+                            $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: settings.coolSetpoint || settings.setPoint + 1, min: coolMin(settings.setPoint), max: units === "F" ? 104 : 41, step: 1, binding: 'coolSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
+                                .attr('title', settings.solarOnly ? 'On a solar only body the Cool Point can be at or below the Heat Point. Nocturnal cooling then works against daytime heating, so keep it at or above the Heat Point minus the solar run delta (3 by default) to avoid heating and cooling the pool every day.' : '')
                                 .on('change', function (e) { self.putSetpoints(undefined, e.value); });
                         }
                         else
@@ -312,11 +327,40 @@
                             self.putHeatMode(parseInt(e.newVal, 10));
                             if (settings.hasCooling) syncCoolVis(parseInt(e.newVal, 10));
                         });
+                        // Same setting as Nocturnal Cooling on the heater config page. The Cool Point
+                        // field above only appears once this is on, so reopen this dialog after enabling it.
+                        if (solarHeaters.length > 0) {
+                            $('<div></div>').appendTo(evt.contents())
+                                .checkbox({ labelText: 'Nocturnal Cooling', binding: 'coolingEnabled', value: solarHeaters.some(function (h) { return makeBool(h.coolingEnabled); }) })
+                                .attr('title', 'Check this to enable cooling when the body is on and the solar temperature is less than the water temperature.')
+                                .on('changed', function (e) {
+                                    solarHeaters.forEach(function (h) {
+                                        h.coolingEnabled = e.newVal;
+                                        $.putApiService('/config/heater', { id: h.id, coolingEnabled: e.newVal }, function () { });
+                                    });
+                                });
+                        }
                     });
                     divPopover.popover({ title: body.attr('data-body') + ' Heat Settings', popoverStyle: 'modal', placement: { target: body } });
                     divPopover[0].show(body);
                     // Min/max 65F-104F
                 });
+                };
+                // The nocturnal cooling option is saved through the heater config, which is only
+                // done here for Nixie (njsPC-controlled) solar heaters on this body.
+                var bodyId = parseInt(el.attr('data-id'), 10);
+                if (($('div.dashOuter').attr('data-controllertype') || '').toLowerCase() === 'nixie' && body.attr('data-hassolar') === 'true') {
+                    $.getApiService('/config/options/heaters', null, function (hopts) {
+                        var solarVal = ((hopts && hopts.heaterTypes) || []).filter(function (t) { return t.name === 'solar'; }).map(function (t) { return t.val; })[0];
+                        var solarHeaters = ((hopts && hopts.heaters) || []).filter(function (h) {
+                            var tv = typeof h.type === 'object' && h.type !== null ? h.type.val : h.type;
+                            var hb = typeof h.body === 'object' && h.body !== null ? h.body.val : h.body;
+                            return tv === solarVal && (hb === 32 ? bodyId <= 2 : bodyId === hb + 1);
+                        });
+                        openPopover(solarHeaters);
+                    });
+                }
+                else openPopover([]);
             });
         },
         setEquipmentData: function (data) {
@@ -328,6 +372,24 @@
             try {
                 if (typeof data.isCovered !== 'undefined') el.attr('data-covered', data.isCovered);
                 if (typeof data.temp === 'undefined') el.find('span.picTempData').text('--');
+                // The temperature is shown with the time it is as of (njsPC's tempTime, when it was last fed the reading). While solar waits out its check
+                // period, the temperature shown is the reading taken at the solar pump speed at the last check (solarCheckTemp), marked with an asterisk,
+                // and the time is when that was read. While the check itself is running (solarChecking), it is the reading from before the pump sped up,
+                // without the asterisk, so the number does not jump until the check is over. The live reading is in the tooltip.
+                var tempData = el.find('span.picTempData'), tempAsOf = el.find('div.picTempAsOf');
+                var asOfText = function (iso) { var dt = new Date(iso); return typeof iso === 'undefined' || iso === null || isNaN(dt.getTime()) ? '' : dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
+                if (typeof data.solarCheckTemp === 'number') {
+                    var tempMask = tempData.attr('data-fmtmask') || '#,##0';
+                    var checking = makeBool(data.solarChecking);
+                    var tip = (checking ? 'Read before the pump sped up for the solar check, which is under way. The number changes when the check is over.' : '* Read with the pump at its solar speed, at the time shown: at the last solar check, or as solar last ran. The water sensor reads differently at the normal pump speed, so this is the reading solar goes by.') + (typeof data.temp === 'number' ? ' The sensor reads ' + data.temp.format(tempMask, '--') + ' now.' : '');
+                    tempData.text(data.solarCheckTemp.format(tempMask, '--') + (checking ? '' : '*')).attr('title', tip);
+                    tempAsOf.text((checking ? 'as of ' : '* as of ') + (asOfText(data.solarCheckTime) || 'the last solar check')).attr('title', tip).show();
+                }
+                else {
+                    tempData.removeAttr('title');
+                    if (asOfText(data.tempTime) !== '') tempAsOf.text('as of ' + asOfText(data.tempTime)).removeAttr('title').show();
+                    else if (typeof data.tempTime !== 'undefined' || typeof data.temp === 'undefined') tempAsOf.text('').hide();
+                }
                 if (typeof data.showInDashboard !== 'undefined') {
                     if (makeBool(data.showInDashboard) === false) el.hide();
                     else el.show();
@@ -344,6 +406,19 @@
                 self.disabled(data.stopDelay);
                 el.attr('data-setpoint', data.setPoint);
                 el.attr('data-coolsetpoint', data.coolSetpoint);
+                el.attr('data-hassolar', typeof data.heaterOptions !== 'undefined' && data.heaterOptions.solar > 0);
+                // Every heater on this body is solar, on a Nixie controller (the panels enforce their own setpoint rules).
+                el.attr('data-solaronly', (pnlType || '').toLowerCase() === 'nixie' && typeof data.heaterOptions !== 'undefined' && data.heaterOptions.total > 0 && data.heaterOptions.solar === data.heaterOptions.total);
+                var solarReturn = el.find('div.picSolarReturn');
+                if (typeof data.solarReturnTemp === 'number') {
+                    var gain = typeof data.solarGain === 'number' ? ' (' + (data.solarGain >= 0 ? '+' : '') + data.solarGain.format('#,##0.0', '--') + '\u00B0)' : '';
+                    solarReturn.find('span.picSolarReturnData').text(data.solarReturnTemp.format('#,##0.0', '--') + '\u00B0' + gain);
+                    solarReturn.attr('title', 'The water coming back from the solar collector' + (gain ? ', and how much warmer it is than the pool water' : '') + '.').show();
+                }
+                else solarReturn.hide();
+                var heatNote = el.find('div.picHeatNote');
+                if (data.heatNote) heatNote.text(data.heatNote).attr('title', data.heatNote).show();
+                else heatNote.text('').removeAttr('title').hide();
                 var tempAvg = el.find('div.picTempAvg');
                 if (typeof data.avgTemp24h === 'number') {
                     var avgUnits = el.parents('div.picBodies:first').attr('data-unitsname') || '';
