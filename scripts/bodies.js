@@ -167,6 +167,8 @@
             $('<span></span>').addClass('picTempData').attr('data-bind', 'temp').attr('data-fmttype', 'number').attr('data-fmtmask', tempFmt).attr('data-fmtempty', '--.-').appendTo(line);
             $('<label></label>').addClass('picUnitSymbol').html('&deg').css({ fontSize: '.4em', verticalAlign:'top', display:'inline-block', paddingTop:'.25em' }).appendTo(line);
             $('<span></span>').addClass('picTempUnits').text('-').css({ fontSize: '.4em', verticalAlign: 'top', display: 'inline-block', paddingTop: '.25em'}).appendTo(line);
+            // The average, high and low of the last 24 hours of readings, from what njsPC publishes on the body.
+            $('<div></div>').addClass('picTempAvg').css({ display: 'none', fontSize: '0.65rem', lineHeight: '1.1', marginTop: '.25em', whiteSpace: 'normal' }).appendTo(bodyTemp);
             bodyTemp.appendTo(el);
 
             var setpointsWrapper = $('<div></div>').appendTo(el);
@@ -342,6 +344,18 @@
                 self.disabled(data.stopDelay);
                 el.attr('data-setpoint', data.setPoint);
                 el.attr('data-coolsetpoint', data.coolSetpoint);
+                var tempAvg = el.find('div.picTempAvg');
+                if (typeof data.avgTemp24h === 'number') {
+                    var avgUnits = el.parents('div.picBodies:first').attr('data-unitsname') || '';
+                    // The last 24 hours always end now, so these move on as time passes (not a calendar day).
+                    var hasRange = typeof data.maxTemp24h === 'number' && typeof data.minTemp24h === 'number';
+                    var atTime = function (iso) { var d = iso ? new Date(iso) : undefined; return d && !isNaN(d.getTime()) ? ' at ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''; };
+                    // The same order as the Weather and Water panels: high and low first, then the average.
+                    tempAvg.text('24 h ' + (hasRange ? 'high ' + data.maxTemp24h.toFixed(1) + ' / low ' + data.minTemp24h.toFixed(1) + ' \u00B7 ' : '') + 'avg ' + data.avgTemp24h.toFixed(1) + '\u00B0' + avgUnits).show();
+                    var span = typeof data.avgTempHours === 'number' && data.avgTempHours < 24 ? 'the last ' + data.avgTempHours.toFixed(1) + ' hours of readings (njsPC has recorded this long so far)' : 'the last 24 hours of readings';
+                    tempAvg.attr('title', 'Average of ' + span + (hasRange ? '. High ' + data.maxTemp24h.toFixed(1) + atTime(data.maxTemp24hAt) + ', low ' + data.minTemp24h.toFixed(1) + atTime(data.minTemp24hAt) : '') + '. Readings are taken while the body is on.');
+                }
+                else tempAvg.text('').removeAttr('title').hide();
                 if (typeof data.heaterOptions === 'undefined' || data.heaterOptions.total < 1) {
                     el.find('div.picBodySetpoints').hide();
                     el.find('div.picSetpointText').text('Set Point');

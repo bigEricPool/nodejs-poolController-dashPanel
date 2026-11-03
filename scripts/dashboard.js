@@ -21,6 +21,7 @@
             el.find('div.picFilters').each(function () { this.initFilters(); });
             el.find('div.picValves').each(function () { this.initValves(); });
             el.find('div.picCovers').each(function () { this.initCovers(); });
+            el.find('div.picWater').each(function () { this.initWater(); });
         },
         _createControllerPanel: function (data) {
             var self = this, o = self.options, el = self.element;
@@ -50,6 +51,10 @@
         _createCoversPanel: function (data) {
             var self = this, o = self.options, el = self.element;
             el.find('div.picCovers').each(function () { this.initCovers(data); });
+        },
+        _createWaterPanel: function (data) {
+            var self = this, o = self.options, el = self.element;
+            el.find('div.picWater').each(function () { this.initWater(data); });
         },
 
         _reset: function () {
@@ -164,6 +169,7 @@
                     self._createFiltersPanel(data);
                     self._createValvesPanel(data);
                     self._createCoversPanel(data);
+                    self._createWaterPanel(data);
                     if (typeof data.equipment !== 'undefined' && typeof data.equipment.messages !== 'undefined') {
                         $('div.picSysMessages').each(function () {
                             console.log('binding messages');
@@ -225,6 +231,7 @@
                     self._createFiltersPanel(data);
                     self._createValvesPanel(data);
                     self._createCoversPanel(data);
+                    self._createWaterPanel(data);
                     self._initSockets();
                     console.log(data);
                     console.log('initializing element order');
@@ -273,12 +280,16 @@
                     $(':root').css('--picCovers-order', getStorage('--picCovers-order'));
                     if (typeof getStorage('--picCovers-display') === 'undefined') setStorage('--picCovers-display', $(':root').css('--picCovers-display'));
                     $(':root').css('--picCovers-display', getStorage('--picCovers-display'));
+                    if (typeof getStorage('--picWater-order') === 'undefined') setStorage('--picWater-order', $(':root').css('--picWater-order'));
+                    $(':root').css('--picWater-order', getStorage('--picWater-order'));
+                    if (typeof getStorage('--picWater-display') === 'undefined') setStorage('--picWater-display', $(':root').css('--picWater-display'));
+                    $(':root').css('--picWater-display', getStorage('--picWater-display'));
 
                     if (typeof getStorage('--show-time-remaining') === 'undefined') setStorage('--show-time-remaining', $(':root').css('--show-time-remaining'));
                     $(':root').css('--show-time-remaining', getStorage('--show-time-remaining'));
 
                     // put elements in correct container div
-                    let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers'];
+                    let arr = ['picBodies', 'picCircuits', 'picLights', 'picSchedules', 'picChemistry', 'picPumps', 'picVirtualCircuits', 'picFilters', 'picValves', 'picCovers', 'picWater'];
                     arr.forEach(id => {
                         console.log(id);
                         let el = $(`.${id}`);
