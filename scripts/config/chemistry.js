@@ -290,6 +290,11 @@
             });
             // The pool's PoolMath share: njsPC reads the pool's log history from it (cell usage before the output log began, the pool volume).
             $('<div></div>').appendTo(el).pnlPoolMathConfig({});
+
+            // SWG Assist: companion panel that recommends (and, on confirmation, applies)
+            // a SWG% from PoolMath logs. Independent of the Chlorinator/ChemController/
+            // ChemDoser panels above -- it does not replace or disable any of them.
+            $('<div></div>').appendTo(el).pnlAutoSwgConfig({});
         }
     });
     $.widget('pic.pnlPoolMathConfig', {
@@ -1163,10 +1168,7 @@
                         $.pic.modalDialog.createConfirm('dlgChlorCellDate', { message: 'Enter the In Service Since date as YYYY-MM-DD, or leave it empty.', width: '350px', height: 'auto', title: 'Cell Date', buttons: [{ text: 'OK', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
                         return;
                     }
-                    $.putApiService('/config/chlorinator', v, 'Saving Chlorinator...', function (c, status, xhr) {
-                        console.log(c);
-                        self.dataBind(c);
-                    });
+                    self._confirmAndSaveChlorinator(v);
                 }
             });
             var btnDetails = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Details', icon: '<i class="fas fa-circle-info"></i>' }).addClass('chlorDetails').attr('title', 'Shows the latest message of each kind received from the chlorinator over RS485.');
@@ -1241,6 +1243,40 @@
                 });
             });
         },
+        // Actually performs the save.
+        _saveChlorinator: function (v) {
+            var self = this;
+            $.putApiService('/config/chlorinator', v, 'Saving Chlorinator...', function (c, status, xhr) {
+                console.log(c);
+                self.dataBind(c);
+            });
+        },
+        // If the Pool/Spa Setpoint being saved differs from what's currently in effect, and
+        // SWG Assist has a pending step queued, saving cancels it (see
+        // ChlorinatorState.onPoolSetpointChanged in njsPC) -- warn before actually submitting,
+        // mirroring the same guard on the dashboard's quick-setpoint popover.
+        _confirmAndSaveChlorinator: function (v) {
+            var self = this;
+            var orig = self._data || {};
+            var changedSetpoint = (typeof v.poolSetpoint !== 'undefined' && Number(v.poolSetpoint) !== Number(orig.poolSetpoint))
+                || (typeof v.spaSetpoint !== 'undefined' && Number(v.spaSetpoint) !== Number(orig.spaSetpoint));
+            if (!changedSetpoint) { self._saveChlorinator(v); return; }
+            $.getApiService('/state/autoSwg', null, function (result) {
+                if (result && result.stepAt) {
+                    $.pic.modalDialog.createConfirm('dlgConfirmManualSwgOverrideCfg', {
+                        message: 'SWG Assist has a pending step to change the SWG % to ' + result.stepPct + '% on '
+                            + new Date(result.stepAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+                            + '. Changing the SWG % now will cancel it. Continue?',
+                        width: '420px', height: 'auto', title: 'Cancel Pending SWG Assist Step?',
+                        buttons: [
+                            { text: 'Continue', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._saveChlorinator(v); } },
+                            { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                        ]
+                    });
+                }
+                else self._saveChlorinator(v);
+            });
+        },
         dataBind: function (obj) {
             var self = this, o = self.options, el = self.element;
             var acc = el.find('div.picAccordian:first');
@@ -1262,6 +1298,7 @@
                 obj.portId = 0; // Force the port id to be the OCP.
             }
             dataBinder.bind(el, obj);
+            self._data = obj;
             self._loadCellUsage(obj);
         },
         // The cell's rating in effect (the default when none is set) and what the cell has made, from njsPC. Hidden when njsPC does not have them.
