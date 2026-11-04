@@ -88,6 +88,12 @@
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Boost Over', binding: 'bandBoostPeriods', min: 0.5, max: 5, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only, so 1 is about a day) a boost takes to bring FC back to the middle of the range. 1 is a firm push; a larger number is gentler and longer. A boost only happens when FC is projected below FC Low.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep the Afternoon Peak Under FC High', binding: 'bandPeakCap' })
+                .attr('title', 'The SWG makes all of its chlorine in its run window, faster than the pool uses it, so FC climbs about half a ppm from the morning low to the afternoon peak. With this on, the SWG % is held down just enough that the afternoon peak, worked out from the projected FC, stays at or under FC High (less a quarter ppm). It only ever lowers the % while FC is inside the range; it does not touch a boost below the range or the hold at 0% above it.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Correct the Hold from the Last Readings', binding: 'bandIntegral' })
+                .attr('title', 'The maintenance % comes from an average of the pool\'s recent burn, which follows a change in season or weather only slowly. With this on, when your last three FC tests average above the middle of the range the hold is trimmed down a little more, and when they average below it the hold is trimmed up (by 30% of the maintenance % at most, reaching that only at the edge of the range). It needs at least two readings and a last reading no more than 3 days old.');
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Aim Above Target as the Last Test Ages', binding: 'overshootPpmPerDay', min: 0, max: 0.5, step: 0.05, units: 'ppm per day (0 = aim at the target)', inputAttrs: { style: { width: '3.5rem' } } })
@@ -182,7 +188,7 @@
             try { self._calcDetailsOpen = window.localStorage.getItem('autoSwgCalcDetailsOpen') === '1'; } catch (e) { /* storage unavailable */ }
             self._tuningOpen = false;
             try { self._tuningOpen = window.localStorage.getItem('autoSwgTuningOpen') === '1'; } catch (e) { /* storage unavailable */ }
-            self._tuningDefaults = { windowDays: 21, daytimeLossSharePct: 0, nightBurnRatio: 0.5, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8, burnTempAdjust: false };
+            self._tuningDefaults = { windowDays: 14, daytimeLossSharePct: 0, nightBurnRatio: 0.5, creditChlorineAdditions: true, fcAnomalyTolerancePpm: 2, projectionWeight: 0.5, projectionTaperStartDays: 3, projectionTaperEndDays: 8, burnTempAdjust: false };
             self._elTuningToggle = $('<div></div>').appendTo(pnl)
                 .css({ cursor: 'pointer', margin: '.6rem 0 .2rem 0', userSelect: 'none', fontWeight: 'bold' })
                 .append($('<i class="fas fa-chevron-right"></i>').css({ width: '1rem', display: 'inline-block' }))
