@@ -341,7 +341,7 @@
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60', margin: '.2rem 0' }).hide();
             self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
-            // The background PoolMath history archive (up to 18 months of logs, pulled from PoolMath's
+            // The background PoolMath history archive (up to 48 months of logs, pulled from PoolMath's
             // JSON interface for longer-range features such as a last-year consumption lookback).
             self._elArchiveStatus = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             // What's actually explaining the % running on the chlorinator right now (saved at
@@ -1437,7 +1437,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
                     + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
-                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
+                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
                     + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
                     + 'The local SWG % log is kept for 48 months.';
