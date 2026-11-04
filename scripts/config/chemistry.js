@@ -369,7 +369,7 @@
             var gallons = pm && pm.gallons > 0 ? pm.gallons : 0;
             if (!pmName && !gallons) return;
             $.getApiService('/config/options/bodies', null, function (opts, status, xhr) {
-                var bodies = (opts && $.isArray(opts.bodies) ? opts.bodies : []).filter(function (b) { return b && b.isActive !== false; });
+                var bodies = (opts && Array.isArray(opts.bodies) ? opts.bodies : []).filter(function (b) { return b && b.isActive !== false; });
                 if (!bodies.length) return;
                 var body = bodies.length === 1 ? bodies[0] : (bodies.find(function (b) { return Number(b.type) === 0; }) || bodies.find(function (b) { return b.id === 1; }) || bodies[0]);
                 var bodyName = body.name || ('Body ' + body.id);
