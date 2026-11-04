@@ -61,6 +61,15 @@
       "build": true
     },
     {
+      "name": "fix/chlor-spa-setpoint-single-body",
+      "kind": "fix",
+      "status": "active",
+      "purpose": "The chlorinator settings show the Spa Setpoint only when the system has a spa (spa, body2 or shared pool/spa); hidden on a single body. Cut from upstream master; upstream candidate.",
+      "depends": [],
+      "upstream": "",
+      "build": true
+    },
+    {
       "name": "feature/chlorinator-rs485-diag",
       "kind": "feature",
       "status": "active",

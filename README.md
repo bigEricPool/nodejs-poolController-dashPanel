@@ -15,6 +15,7 @@ Base for new branches: master at a5e8c15.
 | `pool-next` | integration | pool rebuilt from the branches in this list, in a fixed order. It is replaced at every rebuild; pool takes it over after testing. | all module and fix branches | none |
 | `fix/layout-editor-order` | fix | The layout editor lists the panels in their saved order, not a fixed built-in order. | none | not yet reported; upstream candidate |
 | `fix/body-card-width` | fix | Body card layout: narrower heat settings box, smaller temperature, centered on/off box. | none | none |
+| `fix/chlor-spa-setpoint-single-body` | fix | The chlorinator settings show the Spa Setpoint only when the system has a spa (spa, body2 or shared pool/spa); hidden on a single body. Cut from upstream master; upstream candidate. | none | none |
 | `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
 | `feature/chlorinator-log` | feature | Chlorinator logging UI: the chlorinator panel's cell usage and log settings. Pairs with njsPC feature/chlorinator-log. Cut from upstream master, intended for upstream; SWG Assist builds on it. | none | none |
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
