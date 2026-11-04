@@ -1440,7 +1440,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 18 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
                     + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
-                    + 'The local SWG % log is kept for 18 months.';
+                    + 'The local SWG % log is kept for 48 months.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
