@@ -1076,7 +1076,10 @@
 
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Pool Setpoint', binding: binding + 'poolSetpoint', min: 0, max: 100, step: 1, units: '%', inputAttrs: { maxlength: 4 }, labelAttrs: { style: { marginLeft: '4rem', width: '5.9rem', marginRight: '.25rem' } } });
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Spa Setpoint', binding: binding + 'spaSetpoint', min: 0, max: 100, step: 1, units: '%', inputAttrs: { maxlength: 4 }, labelAttrs: { style: { marginLeft: '4rem', marginRight: '.25rem' } } });
+            var spaSetpoint = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Spa Setpoint', binding: binding + 'spaSetpoint', min: 0, max: 100, step: 1, units: '%', inputAttrs: { maxlength: 4 }, labelAttrs: { style: { marginLeft: '4rem', marginRight: '.25rem' } } });
+            // A system without a spa (a single body) has no use for the spa setpoint, so it is hidden; the value is kept as it is.
+            var hasSpa = (o.bodies || []).some(function (b) { return b.name === 'spa' || b.name === 'body2' || b.name === 'poolspa'; });
+            if (!hasSpa) spaSetpoint.hide();
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Super Chlor', binding: binding + 'superChlorHours', min: 1, max: 96, step: 1, units: 'hours', inputAttrs: { maxlength: 4 }, labelAttrs: { style: { marginLeft: '4rem', width: '5.9rem', marginRight: '.25rem' } } });
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Ignore Salt Reading', binding: binding + 'ignoreSaltReading' }).attr('title', `Check this box if you are feeding the salt display reading from a source other than the onboard conductivity probe for the cell.`).css({ marginLeft: '1.7rem' });
