@@ -318,6 +318,8 @@
             $('<div></div>').appendTo(line).inputField({ labelText: 'Pool Name', binding: 'poolName', inputAttrs: { maxlength: 60, style: { width: '12rem' } }, labelAttrs: { style: { width: '5.9rem' } } })
                 .attr('title', 'The pool\'s name in PoolMath, when the share has more than one pool. Empty means the first pool.');
             self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 6.2rem' }).hide();
+            // PoolMath's volume against the body capacity: a note when they agree, a warning (and, on Nixie, a copy button) when not.
+            self._elVolume = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '0 0 .3rem 6.2rem' }).hide();
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save PoolMath', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
@@ -339,7 +341,7 @@
             var hasCode = !!(cfg && cfg.shareCode);
             var cols = self.element.find('div.picAccordian:first')[0].columns();
             cols[1].elText().text(hasCode ? 'On' : 'Off');
-            if (!hasCode) { self._elStatus.hide(); return; }
+            if (!hasCode) { self._elStatus.hide(); if (self._elVolume) self._elVolume.empty().hide(); return; }
             $.getApiService('/state/poolMath', null, function (st, status, xhr) {
                 if (!st || typeof st !== 'object') return;
                 var parts = [];
@@ -349,6 +351,55 @@
                 if (st.pool && st.pool.gallons > 0) parts.push('Volume ' + st.pool.gallons.toLocaleString() + ' gal' + (st.pool.swgLbsPerDay > 0 ? ', SWG rating ' + st.pool.swgLbsPerDay + ' lb/day' : '') + '.');
                 if (st.error) parts.push('Last error: ' + st.error);
                 self._elStatus.text(parts.join(' ')).show();
+                self._compareVolume(st.pool && st.pool.gallons > 0 ? st.pool.gallons : 0);
+            });
+        },
+        // Compares PoolMath's volume with the pool body's capacity (the only body, else the pool). Nothing is written unless the user
+        // copies it, and the copy is offered only on Nixie: on IntelliCenter and *Touch the body settings belong to the controller.
+        _compareVolume: function (gallons) {
+            var self = this, el = self._elVolume;
+            if (!el) return;
+            el.empty().hide();
+            if (!(gallons > 0)) return;
+            $.getApiService('/config/options/bodies', null, function (opts, status, xhr) {
+                var bodies = (opts && $.isArray(opts.bodies) ? opts.bodies : []).filter(function (b) { return b && b.isActive !== false; });
+                if (!bodies.length) return;
+                var body = bodies.length === 1 ? bodies[0] : (bodies.find(function (b) { return Number(b.type) === 0; }) || bodies.find(function (b) { return b.id === 1; }) || bodies[0]);
+                var name = body.name || ('Body ' + body.id);
+                var fmt = function (v) { return Number(v).toLocaleString() + ' gal'; };
+                var units = typeof body.capacityUnits === 'object' && body.capacityUnits !== null ? body.capacityUnits.val : body.capacityUnits;
+                if (typeof units !== 'undefined' && units !== null && Number(units) !== 1) {
+                    $('<span></span>').appendTo(el).css({ color: '#666' }).text('The ' + name + ' body capacity is not in gallons, so it was not compared with PoolMath\'s ' + fmt(gallons) + '.');
+                    el.show();
+                    return;
+                }
+                var cap = Number(body.capacity) || 0;
+                if (cap === gallons) {
+                    $('<span></span>').appendTo(el).css({ color: '#666' }).text('Matches the ' + name + ' body capacity.');
+                    el.show();
+                    return;
+                }
+                $('<span></span>').appendTo(el).css({ color: '#b35900', fontWeight: 'bold' }).html('<i class="fas fa-exclamation-triangle"></i> ')
+                    .append($('<span></span>').text('PoolMath says ' + fmt(gallons) + '; the ' + name + ' body is set to ' + (cap > 0 ? fmt(cap) : 'no capacity') + '.'));
+                var isNixie = (($('body').attr('data-controllertype') || '').toLowerCase() === 'nixie');
+                if (isNixie) {
+                    var btn = $('<div></div>').appendTo(el).actionButton({ text: 'Copy to ' + name, icon: '<i class="fas fa-copy"></i>' }).css({ marginLeft: '.5rem' });
+                    btn.on('click', function (e) {
+                        $.pic.modalDialog.createConfirm('dlgConfirmCopyPoolMathVolume', {
+                            message: 'Set the ' + name + ' body capacity to ' + fmt(gallons) + ' (now ' + (cap > 0 ? fmt(cap) : 'not set') + ')? This changes the body settings, the same as saving it under Bodies.',
+                            width: '380px', height: 'auto', title: 'Copy PoolMath Volume',
+                            buttons: [
+                                { text: 'Copy', icon: '<i class="fas fa-copy"></i>', click: function () {
+                                    $.pic.modalDialog.closeDialog(this);
+                                    $.putApiService('/config/body', { id: body.id, capacity: gallons }, 'Saving Body...', function (b, status, xhr) { self._compareVolume(gallons); });
+                                } },
+                                { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                            ]
+                        });
+                    });
+                }
+                else $('<span></span>').appendTo(el).css({ color: '#666', marginLeft: '.5rem' }).text('Change it under Bodies if PoolMath is right; on this controller the body settings belong to the controller.');
+                el.show();
             });
         }
     });
