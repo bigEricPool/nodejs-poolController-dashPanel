@@ -37,7 +37,10 @@
             var pnl = $('<div></div>').addClass('pnl-solar-settings').css({ margin: '1rem 0' }).appendTo(parent);
             $('<div></div>').appendTo(pnl).css({ fontWeight: 'bold', marginBottom: '.25rem' }).text('Solar Controls')
                 .attr('title', 'Settings for the solar decision on this controller (njsPC config.json, controller.solar). A change applies at once.');
-            var line = $('<div></div>').appendTo(pnl);
+            var units = '&deg;' + ((opts.tempUnits || {}).name || '');
+            // The solar settings are bound inside fields; the set points below are body values and are saved through the body set point route.
+            var fields = $('<div></div>').addClass('pnl-solar-fields').appendTo(pnl);
+            var line = $('<div></div>').appendTo(fields);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Settle Delay', binding: 'settleMinutes', min: 0, max: 60, step: 1, units: 'min', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', 'After the pump starts or solar turns off, solar waits this long before starting. Solar stops for the water temperature only after the water has stayed past the stop level this long. 0 turns the delay off.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Hysteresis', binding: 'hysteresis', min: 0, max: 5, step: 0.5, units: '&deg;' + ((opts.tempUnits || {}).name || ''), inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
@@ -46,22 +49,60 @@
                 .attr('title', 'When solar should start, the pump first runs at its solar speed for this long with the valve relay still off, and the start is checked again with the readings taken at that speed. The valve relay turns on only if it is still worthwhile. Needs a pump speed tied to the solar circuit. 0 turns it off. To see whether your pool needs it: with solar off, compare the water reading at the normal pump speed with the reading two minutes after switching to the solar pump speed. If they differ by more than the hysteresis, set this to 120.');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Check Period', binding: 'checkPeriodMinutes', min: 0, max: 1440, step: 5, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'After the valve delay check turns a start down, solar does not check again for this long, so the pump is not sped up to test the water more often than that. A change of the Heat Point is checked at once. While it waits, the pool temperature shown is the reading taken at the solar pump speed, marked with * and the time it was read.');
-            line = $('<div></div>').addClass('pnl-solar-return').appendTo(pnl);
+            line = $('<div></div>').appendTo(fields);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Start Margin', binding: 'startMargin', min: 0, max: 10, step: 0.5, units: units, inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'How much more than the Stop Temp Delta the collector must lead the water before a valve delay check starts solar: warmer than the water for heating, colder for nocturnal cooling. It leaves room for the collector reading to move toward the water once water flows through it, so solar does not stop again for the collector straight after starting. Default 2.');
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Minimum Run', binding: 'minRunMinutes', min: 0, max: 60, step: 1, units: 'min', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'For this long after solar turns on, it is not stopped because the collector lead has fallen to the Stop Temp Delta, while the collector reading settles. Stops for the water temperature still apply. 0 turns it off. Default 5.');
+            line = $('<div></div>').addClass('pnl-solar-return').appendTo(fields);
             $('<div></div>').appendTo(line).pickList({
                 bindColumn: 0, displayColumn: 1, labelText: 'Return Sensor', binding: 'returnSensor',
                 columns: [{ binding: 'val', hidden: true, text: 'val', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'Sensor', style: { whiteSpace: 'nowrap' } }],
                 items: [{ val: '', desc: 'None' }, { val: 'solarSensor2', desc: 'Solar Sensor 2' }, { val: 'solarSensor3', desc: 'Solar Sensor 3' }, { val: 'solarSensor4', desc: 'Solar Sensor 4' }],
                 inputAttrs: { style: { width: '9rem' } }
             }).attr('title', 'The temperature input that is on the pipe coming back from the solar collector, if there is one. Its reading, and how much warmer it is than the pool water while solar runs, are shown on the dashboard and written to the solar log. It takes no part in deciding when solar runs.');
+            // The Heat Point and Cool Point of each body: the same values as the Heat Settings on the dashboard body card, so a change in either place shows in the other.
+            var sps = $('<div></div>').addClass('pnl-solar-setpoints').css({ marginTop: '.5rem' }).appendTo(pnl);
+            var isC = (opts.tempUnits || {}).name === 'C', minT = isC ? 5 : 40, maxT = isC ? 41 : 104;
+            $.getApiService('/state/temps', null, function (t) {
+                var bodies = (t && t.bodies) || [];
+                for (var i = 0; i < bodies.length; i++) {
+                    var b = bodies[i];
+                    var cool = typeof b.coolSetpoint === 'number' ? b.coolSetpoint : b.setPoint + 1;
+                    var bl = $('<div></div>').addClass('pnl-solar-setpoint').attr('data-bodyid', b.id).attr('data-heat', b.setPoint).attr('data-cool', cool).appendTo(sps);
+                    $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: (b.name || 'Body ' + b.id) + ' Heat Point', val: b.setPoint, min: minT, max: maxT, step: 1, binding: 'heatSetpoint', units: units, inputAttrs: { style: { width: '3rem' } } })
+                        .attr('title', 'The temperature solar heats this body to. The same setting as Heat Point in the Heat Settings on the dashboard.');
+                    $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: cool, min: minT, max: maxT, step: 1, binding: 'coolSetpoint', units: units, inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                        .attr('title', 'With Nocturnal Cooling on, solar cools this body at night while the water is more than the Stop Temp Delta above this. The same setting as Cool Point in the Heat Settings on the dashboard. Keep it at or above the Heat Point minus the Stop Temp Delta, or nocturnal cooling works against daytime heating.');
+                }
+            });
             var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Solar Controls', icon: '<i class="fas fa-save"></i>' });
+            // njsPC leaves a setting out of config.json until it is changed; its default is shown then.
+            var bindSettings = function (c) {
+                if (!c) return;
+                if (typeof c.startMargin === 'undefined' || c.startMargin === null) c.startMargin = 2;
+                if (typeof c.minRunMinutes === 'undefined' || c.minRunMinutes === null) c.minRunMinutes = 5;
+                dataBinder.bind(fields, c);
+            };
             btnSave.on('click', function () {
                 if (dataBinder.checkRequired(pnl, true)) {
-                    $.putApiService('/config/solar/settings', dataBinder.fromElement(pnl), 'Saving Solar Controls...', function (c) { dataBinder.bind(pnl, c); });
+                    $.putApiService('/config/solar/settings', dataBinder.fromElement(fields), 'Saving Solar Controls...', function (c) { bindSettings(c); });
+                    // Only a set point that was changed here is sent, so a change made on the dashboard meanwhile is not put back.
+                    sps.find('div.pnl-solar-setpoint').each(function () {
+                        var bl = $(this), v = dataBinder.fromElement(bl), put = { id: parseInt(bl.attr('data-bodyid'), 10) };
+                        if (String(v.heatSetpoint) !== bl.attr('data-heat')) put.heatSetpoint = v.heatSetpoint;
+                        if (String(v.coolSetpoint) !== bl.attr('data-cool')) put.coolSetpoint = v.coolSetpoint;
+                        if (typeof put.heatSetpoint === 'undefined' && typeof put.coolSetpoint === 'undefined') return;
+                        $.putApiService('state/body/setPoint', put, function () {
+                            if (typeof put.heatSetpoint !== 'undefined') bl.attr('data-heat', put.heatSetpoint);
+                            if (typeof put.coolSetpoint !== 'undefined') bl.attr('data-cool', put.coolSetpoint);
+                        });
+                    });
                 }
             });
             // njsPC offers the return sensor only on a system with one body (returnSensorAvailable); an older njsPC does not say, and it is shown.
-            $.getApiService('/config/solar/settings', null, function (c) { dataBinder.bind(pnl, c); if (c && c.returnSensorAvailable === false) pnl.find('div.pnl-solar-return').hide(); });
+            $.getApiService('/config/solar/settings', null, function (c) { bindSettings(c); if (c && c.returnSensorAvailable === false) pnl.find('div.pnl-solar-return').hide(); });
         }
     });
     $.widget('pic.pnlHeaterConfig', {
