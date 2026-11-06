@@ -64,6 +64,27 @@
             // The Heat Point and Cool Point of each body: the same values as the Heat Settings on the dashboard body card, so a change in either place shows in the other.
             var sps = $('<div></div>').addClass('pnl-solar-setpoints').css({ marginTop: '.5rem' }).appendTo(pnl);
             var isC = (opts.tempUnits || {}).name === 'C', minT = isC ? 5 : 40, maxT = isC ? 41 : 104;
+            // Nocturnal cooling stops at the Cool Point plus the solar heater's Stop Temp Delta, less the hysteresis, not at the Cool Point itself.
+            // The level is shown next to the Cool Point while a solar heater has cooling enabled, and follows the Cool Point and Hysteresis spinners.
+            var solarTypeVal = (opts.heaterTypes || []).filter(function (ht) { return ht.name === 'solar'; }).map(function (ht) { return ht.val; })[0];
+            var coolHeater = (opts.heaters || []).filter(function (h) { var tv = typeof h.type === 'object' && h.type !== null ? h.type.val : h.type; return tv === solarTypeVal && h.coolingEnabled; })[0];
+            var showCoolStop = function () {
+                if (!coolHeater) return;
+                var hs = fields.find('div.picValueSpinner[data-bind="hysteresis"]');
+                var hyst = hs.length ? parseFloat(hs[0].val()) : 0.5;
+                if (isNaN(hyst)) hyst = 0.5;
+                var delta = typeof coolHeater.stopTempDelta === 'number' ? coolHeater.stopTempDelta : 3;
+                sps.find('div.pnl-solar-setpoint').each(function () {
+                    var bl = $(this), cs = bl.find('div.picValueSpinner[data-bind="coolSetpoint"]');
+                    var cool = cs.length ? parseFloat(cs[0].val()) : NaN;
+                    var note = bl.find('span.pnl-solar-coolstop');
+                    if (!note.length) note = $('<span></span>').addClass('pnl-solar-coolstop').css({ marginLeft: '.5rem', opacity: .75 }).appendTo(bl);
+                    if (isNaN(cool)) { note.text(''); return; }
+                    note.html('(cooling stops at ' + (Math.round((cool + delta - hyst) * 10) / 10) + units + ')')
+                        .attr('title', 'Nocturnal cooling starts when the water is above the Cool Point plus the Stop Temp Delta (' + delta + ') and stops when it falls to that less the Hysteresis (' + hyst + ').');
+                });
+            };
+            fields.find('div.picValueSpinner[data-bind="hysteresis"]').on('change', showCoolStop);
             $.getApiService('/state/temps', null, function (t) {
                 var bodies = (t && t.bodies) || [];
                 for (var i = 0; i < bodies.length; i++) {
@@ -73,8 +94,10 @@
                     $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: (b.name || 'Body ' + b.id) + ' Heat Point', val: b.setPoint, min: minT, max: maxT, step: 1, binding: 'heatSetpoint', units: units, inputAttrs: { style: { width: '3rem' } } })
                         .attr('title', 'The temperature solar heats this body to. The same setting as Heat Point in the Heat Settings on the dashboard.');
                     $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: cool, min: minT, max: maxT, step: 1, binding: 'coolSetpoint', units: units, inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                        .attr('title', 'With Nocturnal Cooling on, solar cools this body at night while the water is more than the Stop Temp Delta above this. The same setting as Cool Point in the Heat Settings on the dashboard. Keep it at or above the Heat Point minus the Stop Temp Delta, or nocturnal cooling works against daytime heating.');
+                        .attr('title', 'With Nocturnal Cooling on, solar cools this body at night while the water is more than the Stop Temp Delta above this. The same setting as Cool Point in the Heat Settings on the dashboard. Keep it at or above the Heat Point minus the Stop Temp Delta, or nocturnal cooling works against daytime heating.')
+                        .on('change', showCoolStop);
                 }
+                showCoolStop();
             });
             var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Solar Controls', icon: '<i class="fas fa-save"></i>' });
@@ -84,6 +107,7 @@
                 if (typeof c.startMargin === 'undefined' || c.startMargin === null) c.startMargin = 2;
                 if (typeof c.minRunMinutes === 'undefined' || c.minRunMinutes === null) c.minRunMinutes = 5;
                 dataBinder.bind(fields, c);
+                showCoolStop();
             };
             btnSave.on('click', function () {
                 if (dataBinder.checkRequired(pnl, true)) {
