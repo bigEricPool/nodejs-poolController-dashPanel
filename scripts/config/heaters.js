@@ -64,8 +64,9 @@
             // The Heat Point and Cool Point of each body: the same values as the Heat Settings on the dashboard body card, so a change in either place shows in the other.
             var sps = $('<div></div>').addClass('pnl-solar-setpoints').css({ marginTop: '.5rem' }).appendTo(pnl);
             var isC = (opts.tempUnits || {}).name === 'C', minT = isC ? 5 : 40, maxT = isC ? 41 : 104;
-            // Nocturnal cooling stops at the Cool Point plus the solar heater's Stop Temp Delta, less the hysteresis, not at the Cool Point itself.
-            // The level is shown next to the Cool Point while a solar heater has cooling enabled, and follows the Cool Point and Hysteresis spinners.
+            // Nocturnal cooling stops at the Cool Point less the hysteresis, as heating stops at the Heat Point plus it. The level is shown next to the
+            // Cool Point while a solar heater has cooling enabled, and follows the spinners. With the Cool Point below the Heat Point plus the hysteresis,
+            // night cooling takes the water below where daytime heating restarts, so a note says heating and cooling can both run.
             var solarTypeVal = (opts.heaterTypes || []).filter(function (ht) { return ht.name === 'solar'; }).map(function (ht) { return ht.val; })[0];
             var coolHeater = (opts.heaters || []).filter(function (h) { var tv = typeof h.type === 'object' && h.type !== null ? h.type.val : h.type; return tv === solarTypeVal && h.coolingEnabled; })[0];
             var showCoolStop = function () {
@@ -73,15 +74,17 @@
                 var hs = fields.find('div.picValueSpinner[data-bind="hysteresis"]');
                 var hyst = hs.length ? parseFloat(hs[0].val()) : 0.5;
                 if (isNaN(hyst)) hyst = 0.5;
-                var delta = typeof coolHeater.stopTempDelta === 'number' ? coolHeater.stopTempDelta : 3;
                 sps.find('div.pnl-solar-setpoint').each(function () {
-                    var bl = $(this), cs = bl.find('div.picValueSpinner[data-bind="coolSetpoint"]');
+                    var bl = $(this), cs = bl.find('div.picValueSpinner[data-bind="coolSetpoint"]'), hp = bl.find('div.picValueSpinner[data-bind="heatSetpoint"]');
                     var cool = cs.length ? parseFloat(cs[0].val()) : NaN;
+                    var heat = hp.length ? parseFloat(hp[0].val()) : NaN;
                     var note = bl.find('span.pnl-solar-coolstop');
                     if (!note.length) note = $('<span></span>').addClass('pnl-solar-coolstop').css({ marginLeft: '.5rem', opacity: .75 }).appendTo(bl);
                     if (isNaN(cool)) { note.text(''); return; }
-                    note.html('(cooling stops at ' + (Math.round((cool + delta - hyst) * 10) / 10) + units + ')')
-                        .attr('title', 'Cool Point + the solar heater’s Stop Temp Delta − Hysteresis: ' + cool + ' + ' + delta + ' − ' + hyst + '. Nocturnal cooling starts when the water is above the Cool Point + the Stop Temp Delta, and stops when it falls to this.');
+                    var both = !isNaN(heat) && cool < heat + hyst;
+                    note.html('(cooling stops at ' + (Math.round((cool - hyst) * 10) / 10) + units + ')' + (both ? ' <span style="color:#c77700">heating and cooling can both run</span>' : ''))
+                        .attr('title', 'Cool Point − Hysteresis: ' + cool + ' − ' + hyst + '. Nocturnal cooling starts when the water is above the Cool Point, stops when it falls to this, and after that restarts above the Cool Point + Hysteresis.'
+                            + (both ? ' The Cool Point is below the Heat Point + Hysteresis (' + (Math.round((heat + hyst) * 10) / 10) + '), so night cooling takes the water below where daytime heating restarts, and the two can undo each other every day.' : ''));
                 });
             };
             fields.find('div.picValueSpinner[data-bind="hysteresis"]').on('change', showCoolStop);
@@ -92,9 +95,10 @@
                     var cool = typeof b.coolSetpoint === 'number' ? b.coolSetpoint : b.setPoint + 1;
                     var bl = $('<div></div>').addClass('pnl-solar-setpoint').attr('data-bodyid', b.id).attr('data-heat', b.setPoint).attr('data-cool', cool).appendTo(sps);
                     $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: (b.name || 'Body ' + b.id) + ' Heat Point', val: b.setPoint, min: minT, max: maxT, step: 1, binding: 'heatSetpoint', units: units, inputAttrs: { style: { width: '3rem' } } })
-                        .attr('title', 'The temperature solar heats this body to. The same setting as Heat Point in the Heat Settings on the dashboard.');
+                        .attr('title', 'The temperature solar heats this body to. The same setting as Heat Point in the Heat Settings on the dashboard.')
+                        .on('change', showCoolStop);
                     $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: cool, min: minT, max: maxT, step: 1, binding: 'coolSetpoint', units: units, inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                        .attr('title', 'With Nocturnal Cooling on, solar cools this body at night while the water is more than the Stop Temp Delta above this. The same setting as Cool Point in the Heat Settings on the dashboard. Keep it at or above the Heat Point minus the Stop Temp Delta, or nocturnal cooling works against daytime heating.')
+                        .attr('title', 'With Nocturnal Cooling on, solar cools this body at night to this temperature, as it heats it to the Heat Point by day. The same setting as Cool Point in the Heat Settings on the dashboard. Below the Heat Point plus the Hysteresis, heating and cooling can both run and undo each other.')
                         .on('change', showCoolStop);
                 }
                 showCoolStop();
