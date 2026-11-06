@@ -18,6 +18,7 @@
             self._lastResult = null;
             self._buildControls();
             self._loadData();
+            self._checkTuneRunning();
             el[0].dataBind = function (obj) { return self.dataBind(obj); };
         },
         _buildControls: function () {
@@ -319,9 +320,9 @@
             var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
                 .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
             btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
-            var btnTune = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Tune', icon: '<i class="fas fa-sliders"></i>' })
+            var btnTune = self._btnTune = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Tune', icon: '<i class="fas fa-sliders"></i>' })
                 .attr('title', 'Checks your saved settings against your FC history and recommends one change, or tells you your settings look good. The detailed Projection Accuracy and What-If Sweep reports open from there.');
-            btnTune.on('click', function (e) { self._tuneClick(); });
+            btnTune.on('click', function (e) { if (btnTune.hasClass('disabled')) return; self._tuneClick(); });
             var btnResetTuning = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'Reset Tuning to Defaults', icon: '<i class="fas fa-undo"></i>' })
                 .attr('title', 'Puts every tuning option back to its default in this form -- Save Settings to keep it.');
             btnResetTuning.on('click', function () {
@@ -1070,6 +1071,7 @@
             var self = this;
             $.getApiService('/state/autoSwg/tune/status', null, function (st) {
                 st = st || {};
+                if (st.running) { self._showTune(st); return; }   // one is already running (auto tune, or another page): wait for its result
                 var tooSoon = !!st.lastTuneAt && !st.manualChangeSinceTune && typeof st.readingsSinceTune === 'number' && st.readingsSinceTune < (st.needed || 10);
                 if (!tooSoon) { self._showTune(st); return; }
                 var n = st.readingsSinceTune;
@@ -1084,13 +1086,50 @@
                 });
             });
         },
+        // A Tune takes minutes on a Raspberry Pi, and the server runs only one at a time: a request while one runs waits for that run. While
+        // it runs, the Tune button is disabled and shows how far it is (polled every 5 seconds). A page opened while a Tune runs waits for
+        // that run's result (?join=1 starts none) instead of starting one.
+        _checkTuneRunning: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/tune/status?run=1', null, function (s) {
+                if (s && s.running) self._showTune(s, true);
+            });
+        },
+        _tuneProgressStart: function (s) {
+            var self = this;
+            self._tuneRunning = true;
+            self._btnTune[0].disabled(true);
+            var show = function (r) {
+                if (!self._tuneRunning) return;
+                r = r || {};
+                var since = new Date(r.startedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                // the current settings are about a sixteenth of the work, the alternatives the rest
+                var pct = r.total > 0 ? Math.floor(r.phase === 'sweep' ? 6 + 94 * r.done / r.total : 6 * r.done / r.total) : 0;
+                self._btnTune[0].buttonText('Tune is running since ' + since + ', ' + pct + '%');
+            };
+            show(s && s.running ? s : {});
+            clearInterval(self._tuneTimer);
+            self._tuneTimer = setInterval(function () {
+                $.getApiService('/state/autoSwg/tune/status?run=1', null, function (r) { if (r && r.running) show(r); });
+            }, 5000);
+        },
+        _tuneProgressStop: function () {
+            var self = this;
+            self._tuneRunning = false;
+            clearInterval(self._tuneTimer);
+            self._tuneTimer = null;
+            self._btnTune[0].buttonText('Tune');
+            self._btnTune[0].disabled(false);
+        },
         // Tune: the two reports boiled down to one recommendation (GET /state/autoSwg/tune). The detailed reports
-        // are one click away from here.
-        _showTune: function (st) {
+        // are one click away from here. `joinOnly`: only wait for the Tune already running (the server answers with nothing if none is).
+        _showTune: function (st, joinOnly) {
             var self = this;
             st = st || {};
-            $.getApiService('/state/autoSwg/tune', null, 'Checking your settings against your FC history (this takes a few seconds)...', function (t) {
-                t = t || {};
+            self._tuneProgressStart(st);
+            $.getApiService('/state/autoSwg/tune' + (joinOnly ? '?join=1' : ''), null, function (t) {
+                self._tuneProgressStop();
+                if (!t) return;   // joinOnly and the run had already finished
                 var buttons = [
                     { text: 'Projection Accuracy', icon: '<i class="fas fa-bullseye"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showProjectionAccuracy(); } },
                     { text: 'What-If Sweep', icon: '<i class="fas fa-flask"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._showWhatIf(); } },
@@ -1186,7 +1225,7 @@
                     });
                 });
                 para('Tune uses your saved settings: if you just changed them in the form, press Save Settings first. Gains are an estimate until about 10 new readings confirm them.', { color: '#666', fontSize: '.85em' });
-            });
+            }, function () { self._tuneProgressStop(); });   // the error itself is shown by the API helper; on the server the run goes on, and Tune joins it
         },
         // A short guide to tuning: what the two reports are for, the order to use them in, and how to check the result.
         _showTuningHelp: function () {
