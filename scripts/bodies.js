@@ -300,11 +300,23 @@
                             return false;
                         };
                         // The Cool Point must be above the Heat Point, except on a Nixie body heated by solar only, where nocturnal cooling is a separate
-                        // control that does not conflict with heating (a heat pump or UltraTemp would switch between heating and cooling).
+                        // control (a heat pump or UltraTemp would switch between heating and cooling). There it may be at or below the Heat Point, and a note
+                        // says heating and cooling can then both run: cooling stops at the Cool Point less the hysteresis, below where heating restarts.
                         var coolMin = function (heat) { return settings.solarOnly ? (units === "F" ? 40 : 5) : heat + 1; };
+                        var syncCoolWarn = function () {
+                            if (!settings.solarOnly) return;
+                            var hp = divPopover.find('div[data-bind="heatSetpoint"]'), cp = divPopover.find('div[data-bind="coolSetpoint"]');
+                            if (!hp.length || !cp.length) return;
+                            var warn = divPopover.find('div.pnl-cool-warn');
+                            if (!warn.length) warn = $('<div></div>').addClass('pnl-cool-warn').css({ fontSize: '.8rem', color: '#c77700', marginLeft: '5rem' }).insertAfter(cp)
+                                .text('Heating and cooling can both run')
+                                .attr('title', 'The Cool Point is at or below the Heat Point. Night cooling stops just below the Cool Point, under where daytime heating restarts, so the two can undo each other every day.');
+                            warn.toggle(cp.is(':visible') && parseFloat(cp[0].val()) <= parseFloat(hp[0].val()));
+                        };
                         var syncCoolVis = function (modeVal) {
                             var canCool = modeCanCool(modeVal);
                             divPopover.find('div[data-bind="coolSetpoint"]').toggle(canCool);
+                            syncCoolWarn();
                         };
                         if (settings.hasCooling) {
                             $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Heat Point', val: settings.setPoint, min: units === "F" ? 40 : 5, max: units === "F" ? 104 : 41, step: 1, binding: 'heatSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
@@ -312,10 +324,11 @@
                                     var coolSetpoint;
                                     divPopover.find('div[data-bind="coolSetpoint"]').each(function () { this.minVal(coolMin(e.value)); coolSetpoint = this.val(); });
                                     self.putSetpoints(e.value, undefined);
+                                    syncCoolWarn();
                                 });
                             $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: settings.coolSetpoint || settings.setPoint + 1, min: coolMin(settings.setPoint), max: units === "F" ? 104 : 41, step: 1, binding: 'coolSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { width: '5rem' } }, style: { display: 'block' } })
-                                .attr('title', settings.solarOnly ? 'On a solar only body the Cool Point can be at or below the Heat Point. Nocturnal cooling then works against daytime heating, so keep it at or above the Heat Point minus the solar run delta (3 by default) to avoid heating and cooling the pool every day.' : '')
-                                .on('change', function (e) { self.putSetpoints(undefined, e.value); });
+                                .attr('title', settings.solarOnly ? 'Nocturnal cooling cools the water to this temperature, as solar heats it to the Heat Point by day. On a solar only body it can be at or below the Heat Point; heating and cooling can then both run and undo each other, so keep it above the Heat Point unless that is what you want.' : '')
+                                .on('change', function (e) { self.putSetpoints(undefined, e.value); syncCoolWarn(); });
                         }
                         else
                             $('<div></div>').appendTo(evt.contents()).valueSpinner({ canEdit: true, labelText: 'Set Point', val: settings.setPoint, min: units === "F" ? 40 : 5, max: units === "F" ? 104 : 41, step: 1, binding: 'heatSetpoint', units: '<span>&deg;</span><span class="picTempUnits">' + units + '</span>', labelAttrs: { style: { marginRight: '.25rem' } } })
