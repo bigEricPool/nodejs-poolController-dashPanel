@@ -81,7 +81,7 @@
                     if (!note.length) note = $('<span></span>').addClass('pnl-solar-coolstop').css({ marginLeft: '.5rem', opacity: .75 }).appendTo(bl);
                     if (isNaN(cool)) { note.text(''); return; }
                     note.html('(cooling stops at ' + (Math.round((cool + delta - hyst) * 10) / 10) + units + ')')
-                        .attr('title', 'Nocturnal cooling starts when the water is above the Cool Point plus the Stop Temp Delta (' + delta + ') and stops when it falls to that less the Hysteresis (' + hyst + ').');
+                        .attr('title', 'Cool Point + the solar heater’s Stop Temp Delta − Hysteresis: ' + cool + ' + ' + delta + ' − ' + hyst + '. Nocturnal cooling starts when the water is above the Cool Point + the Stop Temp Delta, and stops when it falls to this.');
                 });
             };
             fields.find('div.picValueSpinner[data-bind="hysteresis"]').on('change', showCoolStop);
