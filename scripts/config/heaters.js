@@ -61,16 +61,40 @@
                 items: [{ val: '', desc: 'None' }, { val: 'solarSensor2', desc: 'Solar Sensor 2' }, { val: 'solarSensor3', desc: 'Solar Sensor 3' }, { val: 'solarSensor4', desc: 'Solar Sensor 4' }],
                 inputAttrs: { style: { width: '9rem' } }
             }).attr('title', 'The temperature input that is on the pipe coming back from the solar collector, if there is one. Its reading, and how much warmer it is than the pool water while solar runs, are shown on the dashboard and written to the solar log. It takes no part in deciding when solar runs.');
-            // The Heat Point and Cool Point of each body: the same values as the Heat Settings on the dashboard body card, so a change in either place shows in the other.
+            // The Heat Point and Cool Point of each body solar heats: the same values as the Heat Settings on the dashboard body card, so a change in either place
+            // shows in the other. A body no solar heater serves is not listed. The Cool Point has the card's limit: at least the Heat Point + 1, except on a body
+            // heated by solar only.
             var sps = $('<div></div>').addClass('pnl-solar-setpoints').css({ marginTop: '.5rem' }).appendTo(pnl);
             var isC = (opts.tempUnits || {}).name === 'C', minT = isC ? 5 : 40, maxT = isC ? 41 : 104;
             // Nocturnal cooling stops at the Cool Point less the hysteresis, as heating stops at the Heat Point plus it. The level is shown next to the
             // Cool Point while a solar heater has cooling enabled, and follows the spinners. With the Cool Point below the Heat Point plus the hysteresis,
             // night cooling takes the water below where daytime heating restarts, so a note says heating and cooling can both run.
-            var solarTypeVal = (opts.heaterTypes || []).filter(function (ht) { return ht.name === 'solar'; }).map(function (ht) { return ht.val; })[0];
-            var coolHeater = (opts.heaters || []).filter(function (h) { var tv = typeof h.type === 'object' && h.type !== null ? h.type.val : h.type; return tv === solarTypeVal && h.coolingEnabled; })[0];
+            var typeVal = function (h) { return typeof h.type === 'object' && h.type !== null ? h.type.val : h.type; };
+            var typeName = function (h) { var t = (opts.heaterTypes || []).find(function (ht) { return ht.val === typeVal(h); }); return t ? t.name : ''; };
+            // The heaters on a body, as njsPC matches them: the heater's body is the body id, or names it (pool, spa, poolspa, body1 to body4).
+            var heatersOn = function (bodyId) {
+                return (opts.heaters || []).filter(function (h) {
+                    if (h.isActive === false) return false;
+                    var hb = typeof h.body === 'object' && h.body !== null ? h.body.val : h.body;
+                    if (hb === bodyId) return true;
+                    var bn = ((opts.bodies || []).find(function (x) { return x.val === hb; }) || {}).name;
+                    return bn === 'body' + bodyId || (bn === 'pool' && bodyId === 1) || (bn === 'spa' && bodyId === 2) || (bn === 'poolspa' && (bodyId === 1 || bodyId === 2));
+                });
+            };
+            // How far past the Heat Point another heater on the body heats in this heat mode (gas by its Stop Temp Delta, MasterTemp 0, hybrid 1), as
+            // njsPC starts them; nocturnal cooling works to no lower than that plus the hysteresis. undefined when no other heater can heat in the mode.
+            var backupOver = function (bodyHeaters, mode) {
+                var over;
+                bodyHeaters.forEach(function (h) {
+                    var tn = typeName(h), o;
+                    if (['gas', 'maxetherm', 'jxi', 'lxi'].indexOf(tn) >= 0 && ['heater', 'solarpref', 'heatpumppref', 'ultratemppref'].indexOf(mode) >= 0) o = typeof h.stopTempDelta === 'number' ? h.stopTempDelta : 0;
+                    else if (tn === 'mastertemp' && ['mtheater', 'heatpumppref', 'ultratemppref', 'solarpref'].indexOf(mode) >= 0) o = 0;
+                    else if (tn === 'hybrid' && mode !== 'off') o = 1;
+                    if (typeof o === 'number' && (typeof over === 'undefined' || o > over.by)) over = { by: o, name: h.name };
+                });
+                return over;
+            };
             var showCoolStop = function () {
-                if (!coolHeater) return;
                 var hs = fields.find('div.picValueSpinner[data-bind="hysteresis"]');
                 var hyst = hs.length ? parseFloat(hs[0].val()) : 0.5;
                 if (isNaN(hyst)) hyst = 0.5;
@@ -80,11 +104,20 @@
                     var heat = hp.length ? parseFloat(hp[0].val()) : NaN;
                     var note = bl.find('span.pnl-solar-coolstop');
                     if (!note.length) note = $('<span></span>').addClass('pnl-solar-coolstop').css({ marginLeft: '.5rem', opacity: .75 }).appendTo(bl);
-                    if (isNaN(cool)) { note.text(''); return; }
-                    var both = !isNaN(heat) && cool < heat + hyst;
-                    note.html('(cooling stops at ' + (Math.round((cool - hyst) * 10) / 10) + units + ')' + (both ? ' <span style="color:#c77700">heating and cooling can both run</span>' : ''))
-                        .attr('title', 'Cool Point − Hysteresis: ' + cool + ' − ' + hyst + '. Nocturnal cooling starts when the water is above the Cool Point, stops when it falls to this, and after that restarts above the Cool Point + Hysteresis.'
-                            + (both ? ' The Cool Point is below the Heat Point + Hysteresis (' + (Math.round((heat + hyst) * 10) / 10) + '), so night cooling takes the water below where daytime heating restarts, and the two can undo each other every day.' : ''));
+                    // Only for a body a solar heater with cooling enabled serves.
+                    if (isNaN(cool) || bl.attr('data-cooling') !== 'true') { note.text('').removeAttr('title'); return; }
+                    var r1 = function (v) { return Math.round(v * 10) / 10; };
+                    var bk = bl.data('backup');
+                    var target = cool, kept = '';
+                    if (bk && !isNaN(heat) && heat + bk.by + hyst > cool) {
+                        target = heat + bk.by + hyst;
+                        kept = ' In this heat mode ' + bk.name + ' can heat this body, to ' + r1(heat + bk.by) + ', so cooling works to no lower than that + the Hysteresis (' + r1(target) + ') in place of the Cool Point, and the two do not take turns.';
+                    }
+                    var both = kept === '' && !isNaN(heat) && cool < heat + hyst;
+                    note.html('(cooling stops at ' + r1(target - hyst) + units + ')' + (both ? ' <span style="color:#c77700">heating and cooling can both run</span>' : ''))
+                        .attr('title', (kept === '' ? 'Cool Point − Hysteresis: ' + cool + ' − ' + hyst + '.' : 'Cooling target − Hysteresis: ' + r1(target) + ' − ' + hyst + '.')
+                            + ' Nocturnal cooling starts when the water is above ' + (kept === '' ? 'the Cool Point' : 'that target') + ', stops when it falls to this, and after that restarts above ' + (kept === '' ? 'the Cool Point' : 'the target') + ' + Hysteresis.' + kept
+                            + (both ? ' The Cool Point is below the Heat Point + Hysteresis (' + r1(heat + hyst) + '), so night cooling takes the water below where daytime heating restarts, and the two can undo each other every day.' : ''));
                 });
             };
             fields.find('div.picValueSpinner[data-bind="hysteresis"]').on('change', showCoolStop);
@@ -92,15 +125,26 @@
                 var bodies = (t && t.bodies) || [];
                 for (var i = 0; i < bodies.length; i++) {
                     var b = bodies[i];
+                    var onBody = heatersOn(b.id);
+                    var solarHeaters = onBody.filter(function (h) { return typeName(h) === 'solar'; });
+                    if (solarHeaters.length === 0) continue;
+                    var solarOnly = solarHeaters.length === onBody.length;
+                    var cooling = solarHeaters.some(function (h) { return h.coolingEnabled; });
+                    var mode = typeof b.heatMode === 'object' && b.heatMode !== null ? b.heatMode.name : '';
+                    var coolMin = function (heat) { return solarOnly ? minT : heat + 1; };
                     var cool = typeof b.coolSetpoint === 'number' ? b.coolSetpoint : b.setPoint + 1;
-                    var bl = $('<div></div>').addClass('pnl-solar-setpoint').attr('data-bodyid', b.id).attr('data-heat', b.setPoint).attr('data-cool', cool).appendTo(sps);
-                    $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: (b.name || 'Body ' + b.id) + ' Heat Point', val: b.setPoint, min: minT, max: maxT, step: 1, binding: 'heatSetpoint', units: units, inputAttrs: { style: { width: '3rem' } } })
-                        .attr('title', 'The temperature solar heats this body to. The same setting as Heat Point in the Heat Settings on the dashboard.')
+                    var bl = $('<div></div>').addClass('pnl-solar-setpoint').attr('data-bodyid', b.id).attr('data-heat', b.setPoint).attr('data-cool', cool).attr('data-cooling', cooling ? 'true' : 'false').appendTo(sps);
+                    bl.data('backup', backupOver(onBody.filter(function (h) { return typeName(h) !== 'solar'; }), mode));
+                    var hpS = $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: (b.name || 'Body ' + b.id) + ' Heat Point', val: b.setPoint, min: minT, max: maxT, step: 1, binding: 'heatSetpoint', units: units, inputAttrs: { style: { width: '3rem' } } })
+                        .attr('title', 'The temperature solar heats this body to. The same setting as Heat Point in the Heat Settings on the dashboard.');
+                    var cpS = $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: cool, min: coolMin(b.setPoint), max: maxT, step: 1, binding: 'coolSetpoint', units: units, inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                        .attr('title', solarOnly ? 'With Nocturnal Cooling on, solar cools this body at night to this temperature, as it heats it to the Heat Point by day. The same setting as Cool Point in the Heat Settings on the dashboard. Below the Heat Point plus the Hysteresis, heating and cooling can both run and undo each other.'
+                            : 'With Nocturnal Cooling on, solar cools this body at night to this temperature. The same setting as Cool Point in the Heat Settings on the dashboard. With another heater on this body it must be at least the Heat Point + 1.')
                         .on('change', showCoolStop);
-                    $('<div></div>').appendTo(bl).valueSpinner({ canEdit: true, labelText: 'Cool Point', val: cool, min: minT, max: maxT, step: 1, binding: 'coolSetpoint', units: units, inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
-                        .attr('title', 'With Nocturnal Cooling on, solar cools this body at night to this temperature, as it heats it to the Heat Point by day. The same setting as Cool Point in the Heat Settings on the dashboard. Below the Heat Point plus the Hysteresis, heating and cooling can both run and undo each other.')
-                        .on('change', showCoolStop);
+                    // A non-solar-only body keeps the Cool Point at least the Heat Point + 1 as the Heat Point moves, as the Heat Settings popup does.
+                    (function (cp, minFn) { hpS.on('change', function (e) { cp[0].minVal(minFn(e.value)); showCoolStop(); }); })(cpS, coolMin);
                 }
+                if (sps.find('div.pnl-solar-setpoint').length === 0) sps.hide();
                 showCoolStop();
             });
             var btnPnl = $('<div></div>').addClass('picBtnPanel btn-panel').appendTo(pnl);
