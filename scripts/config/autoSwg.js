@@ -1441,6 +1441,75 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             $(link).remove();
             setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
         },
+        // Minutes after local midnight of an ISO time in `tz` (an IANA zone name) when given and valid, otherwise in this browser's time zone; NaN if unreadable.
+        _minutesOfDay: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return NaN;
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return (parseInt(parts.hour, 10) % 24) * 60 + parseInt(parts.minute, 10);
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getHours() * 60 + d.getMinutes();
+        },
+        // Notes on the SWG % rows of the history (newest first, as shown): an array parallel to `entries` with, for each SWG row,
+        // `unchanged` (an automatic check that repeated the % already in force) and `starts` (a change applied outside the SWG's run window
+        // only takes effect when the window opens: "06:40", or "06:40 tomorrow" when it was applied after the window closed).
+        _historySwgNotes: function (entries) {
+            var self = this;
+            var notes = entries.map(function () { return {}; });
+            var idx = [];
+            entries.forEach(function (e, i) { if (e.type === 'SWG') idx.push(i); });
+            var toMin = function (t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN; };
+            idx.forEach(function (i, k) {
+                var e = entries[i], rec = e.record || {};
+                // The % in force before this row: the local record says it, otherwise the next older SWG row.
+                var prev = typeof rec.previousPct === 'number' ? rec.previousPct : (k + 1 < idx.length ? entries[idx[k + 1]].pct : undefined);
+                if (typeof prev === 'number' && typeof e.pct === 'number' && prev === e.pct && e.source !== 'local-manual') notes[i].unchanged = true;
+                var inp = rec.inputs || {};
+                var a = toMin(inp.swgStartTime), b = toMin(inp.swgStopTime);
+                if (typeof e.pct === 'number' && e.pct > 0 && !isNaN(a) && !isNaN(b) && b > a) {
+                    var now = self._minutesOfDay(e.ts, inp.timezone);
+                    if (!isNaN(now) && (now < a || now >= b)) notes[i].starts = inp.swgStartTime + (now >= b ? ' tomorrow' : '');
+                }
+            });
+            return notes;
+        },
+        // Fills the "Ran" column: how long the cell was actually making chlorine while each SWG % was in force (until the next SWG % row, or now), from the
+        // hourly output log (the share of the hour's samples with an output above 0, weighted by how much of the hour falls in the interval). Rows from before
+        // the log began stay blank. `cells` is [{ entry, td }] for the SWG rows.
+        _fillRanHours: function (entries, cells) {
+            var swg = entries.filter(function (e) { return e.type === 'SWG'; });
+            var locals = swg.filter(function (e) { return e.record; });
+            if (!cells.length || !locals.length) return;
+            var oldest = new Date(locals[locals.length - 1].ts).getTime();
+            var days = Math.min(1461, Math.max(2, Math.ceil((Date.now() - oldest) / 86400000) + 2));
+            $.getApiService('/state/autoSwg/output?days=' + days, null, function (r) {
+                var hours = r && Array.isArray(r.hours) ? r.hours : [];
+                if (!hours.length) return;
+                var lines = hours.map(function (h) { return { t: new Date(h.t).getTime(), frac: h.n > 0 ? h.on / h.n : 0 }; }).filter(function (h) { return !isNaN(h.t); });
+                if (!lines.length) return;
+                var firstLog = lines.reduce(function (m, h) { return Math.min(m, h.t); }, Infinity);
+                // SWG rows oldest first, so a row ends where the next newer one begins.
+                var asc = swg.slice().sort(function (a, b) { return new Date(a.ts) - new Date(b.ts); });
+                var endOf = {};
+                asc.forEach(function (e, k) { endOf[e.ts + '|' + k] = k + 1 < asc.length ? new Date(asc[k + 1].ts).getTime() : Date.now(); });
+                cells.forEach(function (c) {
+                    var k = asc.indexOf(c.entry);
+                    if (k < 0) return;
+                    var from = new Date(c.entry.ts).getTime(), to = endOf[c.entry.ts + '|' + k];
+                    if (from < firstLog) return;
+                    var total = 0;
+                    lines.forEach(function (h) {
+                        var overlap = Math.min(to, h.t + 3600000) - Math.max(from, h.t);
+                        if (overlap > 0) total += (overlap / 3600000) * h.frac;
+                    });
+                    c.td.text((Math.round(total * 10) / 10) + ' h' + (k + 1 === asc.length ? ' so far' : ''));
+                });
+            });
+        },
         // Shows the SWG % and FC history as a calculation sees it -- FC readings from
         // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
         // PoolMath SWG entry within an hour of a local one is left out) -- newest first,
@@ -1451,6 +1520,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 h = h || {};
                 var entries = Array.isArray(h.entries) ? h.entries.slice() : [];
                 entries.sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
+                var swgNotes = self._historySwgNotes(entries);
                 var buttons = [];
                 if (entries.length > 0) {
                     buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'csv'); } });
@@ -1482,35 +1552,50 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
                     + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
-                    + 'The local SWG % log is kept for 48 months.';
+                    + 'The local SWG % log is kept for 48 months. '
+                    + 'Grey SWG % rows are automatic checks that repeated the % already in force. A change applied outside the SWG\'s run window only takes effect when the window opens, which the row says. '
+                    + '"Ran" is how long the cell was actually making chlorine while that % was in force (until the next SWG % row), from the chlorinator output log; it is blank for rows from before the log began.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
+                var hideLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem .25rem', cursor: 'pointer' }).appendTo(wrap);
+                var hideChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideLabel);
+                $('<span></span>').text('Hide automatic checks that repeated the previous %').appendTo(hideLabel);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
                     { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
-                    { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
+                    { text: 'Ran', align: 'right' }, { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
                 ];
                 var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
                 cols.forEach(function (c) {
-                    $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
+                    var th = $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
+                    if (c.text === 'Ran') th.attr('title', 'How long the cell was actually making chlorine while this SWG % was in force (until the next SWG % row), from the chlorinator output log.');
                 });
+                hideChk.on('change', function () { $('tr.autoSwgUnchanged', tbl).toggle(!hideChk.is(':checked')); });
                 var body = $('<tbody></tbody>').appendTo(tbl);
                 var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
-                entries.forEach(function (e) {
+                var ranCells = [];
+                entries.forEach(function (e, i) {
                     var rec = e.record || {};
+                    var note = swgNotes[i] || {};
                     var row = $('<tr></tr>').appendTo(body);
+                    if (note.unchanged) row.addClass('autoSwgUnchanged').css({ opacity: 0.55 });
+                    var valueText = self._historyValueLabel(e) + (note.unchanged ? ' (unchanged)' : '') + (note.starts ? ' (starts ' + note.starts + ')' : '');
+                    var tds = [];
                     [
                         [self._fmtDateTime(e.ts), 'left'],
                         [self._historyTypeLabel(e), 'left'],
-                        [self._historyValueLabel(e), e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
+                        [valueText, e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
                         [self._historySourceLabel(e), 'left'],
+                        ['', 'right'],
                         [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
                         [blank(rec.previousPct), 'right'],
                         [blank(rec.recommendedPct), 'right'],
                         [self._historyTargetLabel(e), 'left']
                     ].forEach(function (cell) {
-                        $('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row);
+                        tds.push($('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row));
                     });
+                    if (e.type === 'SWG') ranCells.push({ entry: e, td: tds[4] });
                 });
+                self._fillRanHours(entries, ranCells);
             });
         },
         // Downloads `entries` (newest first, as displayed) as a file, oldest first. JSON
