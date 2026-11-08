@@ -314,6 +314,11 @@
             var line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).inputField({ labelText: 'Share Code', binding: 'shareCode', inputAttrs: { maxlength: 200, style: { width: '12rem' } }, labelAttrs: { style: { width: '5.9rem' } } })
                 .attr('title', 'The code from your PoolMath share link (poolmath.app/share/<code>). Leave it empty to read nothing from PoolMath.');
+            // Opens the share page PoolMath's history is read from, in a new tab; follows the code as it is typed.
+            self._elShareLink = $('<a target="_blank" rel="noopener noreferrer"></a>').appendTo(line).css({ marginLeft: '.5rem', fontSize: '.85em', whiteSpace: 'nowrap' })
+                .html('<i class="fas fa-external-link-alt"></i> Open in PoolMath').attr('title', 'Open your PoolMath share page in a new tab.');
+            line.find('div[data-bind=shareCode] input').on('input change keyup', function () { self._setShareLink($(this).val()); });
+            self._setShareLink('');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).inputField({ labelText: 'Pool Name', binding: 'poolName', inputAttrs: { maxlength: 60, style: { width: '12rem' } }, labelAttrs: { style: { width: '5.9rem' } } })
                 .attr('title', 'The pool\'s name in PoolMath, when the share has more than one pool. Empty means the first pool.');
@@ -332,7 +337,19 @@
         dataBind: function (obj) {
             var self = this, el = self.element;
             dataBinder.bind(el.find('div.picAccordian-contents:first'), { shareCode: obj.shareCode || '', poolName: obj.poolName || '' });
+            self._setShareLink(obj.shareCode || '');
             self._loadStatus(obj);
+        },
+        // The share page's address for a code (or a full share link), and the link's state: usable only while there is a code.
+        _setShareLink: function (code) {
+            var self = this, a = self._elShareLink;
+            if (!a) return;
+            code = typeof code === 'string' ? code.trim() : '';
+            var url = '';
+            if (/^https?:\/\//i.test(code)) url = code.split('?')[0].replace(/\.json$/i, '');
+            else if (code) url = 'https://api.poolmathapp.com/share/' + encodeURIComponent(code);
+            if (url) a.attr('href', url).css({ pointerEvents: '', opacity: '' }).removeAttr('aria-disabled');
+            else a.removeAttr('href').css({ pointerEvents: 'none', opacity: '.4' }).attr('aria-disabled', 'true');
         },
         // What has been read from PoolMath so far: the archive's size and age, and the pool details taken from it.
         _loadStatus: function (cfg) {
@@ -1217,6 +1234,14 @@
                 .attr('title', 'Pounds of chlorine a day the cell makes at 100% output. Leave it at the default unless you know your cell differs: the default is the rating PoolMath has for your pool when a share code is set, otherwise the model\'s rating.');
             $('<div></div>').appendTo(line).inputField({ labelText: 'In Service Since', binding: binding + 'cellInstalledDate', inputAttrs: { maxlength: 10, placeholder: 'YYYY-MM-DD', style: { width: '6.5rem' } }, labelAttrs: { style: { marginLeft: '1rem', marginRight: '.25rem' } } })
                 .attr('title', 'The day the current cell went into service. Changing it, or the rating, counts the cell usage again from this day.');
+            // How the cell makes its chlorine: in cycles of this length, current for the set % of each one. 0 counts each hour by its mean output.
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Cell Cycle', binding: binding + 'cycleHours', min: 0, max: 24, step: 0.5, units: 'hours', inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { marginLeft: '4rem', width: '5.9rem', marginRight: '.25rem' } } })
+                .attr('title', 'Many cells make chlorine in cycles: current flows for the set % of each cycle (for example 3 hours). With a cycle length, the cell usage is counted by its cycles from the times its power came on and went off. 0 counts each hour by its average output.');
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Restarts at Power-On', binding: binding + 'cycleRestartsOnPower' }).css({ marginLeft: '1rem' })
+                .attr('title', 'Check this box if the cell starts a new cycle whenever its power comes on.');
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Current First', binding: binding + 'burstFirst' }).css({ marginLeft: '1rem' })
+                .attr('title', 'Check this box if the current flows at the start of each cycle; clear it if it flows at the end.');
             self._elCellUsage = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.2rem 0 .3rem 4rem' }).hide();
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save Chlorinator', icon: '<i class="fas fa-save"></i>' });
@@ -1284,6 +1309,8 @@
                 pid.hide();
                 obj.portId = 0; // Force the port id to be the OCP.
             }
+            // the cycle settings' defaults when none was saved: no cycles, restarting at power-on, current first
+            obj = $.extend({ cycleHours: 0, cycleRestartsOnPower: true, burstFirst: true }, obj);
             dataBinder.bind(el, obj);
             self._loadCellUsage(obj);
         },
@@ -1301,6 +1328,7 @@
                 var since = d ? new Date(Number(d[1]), Number(d[2]) - 1, Number(d[3])).toLocaleDateString([], { dateStyle: 'medium' }) : (u.since ? new Date(u.since).toLocaleDateString([], { dateStyle: 'medium' }) : '');
                 var run = typeof u.runHours === 'number' ? ', ' + u.runHours.toFixed(1) + ' h enabled' : '';
                 var est = u.estimatedPounds > 0 ? ' About ' + u.estimatedPounds.toFixed(2) + ' lb of that is an estimate from the SWG entries in your PoolMath log, for the time before the output log began.' : '';
+                if (u.cycleHours > 0 && u.cycleSince) est += ' Counted by ' + u.cycleHours + '-hour cycles since ' + new Date(u.cycleSince).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) + ', by average output before that.';
                 self._elCellUsage.text('Cell has made ' + u.pounds.toFixed(2) + ' lb of chlorine (' + u.hours.toFixed(1) + ' full-output hours' + run + ')' + (since ? ', counted since ' + since : '') + '.' + est)
                     .attr('title', 'Full-output hours are the hours the cell would have needed at 100% output to make this much chlorine: an hour at 50% counts as half an hour, so this is a measure of work done. Hours enabled is how long the setting was above 0: the cell makes its chlorine in bursts, on for the set % of each cycle, so it is energized for only part of that time. Hours when the chlorinator had stopped reporting, or reported low flow, very low salt, high current, low voltage or low water temperature, are not counted in either.').show();
             });
