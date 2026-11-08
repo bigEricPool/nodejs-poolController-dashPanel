@@ -80,8 +80,13 @@
             var self = this, o = self.options, el = self.element, r = o.report;
             var body = el.find('div.picPowerBody').empty();
             el.find('span.picPowerTab').each(function () { $(this).toggleClass('picPowerTabOn', $(this).attr('data-range') === o.range); });
-            if (!r.enabled || !r.configured) {
-                $('<div class="picPowerNote"></div>').text(r.configured ? 'Pump power tracking is turned off.' : 'Enter the watts for each pump speed to start.').appendTo(body);
+            if (!r.enabled) {
+                $('<div class="picPowerNote"></div>').text('Pump power tracking is turned off.').appendTo(body);
+                return;
+            }
+            if (!r.configured) {
+                $('<div class="picPowerNote"></div>').text('Set the watts for each pump speed to start: on the Relays tab of the pump (Settings, Pumps), or with the gear above for other pumps.').appendTo(body);
+                self._missing(body, r);
                 return;
             }
             r.now.forEach(function (n) {
@@ -102,7 +107,23 @@
             r.speeds.filter(function (s) { return s.relay === 'none'; }).forEach(function (s) {
                 $('<div class="picPowerWarn"></div>').text('No pump relay or circuit uses the relay set for ' + s.name + ', so that speed is never counted.').appendTo(body);
             });
+            self._missing(body, r);
             $('<div class="picPowerNote"></div>').text('Estimated: the time at each speed times the watts set for it.').appendTo(body);
+        },
+        // Warnings for settings that keep some of a pump's time from being counted (njsPC's report lists them in `missing`).
+        _missing: function (body, r) {
+            var self = this, where = ' (Settings, Pumps, Relays tab)';
+            (r.missing || []).forEach(function (m) {
+                var text;
+                switch (m.kind) {
+                    case 'noSpeeds': text = m.pumpName + ' is tracked but has no speeds: set the watts for its relays' + where + '.'; break;
+                    case 'relayNoWatts': text = m.pumpName + ': ' + m.relayName + ' (relay ' + m.relay + ') has no watts, so time at that speed is not counted. Set them' + where + '.'; break;
+                    case 'fallback': text = m.pumpName + ' has no watts on its relays, so older speeds from the Pump Power settings are used. Set them' + where + '.'; break;
+                    case 'noSpeedTime': text = m.pumpName + ' ran ' + self._hours(m.seconds) + ' in this period with no speed set, counted as 0 W.'; break;
+                    default: return;
+                }
+                $('<div class="picPowerWarn"></div>').text(text).appendTo(body);
+            });
         },
         _row: function (parent, label, value) {
             var line = $('<div class="picPowerRow"></div>').appendTo(parent);
