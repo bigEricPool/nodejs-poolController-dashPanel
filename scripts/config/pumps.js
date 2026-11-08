@@ -521,6 +521,12 @@
 
                     l.find('div[data-bind$=connectionId]').each(function () { this.val(r.connectionId); });
                     l.find('div[data-bind$=deviceBinding]').each(function () { this.val(r.deviceBinding); });
+                    // The speed of the relay (pump power tracking). dataBinder.bind does not reach into the relays list, so these are set
+                    // here like the connection and device; a field left as it is would be saved back as empty or 0.
+                    ['speedName', 'rpm', 'watts', 'priority'].forEach(function (f) {
+                        var v = typeof r[f] !== 'undefined' && r[f] !== null ? r[f] : (f === 'speedName' ? '' : 0);
+                        l.find(`*[data-bind$=".${f}"]`).each(function () { if (typeof this.val === 'function') this.val(v); });
+                    });
                 }
             }
             dataBinder.bind(el, obj);
