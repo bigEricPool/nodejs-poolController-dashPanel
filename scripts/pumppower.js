@@ -222,6 +222,15 @@
             pumps.forEach(function (p) {
                 var sec = $('<div class="picPowerPump"></div>').attr('data-pump', p.id).appendTo(dlg);
                 $('<div class="picPowerPumpName"></div>').text(p.name || 'Pump ' + p.id).appendTo(sec);
+                // A pump with speeds set on its relays (the Relays tab of its pump page) shows them here; they are changed there.
+                if ((p.relaySpeeds || []).length > 0) {
+                    p.relaySpeeds.forEach(function (s) {
+                        $('<div class="picPowerSpeedFixed"></div>').text(s.name + ': ' + (s.rpm > 0 ? s.rpm + ' rpm, ' : '') + s.watts + ' W' + (s.priority > 0 ? ', priority ' + s.priority : '')).appendTo(sec);
+                    });
+                    $('<div class="picPowerNote"></div>').text('These are set on the Relays tab of the pump (Settings, Pumps).').appendTo(sec);
+                    return;
+                }
+                if (p.speedsOnRelays) $('<div class="picPowerNote"></div>').text('This pump\'s speeds can also be set on the Relays tab of the pump (Settings, Pumps); once they are, they are used instead of these.').appendTo(sec);
                 var rows = $('<div class="picPowerSpeeds"></div>').appendTo(sec);
                 var cfg = (settings.pumps || []).find(function (x) { return x.pump === p.id; });
                 ((cfg && cfg.speeds) || []).forEach(function (s) { self._speedRow(rows, s, servers); });

@@ -344,7 +344,19 @@
                     else if (type.maxRelays === 2) relayName = i === 0 ? 'Low Speed' : 'High Speed';
                     $('<span></span>').appendTo(l).text(relayName).css({ display: 'inline-block', width: '7rem' });
                     $('<div></div>').appendTo(l).REMBinding({ binding: `relays[${i}]`, servers: o.servers, horizontal: true, showLabel: false }).css({ marginLeft: '.25rem', display: 'inline-block' });
+                    // On a pump whose relays each pick a speed, what that speed is, for the pump power tracking (njsPC PumpPower.ts). A Hayward
+                    // relay pump's relays are the bits of a step number, so it gets none.
+                    if (['ss', 'ds', 'sf'].indexOf(type.name) >= 0) {
+                        var sp = $('<div class="pmprelay-speed"></div>').appendTo(l).css({ paddingLeft: '7.25rem', paddingBottom: '3px' });
+                        $('<div></div>').appendTo(sp).inputField({ labelText: 'Speed', binding: `relays[${i}].speedName`, inputAttrs: { maxlength: 20, style: { width: '7rem' }, placeholder: relayName }, labelAttrs: { style: { width: '2.7rem' } } });
+                        $('<div></div>').appendTo(sp).valueSpinner({ canEdit: true, labelText: 'RPM', binding: `relays[${i}].rpm`, min: 0, max: 10000, step: 50, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 5 } });
+                        $('<div></div>').appendTo(sp).valueSpinner({ canEdit: true, labelText: 'Watts', binding: `relays[${i}].watts`, min: 0, max: 20000, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 5 } });
+                        if (type.maxRelays > 1) $('<div></div>').appendTo(sp).valueSpinner({ canEdit: true, labelText: 'Priority', binding: `relays[${i}].priority`, min: 0, max: 8, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 1 } });
+                    }
                 }
+                if (['ss', 'ds', 'sf'].indexOf(type.name) >= 0)
+                    $('<div class="cfgPump-relayNote"></div>').appendTo(pnlRelays).css({ fontSize: '.8rem', fontStyle: 'italic', paddingTop: '3px' })
+                        .text('Watts and RPM are for the Pump Power panel; a relay with no watts is not counted. When several relays are on, the pump runs the speed with the best priority: 1 is first, 0 means not set.');
             }
             tabs[0].showTab('tabPumpRelays', type.maxRelays > 0);
             tabs[0].showTab('tabPumpCircuits', type.maxCircuits > 0);
