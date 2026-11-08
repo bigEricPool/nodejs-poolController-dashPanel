@@ -80,8 +80,13 @@
             var self = this, o = self.options, el = self.element, r = o.report;
             var body = el.find('div.picPowerBody').empty();
             el.find('span.picPowerTab').each(function () { $(this).toggleClass('picPowerTabOn', $(this).attr('data-range') === o.range); });
-            if (!r.enabled || !r.configured) {
-                $('<div class="picPowerNote"></div>').text(r.configured ? 'Pump power tracking is turned off.' : 'Enter the watts for each pump speed to start.').appendTo(body);
+            if (!r.enabled) {
+                $('<div class="picPowerNote"></div>').text('Pump power tracking is turned off.').appendTo(body);
+                return;
+            }
+            if (!r.configured) {
+                $('<div class="picPowerNote"></div>').text('Set the watts for each pump speed to start: on the Relays tab of the pump (Settings, Pumps), or with the gear above for other pumps.').appendTo(body);
+                self._missing(body, r);
                 return;
             }
             r.now.forEach(function (n) {
@@ -102,7 +107,23 @@
             r.speeds.filter(function (s) { return s.relay === 'none'; }).forEach(function (s) {
                 $('<div class="picPowerWarn"></div>').text('No pump relay or circuit uses the relay set for ' + s.name + ', so that speed is never counted.').appendTo(body);
             });
+            self._missing(body, r);
             $('<div class="picPowerNote"></div>').text('Estimated: the time at each speed times the watts set for it.').appendTo(body);
+        },
+        // Warnings for settings that keep some of a pump's time from being counted (njsPC's report lists them in `missing`).
+        _missing: function (body, r) {
+            var self = this, where = ' (Settings, Pumps, Relays tab)';
+            (r.missing || []).forEach(function (m) {
+                var text;
+                switch (m.kind) {
+                    case 'noSpeeds': text = m.pumpName + ' is tracked but has no speeds: set the watts for its relays' + where + '.'; break;
+                    case 'relayNoWatts': text = m.pumpName + ': ' + m.relayName + ' (relay ' + m.relay + ') has no watts, so time at that speed is not counted. Set them' + where + '.'; break;
+                    case 'fallback': text = m.pumpName + ' has no watts on its relays, so older speeds from the Pump Power settings are used. Set them' + where + '.'; break;
+                    case 'noSpeedTime': text = m.pumpName + ' ran ' + self._hours(m.seconds) + ' in this period with no speed set, counted as 0 W.'; break;
+                    default: return;
+                }
+                $('<div class="picPowerWarn"></div>').text(text).appendTo(body);
+            });
         },
         _row: function (parent, label, value) {
             var line = $('<div class="picPowerRow"></div>').appendTo(parent);
@@ -222,8 +243,25 @@
             pumps.forEach(function (p) {
                 var sec = $('<div class="picPowerPump"></div>').attr('data-pump', p.id).appendTo(dlg);
                 $('<div class="picPowerPumpName"></div>').text(p.name || 'Pump ' + p.id).appendTo(sec);
-                var rows = $('<div class="picPowerSpeeds"></div>').appendTo(sec);
+                if (p.tracked === false) $('<div class="picPowerWarn"></div>').text('Not counted: Track power is turned off on this pump (Settings, Pumps, Relays tab).').appendTo(sec);
+                // A pump with speeds set on its relays (the Relays tab of its pump page) shows them here; they are changed there.
+                if ((p.relaySpeeds || []).length > 0) {
+                    p.relaySpeeds.forEach(function (s) {
+                        $('<div class="picPowerSpeedFixed"></div>').text(s.name + ': ' + (s.rpm > 0 ? s.rpm + ' rpm, ' : '') + s.watts + ' W' + (s.priority > 0 ? ', priority ' + s.priority : '')).appendTo(sec);
+                    });
+                    $('<div class="picPowerNote"></div>').text('These are set on the Relays tab of the pump (Settings, Pumps).').appendTo(sec);
+                    return;
+                }
                 var cfg = (settings.pumps || []).find(function (x) { return x.pump === p.id; });
+                // A pump that keeps its speeds on its relays but has none there is counted from the speeds below; say so, since they may be
+                // older than what was last set on the pump page.
+                if (p.speedsOnRelays) {
+                    var inUse = cfg && cfg.speeds && cfg.speeds.length > 0;
+                    $('<div></div>').addClass(inUse ? 'picPowerWarn' : 'picPowerNote').text(inUse
+                        ? 'No relay of this pump has watts, so these speeds are being used. Set the speeds on the Relays tab of the pump (Settings, Pumps) to use those instead.'
+                        : 'Set this pump\'s speeds on the Relays tab of the pump (Settings, Pumps), or add them here.').appendTo(sec);
+                }
+                var rows = $('<div class="picPowerSpeeds"></div>').appendTo(sec);
                 ((cfg && cfg.speeds) || []).forEach(function (s) { self._speedRow(rows, s, servers); });
                 $('<div></div>').appendTo(sec).actionButton({ text: 'Add Speed', icon: '<i class="fas fa-plus"></i>' }).on('click', function () {
                     var id = 0;
