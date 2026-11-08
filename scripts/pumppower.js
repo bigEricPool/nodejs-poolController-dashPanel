@@ -222,6 +222,7 @@
             pumps.forEach(function (p) {
                 var sec = $('<div class="picPowerPump"></div>').attr('data-pump', p.id).appendTo(dlg);
                 $('<div class="picPowerPumpName"></div>').text(p.name || 'Pump ' + p.id).appendTo(sec);
+                if (p.tracked === false) $('<div class="picPowerWarn"></div>').text('Not counted: Track power is turned off on this pump (Settings, Pumps, Relays tab).').appendTo(sec);
                 // A pump with speeds set on its relays (the Relays tab of its pump page) shows them here; they are changed there.
                 if ((p.relaySpeeds || []).length > 0) {
                     p.relaySpeeds.forEach(function (s) {
@@ -230,9 +231,16 @@
                     $('<div class="picPowerNote"></div>').text('These are set on the Relays tab of the pump (Settings, Pumps).').appendTo(sec);
                     return;
                 }
-                if (p.speedsOnRelays) $('<div class="picPowerNote"></div>').text('This pump\'s speeds can also be set on the Relays tab of the pump (Settings, Pumps); once they are, they are used instead of these.').appendTo(sec);
-                var rows = $('<div class="picPowerSpeeds"></div>').appendTo(sec);
                 var cfg = (settings.pumps || []).find(function (x) { return x.pump === p.id; });
+                // A pump that keeps its speeds on its relays but has none there is counted from the speeds below; say so, since they may be
+                // older than what was last set on the pump page.
+                if (p.speedsOnRelays) {
+                    var inUse = cfg && cfg.speeds && cfg.speeds.length > 0;
+                    $('<div></div>').addClass(inUse ? 'picPowerWarn' : 'picPowerNote').text(inUse
+                        ? 'No relay of this pump has watts, so these speeds are being used. Set the speeds on the Relays tab of the pump (Settings, Pumps) to use those instead.'
+                        : 'Set this pump\'s speeds on the Relays tab of the pump (Settings, Pumps), or add them here.').appendTo(sec);
+                }
+                var rows = $('<div class="picPowerSpeeds"></div>').appendTo(sec);
                 ((cfg && cfg.speeds) || []).forEach(function (s) { self._speedRow(rows, s, servers); });
                 $('<div></div>').appendTo(sec).actionButton({ text: 'Add Speed', icon: '<i class="fas fa-plus"></i>' }).on('click', function () {
                     var id = 0;

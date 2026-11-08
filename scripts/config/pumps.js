@@ -354,9 +354,14 @@
                         if (type.maxRelays > 1) $('<div></div>').appendTo(sp).valueSpinner({ canEdit: true, labelText: 'Priority', binding: `relays[${i}].priority`, min: 0, max: 8, step: 1, labelAttrs: { style: { marginLeft: '.5rem' } }, inputAttrs: { maxlength: 1 } });
                     }
                 }
-                if (['ss', 'ds', 'sf'].indexOf(type.name) >= 0)
+                if (['ss', 'ds', 'sf'].indexOf(type.name) >= 0) {
+                    $('<div></div>').appendTo(pnlRelays).css({ paddingTop: '3px' }).checkbox({ labelText: 'Track power for this pump (Pump Power panel)', binding: 'trackPower' });
                     $('<div class="cfgPump-relayNote"></div>').appendTo(pnlRelays).css({ fontSize: '.8rem', fontStyle: 'italic', paddingTop: '3px' })
                         .text('Watts and RPM are for the Pump Power panel; a relay with no watts is not counted. When several relays are on, the pump runs the speed with the best priority: 1 is first, 0 means not set.');
+                    if (type.name === 'sf')
+                        $('<div class="cfgPump-relayNote"></div>').appendTo(pnlRelays).css({ fontSize: '.8rem', fontStyle: 'italic', paddingTop: '3px' })
+                            .text('Also fits a variable speed pump whose speeds are picked by relays, one relay per speed, such as the Calimar / Black & Decker VSP with its automation controller add-on.');
+                }
             }
             tabs[0].showTab('tabPumpRelays', type.maxRelays > 0);
             tabs[0].showTab('tabPumpCircuits', type.maxCircuits > 0);
@@ -450,6 +455,8 @@
         },
         dataBind: function (obj) {
             var self = this, o = self.options, el = self.element;
+            // Power tracking counts a pump unless it is turned off on it, so a pump that has never been saved with it shows it on.
+            if (typeof obj.trackPower === 'undefined') obj.trackPower = true;
             var acc = el.find('div.picAccordian:first');
             var type = o.pumpTypes.find(elem => elem.val === obj.type) || { val: -1, name: 'invalid', desc: 'Unknown Type' };
             var cols = acc[0].columns();
