@@ -148,10 +148,10 @@
                 // the upper one (and a check begins only with the projected reading below it), and after stopping there starts again below the lower one.
                 if (typeof b.hysteresis === 'number' && has(b.s)) {
                     anyLevels = true;
-                    series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s + b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true });
-                    series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s - b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true });
+                    series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s + b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true, overlay: true });
+                    series.push({ values: b.s.map(function (s) { return typeof s === 'number' ? s - b.hysteresis : null; }), cls: 'picWaterLineLevel', step: true, overlay: true });
                 }
-                if (has(b.p)) { anyProjected = true; series.push({ values: b.p, cls: 'picWaterLineProjected' }); }
+                if (has(b.p)) { anyProjected = true; series.push({ values: b.p, cls: 'picWaterLineProjected', overlay: true }); }
                 // Readings taken while the body was off (the sensor in the still water of the pipes, which follows the air more than the pool)
                 // are recorded but not drawn, so the chart has a gap while the pump is off.
                 var main = b.v, off = isDay ? null : b.ov;
@@ -161,7 +161,7 @@
                 }
                 if (has(off)) anyOff = true;
                 series.push({ values: main });
-                if (held) series.push({ values: b.l, cls: 'picWaterLineLive' });
+                if (held) series.push({ values: b.l, cls: 'picWaterLineLive', overlay: true });
                 var copts = isDay ? { mode: 'day' } : { mode: o.range, days: days };
                 var c = self._chart(body, (b.name || 'Body') + ' temperature (' + deg + ')', series, b.t, copts);
                 if (c && c.attr('data-fc')) anyFc = true;
@@ -358,8 +358,14 @@
             var gapMs = mode === 'day' ? 5 * 60 * 1000 : mode === 'week' ? 2 * 3600000 + 60000 : 2 * 86400000 + 3600000;
             var n = times.length;
             var min = Infinity, max = -Infinity;
-            var see = function (v) { if (typeof v === 'number' && !isNaN(v)) { if (v < min) min = v; if (v > max) max = v; } };
-            series.forEach(function (s) { if (s.band) { s.band.hi.forEach(see); s.band.lo.forEach(see); } else s.values.forEach(see); });
+            // The value scale spans every series drawn, so the overlays fit. The range in the label is of the temperature readings only (the
+            // line and the band); an `overlay` series (the solar levels, the projected reading, the live reading) does not widen it.
+            var rMin = Infinity, rMax = -Infinity, inRange = false;
+            var see = function (v) {
+                if (typeof v === 'number' && !isNaN(v)) { if (v < min) min = v; if (v > max) max = v; if (inRange) { if (v < rMin) rMin = v; if (v > rMax) rMax = v; } }
+            };
+            series.forEach(function (s) { inRange = !s.overlay; if (s.band) { s.band.hi.forEach(see); s.band.lo.forEach(see); } else s.values.forEach(see); });
+            if (rMin === Infinity) { rMin = min; rMax = max; }
             var box = $('<div class="picWaterChart"></div>').appendTo(parent);
             var head = $('<div class="picWaterChartLabel"></div>').appendTo(box);
             $('<span></span>').text(label).appendTo(head);
@@ -388,7 +394,7 @@
                 mode = spanDays <= 10 ? 'dates' : spanDays <= 62 ? 'month' : 'year';
             }
             if (n < (opts.mode === 'day' ? 2 : 1) || min === Infinity || !(t1 > t0)) { $('<div class="picWaterNote"></div>').text('Not enough readings yet.').appendTo(box); return box; }
-            $('<span class="picWaterChartRange"></span>').text(min.toFixed(1) + '–' + max.toFixed(1) + '°').appendTo(head);
+            $('<span class="picWaterChartRange"></span>').text(rMin.toFixed(1) + '–' + rMax.toFixed(1) + '°').appendTo(head);
             if (max - min < 2) { var mid = (max + min) / 2; min = mid - 1; max = mid + 1; }
             var ys = self._step(max - min, [0.5, 1, 2, 5, 10, 20], 4);
             min = Math.floor(min / ys) * ys;
