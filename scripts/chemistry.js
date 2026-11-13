@@ -28,6 +28,11 @@
         }
         return text;
     }
+    // The Model Bench's CYA test advice in full: the main reason, then any other rule that also holds.
+    function autoSwgCyaAdviceText(a) {
+        var more = (Array.isArray(a.rules) ? a.rules : []).filter(function (r) { return r.rule !== a.rule; }).map(function (r) { return r.reason; });
+        return String(a.reason) + (more.length ? ' Also: ' + more.join(' ') : '');
+    }
     // The warning that even 100% SWG can't reach the target within the window the last
     // apply was aiming for -- only while that deadline is still ahead (afterward there's
     // no longer a target being missed). Empty string when there's nothing to warn about.
@@ -209,6 +214,11 @@
                     fontSize: '1em', color: '#0b3d5c', background: '#d6ecfa',
                     padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
                 }).hide().appendTo(self._elAutoSwgSummary.parent());
+                // The SWG Assist Model Bench's CYA test advice (state.autoSwg.benchCyaAdvice, advisory only): a CYA test would help the projections, and why.
+                self._elAutoSwgCyaNote = $('<div></div>').css({
+                    fontSize: '1em', color: '#0b3d5c', background: '#d6ecfa',
+                    padding: '.4rem .6rem', borderRadius: '.25rem', marginTop: '.3rem'
+                }).hide().appendTo(self._elAutoSwgSummary.parent());
                 // Separate from the one above (a different problem, and both can apply): the
                 // applied % is already maxed out and still won't reach the target in time.
                 self._elAutoSwgTargetWarning = $('<div></div>').css({
@@ -293,6 +303,10 @@
             self._elAutoSwgAlerts.toggle(swgAlerts.length > 0);
             if (data.saltNote) self._elAutoSwgSaltNote.text('ℹ ' + String(data.saltNote).split('. ')[0] + '.').attr('title', data.saltNote).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgSaltNote.hide();
+            // Nothing unless the bench says a CYA test is due; the first sentence here, all of it in the tooltip and the status popup.
+            var cyaAdvice = data.benchCyaAdvice;
+            if (cyaAdvice && cyaAdvice.due && cyaAdvice.reason) self._elAutoSwgCyaNote.text('ℹ CYA test advised: ' + String(cyaAdvice.reason).split('. ')[0].replace(/\.$/, '') + '.').attr('title', autoSwgCyaAdviceText(cyaAdvice)).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
+            else self._elAutoSwgCyaNote.hide();
             var targetWarning = autoSwgTargetWarning(data);
             if (targetWarning) self._elAutoSwgTargetWarning.text('⚠ ' + targetWarning).off('click').on('click', function () { self._showAutoSwgPopup(); }).show();
             else self._elAutoSwgTargetWarning.hide();
@@ -344,6 +358,7 @@
                 addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved ' + autoSwgLargeChangeText(data) + ' with no manual review.',
                     { fontWeight: 'bold', color: '#fff', background: '#c0392b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
+            if (data.benchCyaAdvice && data.benchCyaAdvice.due && data.benchCyaAdvice.reason) addLine('ℹ CYA test advised: ' + autoSwgCyaAdviceText(data.benchCyaAdvice), { color: '#0b3d5c', background: '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             var targetWarning = autoSwgTargetWarning(data);
             if (targetWarning) {
                 addLine('⚠ ' + targetWarning, { fontWeight: 'bold', color: '#fff', background: '#d35400', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
