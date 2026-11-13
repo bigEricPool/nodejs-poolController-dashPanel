@@ -1768,6 +1768,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             $('<div></div>').appendTo(pnl).css({ fontSize: '.8em', color: '#888', margin: '.2rem 0 .4rem .25rem' })
                 .text('Band: the 90% miss range (±ppm). 5% to 95%: test minus projection, so a lopsided range shows a skew. vs live: the mean difference in absolute miss against the SWG Assist projection on the same tests (negative: this model misses less), ± its standard error, and how often it came out better in resampling. '
                     + 'Own band: the band this model would show from its last 30 misses. Revised: the same scores redone with the CYA path corrected by a later CYA test, for tuning only; the verdict stays with the scores as made. Click a row for its last misses and its band by gap.');
+            // flagged pairs (njsPC scoreFlags): kept, but out of the bands and the comparison with live; the thresholds come with the scoreboard
+            self._elBenchFlagsNote = $('<div></div>').appendTo(pnl).css({ fontSize: '.8em', color: '#888', margin: '0 0 .4rem .25rem' });
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh', icon: '<i class="fas fa-rotate"></i>' })
                 .on('click', function () { self._loadBench(); });
@@ -1839,6 +1841,9 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 }
                 else self._elBenchCoverage.text('');
                 self._renderBenchCyaLine(b.cya);
+                var sc = b.scoring;
+                self._elBenchFlagsNote.text(sc ? 'Flagged pairs are kept but left out of the bands and the comparison with live: a long gap (over ' + sc.maxGapDays + ' days), thin inputs (under ' + Math.round(sc.minCoverage * 100)
+                    + '% of the hours with every input), or an implausible projection (below zero, or above the reading before plus the chlorine credited). A gap band shows its band from ' + sc.minGapN + ' pairs on.' : '');
                 self._renderBenchTables();
                 // While a replay runs, follow it (only while the bench is open on the page).
                 clearTimeout(self._benchPoll);
@@ -1869,7 +1874,14 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 if (replay) return v.replay ? v.replay[replayView] : undefined;
                 return v.live ? v.live[liveView] : undefined;
             };
-            var gap47 = function (blk) { var g = blk && Array.isArray(blk.byGap) ? blk.byGap.find(function (x) { return x.label === '4-7 d'; }) : undefined; return g && g.n ? f.band(g.halfWidth90) + ' (' + g.n + ')' : '--'; };
+            // the 4-7 day band; below the pairs a band needs, the count and the server's note in its place (and the flagged pairs left out of it)
+            var gap47 = function (blk) {
+                var g = blk && Array.isArray(blk.byGap) ? blk.byGap.find(function (x) { return x.label === '4-7 d'; }) : undefined;
+                if (!g || !(g.n || g.flagged)) return '--';
+                var need = b.scoring && b.scoring.minGapN;
+                var t = typeof g.halfWidth90 === 'number' ? f.band(g.halfWidth90) + ' (' + g.n + ')' : g.n + ' pair' + (g.n === 1 ? '' : 's') + (need ? ', needs ' + need : (g.note ? ' (' + g.note + ')' : ''));
+                return t + (g.flagged ? ', ' + g.flagged + ' flagged' : '');
+            };
             var build = function (target, replay) {
                 target.empty();
                 var rows = vs.map(function (v) { return { v: v, blk: pickBlock(v, replay) || { n: 0 } }; })
@@ -1886,7 +1898,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                         .text(replay ? 'No replay rows for this view. Replay works the scores out over the past.' : 'No live scores for this view yet: each model is scored when a new FC test arrives, with the fit it froze at the last check before it.');
                     if (replay) return;
                 }
-                var cols = [['Model', 'left'], ['Band', 'right'], ['5% to 95%', 'right'], ['n', 'right'], ['MAE', 'right'], ['Bias', 'right'], ['vs live', 'right'], ['P(better)', 'right'], ['4-7 d band', 'right'], ['Own band', 'right']];
+                var cols = [['Model', 'left'], ['Band', 'right'], ['5% to 95%', 'right'], ['n', 'right'], ['Excluded', 'left'], ['MAE', 'right'], ['Bias', 'right'], ['vs live', 'right'], ['P(better)', 'right'], ['4-7 d band', 'right'], ['Own band', 'right']];
                 if (!replay) cols.push(['Revised (tuning only)', 'right']);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.3rem' }).appendTo(target);
                 var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
@@ -1896,8 +1908,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     var v = x.v, blk = x.blk, pd = blk.vsLive || {};
                     var isLive = v.kind === 'live';
                     var name = (v.label || v.id) + '  (' + v.id + ' v' + v.version + (v.retired ? ', retired' : '') + ')';
-                    var cells = [name, f.band(blk.halfWidth90), blk.n ? f.signed(blk.p5) + ' to ' + f.signed(blk.p95) : '--', String(blk.n || 0), f.n2(blk.mae), f.signed(blk.bias),
-                        isLive ? '' : (typeof pd.meanDiff === 'number' ? f.signed(pd.meanDiff) + ' ± ' + f.n2(pd.se) + ' (' + pd.n + ')' : '--'),
+                    var cells = [name, f.band(blk.halfWidth90), blk.n ? f.signed(blk.p5) + ' to ' + f.signed(blk.p95) : '--', String(blk.n || 0), self._benchExcluded(blk), f.n2(blk.mae), f.signed(blk.bias),
+                        isLive ? '' : pd.note ? 'not compared' : (typeof pd.meanDiff === 'number' ? f.signed(pd.meanDiff) + ' ± ' + f.n2(pd.se) + ' (' + pd.n + ')' : '--'),
                         isLive ? '' : (typeof pd.pBetter === 'number' ? Math.round(pd.pBetter * 100) + '%' : '--'),
                         gap47(blk), replay ? '--' : f.band(v.ownBand)];
                     if (!replay) {
@@ -1913,10 +1925,13 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                         if (i === 0) td.css({ whiteSpace: 'normal', minWidth: '12rem' }).append($('<div></div>').text(v.label || v.id))
                             .append($('<div></div>').css({ fontSize: '.8em', fontWeight: 'normal', color: '#999' }).text(v.id + ' v' + v.version + (v.retired ? ', retired' : '')));
                         else td.text(val);
+                        if (i === 7 && pd.note) td.attr('title', pd.note).css({ color: '#888' });
                     });
-                    if (!isLive && pd.n >= 2 && typeof pd.pBetter === 'number') tr.children().eq(7).css({ color: pd.pBetter >= 0.9 ? '#2a7' : pd.pBetter <= 0.1 ? '#c0392b' : '' });
+                    if (!isLive && pd.n >= 2 && typeof pd.pBetter === 'number') tr.children().eq(8).css({ color: pd.pBetter >= 0.9 ? '#2a7' : pd.pBetter <= 0.1 ? '#c0392b' : '' });
                     tr.on('click', function () { self._showBenchVariant(v, blk, replay); });
                 });
+                var notCompared = rows.map(function (x) { return x.blk.vsLive && x.blk.vsLive.note; }).filter(function (n) { return !!n; })[0];
+                if (notCompared) $('<div></div>').appendTo(target).css({ fontSize: '.8em', color: '#888', margin: '0 0 .3rem .25rem' }).text('vs live: ' + notCompared + '.');
             };
             build(self._elBenchLive, false);
             build(self._elBenchReplay, true);
@@ -1939,11 +1954,13 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     row.forEach(function (val, i) { $('<td></td>').text(val).css({ textAlign: cols[i][1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr); });
                 });
             };
-            table('Band by time since the reading before (' + (replay ? 'replay rows' : 'live rows') + ', the view picked)', [['Gap', 'left'], ['n', 'right'], ['Band', 'right'], ['MAE', 'right']],
-                ((blk && blk.byGap) || []).map(function (g) { return [g.label, String(g.n), f.band(g.halfWidth90), f.n2(g.mae)]; }));
+            table('Band by time since the reading before (' + (replay ? 'replay rows' : 'live rows') + ', the view picked)', [['Gap', 'left'], ['n', 'right'], ['Flagged', 'right'], ['Band', 'right'], ['MAE', 'right']],
+                ((blk && blk.byGap) || []).map(function (g) { return [g.label, String(g.n), typeof g.flagged === 'number' ? String(g.flagged) : '--', typeof g.halfWidth90 === 'number' ? f.band(g.halfWidth90) : (g.note || '--'), f.n2(g.mae)]; }));
+            if (blk && blk.excluded) $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', margin: '-.2rem 0 .5rem 0' }).text('Excluded from this view: ' + self._benchExcluded(blk) + '. Flagged pairs are kept but left out of the bands and the comparison with live.');
+            if (blk && blk.vsLive && blk.vsLive.note) $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', margin: '-.2rem 0 .5rem 0' }).text('vs live: ' + blk.vsLive.note + '.');
             var misses = Array.isArray(v.lastMisses) ? v.lastMisses.slice().reverse() : [];
-            if (misses.length) table('Last live misses at the next test (test minus projection)', [['Test', 'left'], ['Days', 'right'], ['Projected', 'right'], ['Tested', 'right'], ['Miss', 'right']],
-                misses.map(function (m) { return [f.when(m.t), f.n2(m.days), f.n2(m.proj), f.n2(m.test), f.signed(m.miss)]; }));
+            if (misses.length) table('Last live misses at the next test (test minus projection)', [['Test', 'left'], ['Days', 'right'], ['Projected', 'right'], ['Tested', 'right'], ['Miss', 'right'], ['Flagged', 'left']],
+                misses.map(function (m) { return [f.when(m.t), f.n2(m.days), f.n2(m.proj), f.n2(m.test), f.signed(m.miss), (Array.isArray(m.flags) ? m.flags : []).map(function (x) { return self._benchFlagNames[x] || x; }).join(', ')]; }));
             else $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', fontStyle: 'italic', color: '#888' }).text('No live misses yet.');
         },
         // A model's definition in words.
@@ -1954,6 +1971,31 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             return 'Burn = a x ' + (v.fcTerm === 'fc' ? 'FC' : 'FC/CYA') + ' x ' + sun + (v.temp ? ' x a water-temperature factor' : '') + ' + b' + (v.rainWash ? ' + a rain wash-in term' : '')
                 + '; fitted on the last ' + (v.fitDays || 30) + ' days (ridge ' + (typeof v.ridge === 'number' ? v.ridge : 0.5) + '); CYA ' + (v.cya === 'path' ? 'on the path between tests' : 'held at the last test')
                 + '; FC inside the gap ' + (v.fcPath === 'held' ? 'held at the start reading' : 'following the model') + '.';
+        },
+        // "N (long gap a, thin inputs b, implausible c)" for a block's flagged pairs; '--' from an njsPC that does not flag them
+        _benchExcluded: function (blk) {
+            var e = blk && blk.excluded;
+            if (!e) return '--';
+            var nAll = typeof blk.nAll === 'number' ? blk.nAll : blk.n;
+            var x = nAll - (blk.n || 0);
+            if (!x) return '0';
+            var parts = [];
+            if (e.longGap) parts.push('long gap ' + e.longGap);
+            if (e.thinInputs) parts.push('thin inputs ' + e.thinInputs);
+            if (e.implausible) parts.push('implausible ' + e.implausible);
+            return x + (parts.length ? ' (' + parts.join(', ') + ')' : '');
+        },
+        _benchFlagNames: { longGap: 'long gap', thinInputs: 'thin inputs', implausible: 'implausible' },
+        // A score row's flags judged with the scoreboard's scoring settings (the rule of njsPC scoreFlags), so the chart agrees with the tables; with no
+        // settings (an njsPC that does not flag) the flags written with the row, if any.
+        _benchRowFlags: function (r) {
+            var s = this._bench && this._bench.scoring;
+            if (!s) return Array.isArray(r.flags) ? r.flags : [];
+            var out = [];
+            if (r.days > s.maxGapDays) out.push('longGap');
+            if (typeof r.cov === 'number' && r.cov < s.minCoverage) out.push('thinInputs');
+            if (r.proj < 0 || (typeof r.gen === 'number' && r.proj > r.f1 + r.gen + 1e-6)) out.push('implausible');
+            return out;
         },
         _benchPalette: ['#1f77b4', '#d62728', '#2ca02c', '#9467bd', '#ff7f0e', '#17becf', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#393b79', '#ad494a', '#637939', '#843c39'],
         _benchEsc: function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
@@ -1979,7 +2021,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             var chart = $('<div></div>').appendTo(wrap);
             var legend = $('<div></div>').appendTo(wrap).css({ display: 'flex', flexWrap: 'wrap', gap: '.3rem .9rem', fontSize: '.85em', margin: '.3rem 0' });
             $('<div></div>').appendTo(wrap).css({ fontSize: '.8em', color: '#888' })
-                .text('Black dots: the FC tests. Each model\'s projection for a test is drawn at that test (lines join a model\'s projections; they are not a path between tests). The shaded band is your FC range. Below: the misses (test minus projection). Hover a point for its numbers; click a model in the legend to hide or show it. The live SWG Assist projection is scored at the next test only.');
+                .text('Black dots: the FC tests. Each model\'s projection for a test is drawn at that test (lines join a model\'s projections; they are not a path between tests). The shaded band is your FC range. Below: the misses (test minus projection). Hollow points are flagged pairs (a long gap, thin inputs or an implausible projection): kept, but left out of the bands and the comparison with live. Hover a point for its numbers; click a model in the legend to hide or show it. The live SWG Assist projection is scored at the next test only.');
             var rows = [], hidden = self._benchChartHidden || (self._benchChartHidden = {});
             var draw = function () {
                 var useReplay = selRows.val() === 'replay', horizon = selHorizon.val(), mode = selMode.val();
@@ -2054,9 +2096,12 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     var name = self._benchEsc(k.replace('|', ' v'));
                     s.push('<polyline fill="none" stroke="' + c + '" stroke-opacity="0.45" stroke-width="1" points="' + pts.map(function (r) { return px(r.t).toFixed(1) + ',' + py(r.proj).toFixed(1); }).join(' ') + '"></polyline>');
                     pts.forEach(function (r) {
-                        var tip = name + '\n' + self._benchEsc(f.when(r.t)) + ': projected ' + f.n2(r.proj) + ', tested ' + f.n2(r.test) + ', miss ' + f.signed(r.miss) + '\nfrom ' + f.n2(r.f1) + ' ' + f.n2(r.days) + ' days before';
-                        s.push('<circle cx="' + px(r.t).toFixed(1) + '" cy="' + py(r.proj).toFixed(1) + '" r="3" fill="' + c + '"><title>' + tip + '</title></circle>');
-                        s.push('<circle cx="' + px(r.t).toFixed(1) + '" cy="' + pm(Math.max(-mAbs, Math.min(mAbs, r.miss))).toFixed(1) + '" r="2.5" fill="' + c + '"><title>' + tip + '</title></circle>');
+                        var fl = self._benchRowFlags(r);
+                        var tip = name + '\n' + self._benchEsc(f.when(r.t)) + ': projected ' + f.n2(r.proj) + ', tested ' + f.n2(r.test) + ', miss ' + f.signed(r.miss) + '\nfrom ' + f.n2(r.f1) + ' ' + f.n2(r.days) + ' days before'
+                            + (fl.length ? '\nflagged: ' + fl.map(function (x) { return self._benchFlagNames[x] || x; }).join(', ') + ' (left out of the bands)' : '');
+                        var mark = fl.length ? 'fill="none" stroke="' + c + '" stroke-width="1.5"' : 'fill="' + c + '"';
+                        s.push('<circle cx="' + px(r.t).toFixed(1) + '" cy="' + py(r.proj).toFixed(1) + '" r="3" ' + mark + '><title>' + tip + '</title></circle>');
+                        s.push('<circle cx="' + px(r.t).toFixed(1) + '" cy="' + pm(Math.max(-mAbs, Math.min(mAbs, r.miss))).toFixed(1) + '" r="2.5" ' + mark + '><title>' + tip + '</title></circle>');
                     });
                 });
                 // the tests on top
@@ -2284,6 +2329,24 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     body.outline = ol;
                     put({ geometry: body }, 'Saved the geometry. It applies from the next check.');
                 });
+                // the scoring thresholds (an older njsPC has no scoring block and ignores it)
+                if (s.scoring) {
+                    var sc = s.scoring;
+                    section('Scoring: the pairs the bench cannot score fairly');
+                    $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', marginBottom: '.3rem' })
+                        .text('A flagged pair is kept in the scores and shown hollow on the chart, but left out of the bands and the comparison with live, the same way for the SWG Assist projection and every model. Long-gap and thin-input intervals are also left out of the model fits. '
+                            + 'The scoreboard judges every pair again with these settings. Pairs scored before the bench kept input coverage are judged only for a long gap or an implausible projection until you run Replay again.');
+                    var sBox = $('<div></div>').appendTo(wrap);
+                    var maxGap = field(sBox, 'Longest gap scored', num(sc.maxGapDays), 'days (1 to 60, default 10)');
+                    var minCov = field(sBox, 'Fewest hours with every input', num(sc.minCoverage), 'share of the gap, 0 to 1 (default 0.9)');
+                    var minN = field(sBox, 'Pairs a gap band needs', num(sc.minGapN), 'before its band is shown (1 to 100, default 8)');
+                    var sBtn = $('<div class="picBtnPanel btn-panel"></div>').appendTo(wrap);
+                    $('<div></div>').appendTo(sBtn).actionButton({ text: 'Save Scoring', icon: '<i class="fas fa-save"></i>' }).on('click', function () {
+                        var body = {};
+                        [['maxGapDays', maxGap], ['minCoverage', minCov], ['minGapN', minN]].forEach(function (p) { var x = parseFloat(p[1].val()); if (isFinite(x)) body[p[0]] = x; });
+                        put({ scoring: body }, 'Saved the scoring settings. The scoreboard uses them at once; the fits from the next check.');
+                    });
+                }
                 // CYA (step 2 of the bench; an older njsPC has no cya block and ignores it)
                 if (s.cya) {
                     var c = s.cya;
