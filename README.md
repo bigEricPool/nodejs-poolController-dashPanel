@@ -31,6 +31,7 @@ Base for new branches: master at a5e8c15.
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
 | `feature/swg-assist` | feature | SWG Assist: a recommended SWG % from PoolMath readings, with Away protection and the FC range control mode. User-facing text says SWG Assist; code, the autoSwg config key, data files and API routes keep the internal name AutoSwg. In pool and pool-next. | optional: fix/chlorinator-poll-stall | none |
+| `feature/swg-bench` | feature | SWG Assist Model Bench page in the SWG Assist settings (scoreboard, scores, replay, simulator, CYA path) and the CYA test advice note on the Chemistry panel. Pairs with njsPC feature/swg-bench and feature/swg-bench-wiring. In pool and pool-next. | feature/swg-assist | none (fork only) |
 
 ## Being replaced
 

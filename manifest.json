@@ -166,6 +166,17 @@
       "build": true
     },
     {
+      "name": "feature/swg-bench",
+      "kind": "feature",
+      "status": "active",
+      "purpose": "SWG Assist Model Bench page (scoreboard, scores, replay, simulator, CYA path) in the SWG Assist settings, and the CYA test advice note on the Chemistry panel. Needs njsPC feature/swg-bench and feature/swg-bench-wiring. Fork only.",
+      "depends": [
+        "feature/swg-assist"
+      ],
+      "upstream": "",
+      "build": true
+    },
+    {
       "name": "feature/power-tracking",
       "kind": "feature",
       "status": "active",
