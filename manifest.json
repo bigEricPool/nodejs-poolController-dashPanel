@@ -97,13 +97,13 @@
       "build": true
     },
     {
-      "name": "feature/dashboard-enhancements",
-      "kind": "feature",
-      "status": "legacy",
+      "name": "archive/2026-11-13/feature/dashboard-enhancements",
+      "kind": "archive",
+      "status": "archive",
       "purpose": "Older combined branch; replaced by feature/chlorinator-rs485-diag and, in dashPanel, feature/dashboard-sun-times.",
       "depends": [],
       "upstream": "#1250",
-      "build": true
+      "build": false
     },
     {
       "name": "feature/temp-average-24h",
@@ -195,7 +195,7 @@
       "build": true
     },
     {
-      "name": "audit-fix-pi",
+      "name": "archive/2026-11-13/audit-fix-pi",
       "kind": "archive",
       "status": "archive",
       "purpose": "Snapshot of an earlier install; fully contained in pool.",

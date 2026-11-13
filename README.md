@@ -37,13 +37,13 @@ Base for new branches: master at a5e8c15.
 
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
-| `feature/dashboard-enhancements` | feature | Older combined branch; replaced by feature/chlorinator-rs485-diag and, in dashPanel, feature/dashboard-sun-times. | none | #1250 |
+| `archive/2026-11-13/feature/dashboard-enhancements` | archive | Older combined branch; replaced by feature/chlorinator-rs485-diag and, in dashPanel, feature/dashboard-sun-times. | none | #1250 |
 
 ## Kept for history
 
 | Branch | Kind | Purpose | Depends on | Related report |
 |---|---|---|---|---|
-| `audit-fix-pi` | archive | Snapshot of an earlier install; fully contained in pool. | none | none |
+| `archive/2026-11-13/audit-fix-pi` | archive | Snapshot of an earlier install; fully contained in pool. | none | none |
 | `archive/2026-10-11/*` | archive | Tips of branches as they were before being re-cut on current master on 2026-10-11. | none | none |
 | `archive/2026-11-03/*` | archive | Old AutoSwg branch names (feature/auto-swg, -automation, -clean), moved here on 2026-11-03, and feature/swg-cell-usage, whose content moved to feature/chlorinator-log and feature/swg-assist; their content is in feature/swg-assist and pool. | none | none |
 
