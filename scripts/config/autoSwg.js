@@ -391,6 +391,11 @@
                 color: '#0b3d5c', background: '#d6ecfa',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            // The Model Bench's CYA test advice (state.autoSwg.benchCyaAdvice): a CYA test would help, and why. Advisory only; hidden when none is due.
+            self._elBenchCyaNote = $('<div></div>').appendTo(results).css({
+                color: '#0b3d5c', background: '#d6ecfa',
+                padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
+            }).hide();
             self._elCalcHeader = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#555', marginBottom: '.15rem' }).hide();
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results).hide();
@@ -440,6 +445,7 @@
             results.append(self._elResultDivider);
             [self._elRunningNow, self._elLastApplied, self._elPendingStep, self._elNextAutoCheck, self._elArchiveStatus, self._elAppliedRationaleHeader, self._elAppliedRationale]
                 .forEach(function (el) { results.append(el); });
+            self._buildBench();
         },
         // Keeps Apply and Cancel enabled/disabled together -- both only make sense while
         // there's a fresh, unapplied calculation to act on.
@@ -742,6 +748,7 @@
                     $.getApiService('/config/autoSwg', null, function (cfg) {
                         self._automation = !(cfg && cfg.automationAvailable === false);
                         self._gate = cfg && cfg.gate;
+                        self._fcRange = { low: cfg && cfg.fcLow, high: cfg && cfg.fcHigh };
                         self.dataBind(cfg);
                         self._updateManualTimeFields(cfg && cfg.scheduleId);
                         self._updateAutoApplyFields(cfg && cfg.autoApplyEnabled);
@@ -857,6 +864,7 @@
             else self._elStaleFcNote.hide();
             if (hasCalc && result.saltNote) self._elSaltNote.text('ℹ ' + result.saltNote).show();
             else self._elSaltNote.hide();
+            self._renderBenchCyaAdvice(result);
             self._elAsOf.toggle(hasCalc).text(hasCalc && fromSaved ? 'As of last check: ' + new Date(result.lastCheckedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ' -- run Check Now to refresh.' : '');
             self._elCalcHeader.toggle(hasCalc).text(result.pending ? 'Latest calculation (not applied yet):' : 'Latest calculation (applied):');
             // Under range control there is no target or deadline to reach: the % keeps FC between the low and the high (Away protection still steers to its target).
@@ -1719,6 +1727,688 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     { text: 'Got It', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
                 ]
             });
+        },
+        // ---------------------------------------------------------------- SWG Assist Model Bench
+        // The Model Bench (njsPC controller/AutoSwgBench.ts) runs several FC projection models beside SWG Assist and scores each one against every FC
+        // test. It never changes the SWG %. It has its own accordion, outside the settings panel (self._pnl), so none of its fields join the SWG Assist
+        // settings form, its dirty check or its save. Routes (code names keep autoSwg; the text says SWG Assist):
+        //   GET  /state/autoSwg/bench                    the scoreboard: per variant version, live rows and replay rows apart, input coverage, the CYA block
+        //   GET  /state/autoSwg/bench/scores?days=       every score row (&format=csv downloads them)
+        //   GET  /state/autoSwg/bench/cya?days=          the CYA path, its tests and their status, the stabilizer additions, the rain k, the advice
+        //   GET/PUT /config/autoSwg/bench                enabled, the pool geometry, the CYA settings, the variants (a changed definition makes a new version)
+        //   POST /state/autoSwg/bench/replay?since=      works the scores out over the past (rows flagged replay, kept apart from live rows)
+        // The user judges models by time in the FC range and smoothness; the projection band is the supporting measure, so band widths come first.
+        _buildBench: function () {
+            var self = this, el = self.element;
+            var acc = $('<div></div>').appendTo(el).accordian({ columns: [{ binding: 'title', glyph: 'fas fa-flask', style: { width: '20rem' } }] });
+            acc[0].columns()[0].elText().text('SWG Assist Model Bench');
+            var pnl = acc.find('div.picAccordian-contents');
+            self._benchAcc = acc;
+            $('<div></div>').appendTo(pnl).css({ padding: '.25rem .25rem .6rem .25rem', fontStyle: 'italic' })
+                .text('Runs several FC projection models beside SWG Assist and scores each one against every FC test. It never changes the SWG %. '
+                    + 'The band is the 90% miss range: the next test reads within this many ppm of the projection 9 times in 10, so a narrower band is better. '
+                    + 'Live rows were scored as each test arrived and decide; replay rows were worked out afterwards over the past and are only a quick early read.');
+            self._elBenchStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
+            self._elBenchCoverage = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
+            self._elBenchCya = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
+            self._elBenchAdvice = $('<div></div>').appendTo(pnl).css({ color: '#0b3d5c', background: '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).hide();
+            var pick = function (label, items, def) {
+                var line = $('<div></div>').appendTo(pnl).css({ margin: '.6rem 0 .2rem 0' });
+                $('<span></span>').text(label).css({ fontWeight: 'bold', marginRight: '.5rem' }).appendTo(line);
+                var sel = $('<select></select>').appendTo(line).css({ fontSize: '.9em' });
+                items.forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(sel); });
+                sel.val(def);
+                sel.on('change', function () { self._renderBenchTables(); });
+                return sel;
+            };
+            self._selBenchLive = pick('Live rows', [['all', 'All time, next test'], ['last90', 'Last 90 days, next test'], ['skip', 'Skip one test (the weekly-testing case)'], ['forecast', 'Forecast (only what was known at the check)']], 'all');
+            self._elBenchLive = $('<div></div>').appendTo(pnl).css({ overflowX: 'auto' });
+            self._selBenchReplay = pick('Replay rows', [['next', 'Next test'], ['skip', 'Skip one test (the weekly-testing case)'], ['forecast', 'Forecast (only what was known at the check)']], 'next');
+            self._elBenchReplay = $('<div></div>').appendTo(pnl).css({ overflowX: 'auto' });
+            $('<div></div>').appendTo(pnl).css({ fontSize: '.8em', color: '#888', margin: '.2rem 0 .4rem .25rem' })
+                .text('Band: the 90% miss range (±ppm). 5% to 95%: test minus projection, so a lopsided range shows a skew. vs live: the mean difference in absolute miss against the SWG Assist projection on the same tests (negative: this model misses less), ± its standard error, and how often it came out better in resampling. '
+                    + 'Own band: the band this model would show from its last 30 misses. Revised: the same scores redone with the CYA path corrected by a later CYA test, for tuning only; the verdict stays with the scores as made. Click a row for its last misses and its band by gap.');
+            var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh', icon: '<i class="fas fa-rotate"></i>' })
+                .on('click', function () { self._loadBench(); });
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Projections Chart', icon: '<i class="fas fa-chart-line"></i>' })
+                .attr('title', 'Each model\'s projected FC against the FC tests.')
+                .on('click', function () { self._showBenchChart(); });
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'CYA Path', icon: '<i class="fas fa-chart-area"></i>' })
+                .attr('title', 'The CYA the bench assumes between tests: the path, the tests and how it took them, the stabilizer additions, the rain dilution.')
+                .on('click', function () { self._showBenchCya(); });
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Models and Settings', icon: '<i class="fas fa-sliders"></i>' })
+                .attr('title', 'Copy, edit or retire a model, and the pool geometry and CYA settings. An edit makes a new version of the model, scored apart from the old one.')
+                .on('click', function () { self._showBenchSettings(); });
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Replay', icon: '<i class="fas fa-backward"></i>' })
+                .attr('title', 'Works the scores out over the past, as if the bench had been running. Replay rows are kept apart from live rows.')
+                .on('click', function () { self._showBenchReplay(); });
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Download CSV', icon: '<i class="fas fa-download"></i>' })
+                .attr('title', 'Every score row the bench keeps (up to 18 months), live and replay, as CSV.')
+                .on('click', function () { self._downloadBenchCsv(); });
+            // Loads each time it is opened (the accordion's own click handler runs first and sets data-expanded).
+            acc.on('click keydown', 'div.picAccordian-title:first', function (evt) {
+                if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ' && evt.key !== 'Spacebar') return;
+                setTimeout(function () { if (makeBool(acc.attr('data-expanded'))) self._loadBench(); }, 0);
+            });
+        },
+        // An API URL the way $.getApiService builds it (through the proxy when the page uses one).
+        _benchUrl: function (path) {
+            var useProxy = makeBool($('body').attr('data-apiproxy'));
+            var u = useProxy ? '/njsPC' + path : $('body').attr('data-apiserviceurl') + path;
+            if (u.startsWith('/')) u = u.substring(1);
+            return u;
+        },
+        // A GET with no error popup: for a route an older njsPC may not have (the CYA path came in step 2 of the bench).
+        _benchGet: function (path, ok, fail) {
+            var self = this;
+            return jQuery.ajax({ url: self._benchUrl(path), type: 'GET', dataType: 'json', success: function (d) { ok(d); }, error: function (xhr) { if (fail) fail(xhr && xhr.status); } });
+        },
+        _benchFmt: {
+            n2: function (v) { return typeof v === 'number' && isFinite(v) ? v.toFixed(2) : '--'; },
+            signed: function (v) { return typeof v === 'number' && isFinite(v) ? (v > 0 ? '+' : '') + v.toFixed(2) : '--'; },
+            band: function (v) { return typeof v === 'number' && isFinite(v) ? '±' + v.toFixed(2) : '--'; },
+            pct: function (v) { return typeof v === 'number' && isFinite(v) ? Math.round(v * 100) + '%' : '--'; },
+            when: function (t) { if (!t) return '--'; var d = new Date(t); return isNaN(d.getTime()) ? '--' : d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); },
+            day: function (t) { if (!t) return '--'; var d = new Date(t); return isNaN(d.getTime()) ? '--' : d.toLocaleDateString([], { dateStyle: 'medium' }); }
+        },
+        _loadBench: function () {
+            var self = this, f = self._benchFmt;
+            self._elBenchStatus.text('Loading the scoreboard...');
+            $.getApiService('/state/autoSwg/bench', null, function (b) {
+                self._bench = b || {};
+                b = self._bench;
+                var parts = [b.enabled === false ? 'The bench is off (Models and Settings turns it on).' : 'The bench is on.'];
+                parts.push('Last fit at a check: ' + (b.lastCheck ? f.when(b.lastCheck) : 'none since njsPC started') + '.');
+                parts.push('Last scoring: ' + (b.lastScored ? f.when(b.lastScored) : 'none since njsPC started') + '.');
+                var r = b.replay || {};
+                if (r.running) parts.push('Replay running: ' + (r.done || 0) + ' of ' + (r.total || '?') + '.');
+                else if (r.finishedAt) parts.push('Last replay finished ' + f.when(r.finishedAt) + (r.since ? ' (from ' + f.day(r.since) + ')' : '') + (r.error ? ' with an error: ' + r.error : '') + '.');
+                self._elBenchStatus.text(parts.join('  '));
+                if (b.lastError) $('<span></span>').css({ color: '#c0392b', marginLeft: '.4rem' }).text('Last error: ' + b.lastError).appendTo(self._elBenchStatus);
+                var c = b.coverage || {};
+                if (c.error) self._elBenchCoverage.text('Input coverage could not be worked out: ' + c.error);
+                else if (typeof c.hours === 'number') {
+                    var missing = [];
+                    if (c.weatherSource === false) missing.push('weather');
+                    if (c.waterTempSource === false) missing.push('water temperature');
+                    if (c.pumpSource === false) missing.push('pump');
+                    self._elBenchCoverage.text('Inputs over the last 14 days (' + c.hours + ' h): sun ' + f.pct(c.sun) + ', SWG output from its log ' + f.pct(c.genLog) + ' (any source ' + f.pct(c.genAny) + '), water temperature ' + f.pct(c.temp) + ', pump ' + f.pct(c.pump) + '.'
+                        + (missing.length ? ' Not connected: ' + missing.join(', ') + '; the models that need them report the input as missing.' : '')
+                        + (c.place === false ? ' No location is set, so the sun cannot be worked out.' : ''));
+                }
+                else self._elBenchCoverage.text('');
+                self._renderBenchCyaLine(b.cya);
+                self._renderBenchTables();
+                // While a replay runs, follow it (only while the bench is open on the page).
+                clearTimeout(self._benchPoll);
+                if (r.running) self._benchPoll = setTimeout(function () {
+                    if (self.element.closest('body').length && makeBool(self._benchAcc.attr('data-expanded'))) self._loadBench();
+                }, 5000);
+            });
+        },
+        _renderBenchCyaLine: function (cya) {
+            var self = this, f = self._benchFmt;
+            self._elBenchAdvice.hide();
+            if (!cya) { self._elBenchCya.text('CYA path: this njsPC holds CYA at the last test (the full CYA path comes with a newer bench).'); return; }
+            if (cya.error) { self._elBenchCya.text('CYA path: ' + cya.error); return; }
+            var src = { none: 'no dilution', rain: 'rain dilution', salt: 'salt dilution', both: 'rain and salt dilution' }[cya.source] || cya.source;
+            self._elBenchCya.text('CYA on the path now: ' + (typeof cya.now === 'number' ? cya.now.toFixed(0) + ' ppm' : '--')
+                + (cya.anchor ? ' (last test ' + cya.anchor.ppm + ' ppm on ' + f.day(cya.anchor.t) + ')' : '') + ', ' + src
+                + (typeof cya.rainK === 'number' ? ', rain k ' + (cya.rainK * 100).toFixed(2) + '% of the water per inch' + (typeof cya.defaultK === 'number' ? ' (default ' + (cya.defaultK * 100).toFixed(2) + '%' + (cya.pairs ? ', ' + cya.pairs + ' test pair' + (cya.pairs === 1 ? '' : 's') : '') + ')' : '') : '') + '.');
+            var a = cya.advice;
+            if (a && a.due && a.reason) self._elBenchAdvice.text('ℹ CYA test advised: ' + a.reason).show();
+        },
+        // The scoreboard tables: live rows (the view picked) and replay rows, band widths first.
+        _renderBenchTables: function () {
+            var self = this, f = self._benchFmt;
+            var b = self._bench || {};
+            var vs = Array.isArray(b.variants) ? b.variants : [];
+            var liveView = self._selBenchLive.val(), replayView = self._selBenchReplay.val();
+            var pickBlock = function (v, replay) {
+                if (replay) return v.replay ? v.replay[replayView] : undefined;
+                return v.live ? v.live[liveView] : undefined;
+            };
+            var gap47 = function (blk) { var g = blk && Array.isArray(blk.byGap) ? blk.byGap.find(function (x) { return x.label === '4-7 d'; }) : undefined; return g && g.n ? f.band(g.halfWidth90) + ' (' + g.n + ')' : '--'; };
+            var build = function (target, replay) {
+                target.empty();
+                var rows = vs.map(function (v) { return { v: v, blk: pickBlock(v, replay) || { n: 0 } }; })
+                    .filter(function (x) { return !(replay && x.v.kind === 'live'); });
+                // the live projection first, then the narrowest band; models with no scores yet, then retired ones, last
+                rows.sort(function (a, c) {
+                    var ka = a.v.retired ? 3 : a.v.kind === 'live' ? 0 : a.blk.n > 0 ? 1 : 2, kc = c.v.retired ? 3 : c.v.kind === 'live' ? 0 : c.blk.n > 0 ? 1 : 2;
+                    if (ka !== kc) return ka - kc;
+                    if (ka === 1) return (a.blk.halfWidth90 || 0) - (c.blk.halfWidth90 || 0);
+                    return 0;
+                });
+                if (!rows.some(function (x) { return x.blk.n > 0; })) {
+                    $('<div></div>').appendTo(target).css({ fontSize: '.85em', fontStyle: 'italic', color: '#888', padding: '.2rem .25rem' })
+                        .text(replay ? 'No replay rows for this view. Replay works the scores out over the past.' : 'No live scores for this view yet: each model is scored when a new FC test arrives, with the fit it froze at the last check before it.');
+                    if (replay) return;
+                }
+                var cols = [['Model', 'left'], ['Band', 'right'], ['5% to 95%', 'right'], ['n', 'right'], ['MAE', 'right'], ['Bias', 'right'], ['vs live', 'right'], ['P(better)', 'right'], ['4-7 d band', 'right'], ['Own band', 'right']];
+                if (!replay) cols.push(['Revised (tuning only)', 'right']);
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.3rem' }).appendTo(target);
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                cols.forEach(function (c) { $('<th></th>').text(c[0]).css({ textAlign: c[1], padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                rows.forEach(function (x) {
+                    var v = x.v, blk = x.blk, pd = blk.vsLive || {};
+                    var isLive = v.kind === 'live';
+                    var name = (v.label || v.id) + '  (' + v.id + ' v' + v.version + (v.retired ? ', retired' : '') + ')';
+                    var cells = [name, f.band(blk.halfWidth90), blk.n ? f.signed(blk.p5) + ' to ' + f.signed(blk.p95) : '--', String(blk.n || 0), f.n2(blk.mae), f.signed(blk.bias),
+                        isLive ? '' : (typeof pd.meanDiff === 'number' ? f.signed(pd.meanDiff) + ' ± ' + f.n2(pd.se) + ' (' + pd.n + ')' : '--'),
+                        isLive ? '' : (typeof pd.pBetter === 'number' ? Math.round(pd.pBetter * 100) + '%' : '--'),
+                        gap47(blk), replay ? '--' : f.band(v.ownBand)];
+                    if (!replay) {
+                        var rv = v.revised;
+                        cells.push(rv && rv.n ? f.band(rv.halfWidth90) + ' (as scored ' + f.band(rv.asScored && rv.asScored.halfWidth90) + ', ' + rv.n + ')' : '--');
+                    }
+                    var tr = $('<tr></tr>').appendTo(body).css({ cursor: 'pointer' }).attr('title', 'Click for the last misses and the band by gap');
+                    if (isLive) tr.css({ background: 'rgba(128,128,128,.12)', fontWeight: 'bold' });
+                    if (v.retired || !blk.n) tr.css({ color: '#999' });
+                    cells.forEach(function (val, i) {
+                        var td = $('<td></td>').css({ textAlign: cols[i][1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr);
+                        // the model: its label, and its id and version in small type under it (keeps the column narrow)
+                        if (i === 0) td.css({ whiteSpace: 'normal', minWidth: '12rem' }).append($('<div></div>').text(v.label || v.id))
+                            .append($('<div></div>').css({ fontSize: '.8em', fontWeight: 'normal', color: '#999' }).text(v.id + ' v' + v.version + (v.retired ? ', retired' : '')));
+                        else td.text(val);
+                    });
+                    if (!isLive && pd.n >= 2 && typeof pd.pBetter === 'number') tr.children().eq(7).css({ color: pd.pBetter >= 0.9 ? '#2a7' : pd.pBetter <= 0.1 ? '#c0392b' : '' });
+                    tr.on('click', function () { self._showBenchVariant(v, blk, replay); });
+                });
+            };
+            build(self._elBenchLive, false);
+            build(self._elBenchReplay, true);
+        },
+        // One model's block: its band by gap length and its last ten live misses.
+        _showBenchVariant: function (v, blk, replay) {
+            var self = this, f = self._benchFmt;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchVariant', { width: '640px', height: 'auto', title: (v.label || v.id) + ' (v' + v.version + ')',
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+            var wrap = $('<div></div>').css({ maxHeight: '28rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+            $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', paddingBottom: '.4rem' }).text(self._benchDescribe(v));
+            var table = function (title, cols, data) {
+                $('<div></div>').appendTo(wrap).css({ fontWeight: 'bold', margin: '.3rem 0' }).text(title);
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em', marginBottom: '.5rem' }).appendTo(wrap);
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                cols.forEach(function (c) { $('<th></th>').text(c[0]).css({ textAlign: c[1], padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                data.forEach(function (row) {
+                    var tr = $('<tr></tr>').appendTo(body);
+                    row.forEach(function (val, i) { $('<td></td>').text(val).css({ textAlign: cols[i][1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).appendTo(tr); });
+                });
+            };
+            table('Band by time since the reading before (' + (replay ? 'replay rows' : 'live rows') + ', the view picked)', [['Gap', 'left'], ['n', 'right'], ['Band', 'right'], ['MAE', 'right']],
+                ((blk && blk.byGap) || []).map(function (g) { return [g.label, String(g.n), f.band(g.halfWidth90), f.n2(g.mae)]; }));
+            var misses = Array.isArray(v.lastMisses) ? v.lastMisses.slice().reverse() : [];
+            if (misses.length) table('Last live misses at the next test (test minus projection)', [['Test', 'left'], ['Days', 'right'], ['Projected', 'right'], ['Tested', 'right'], ['Miss', 'right']],
+                misses.map(function (m) { return [f.when(m.t), f.n2(m.days), f.n2(m.proj), f.n2(m.test), f.signed(m.miss)]; }));
+            else $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', fontStyle: 'italic', color: '#888' }).text('No live misses yet.');
+        },
+        // A model's definition in words.
+        _benchDescribe: function (v) {
+            if (v.kind === 'live') return 'SWG Assist\'s own projection, as it stood just before each test.';
+            if (v.kind === 'plain') return 'A flat burn: the average of the last ' + (v.windowDays || 14) + ' days of FC intervals.';
+            var sun = { none: 'no sun term', station: 'station sun', pool: 'pool sun (station sun on the water, after shade and screen)', poolHourHigh: 'pool sun from the hour highs', clearPool: 'clear-sky pool sun times the recent clearness' }[v.sun] || v.sun;
+            return 'Burn = a x ' + (v.fcTerm === 'fc' ? 'FC' : 'FC/CYA') + ' x ' + sun + (v.temp ? ' x a water-temperature factor' : '') + ' + b' + (v.rainWash ? ' + a rain wash-in term' : '')
+                + '; fitted on the last ' + (v.fitDays || 30) + ' days (ridge ' + (typeof v.ridge === 'number' ? v.ridge : 0.5) + '); CYA ' + (v.cya === 'path' ? 'on the path between tests' : 'held at the last test')
+                + '; FC inside the gap ' + (v.fcPath === 'held' ? 'held at the start reading' : 'following the model') + '.';
+        },
+        _benchPalette: ['#1f77b4', '#d62728', '#2ca02c', '#9467bd', '#ff7f0e', '#17becf', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#393b79', '#ad494a', '#637939', '#843c39'],
+        _benchEsc: function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); },
+        // Each model's projections against the FC tests (GET /state/autoSwg/bench/scores?days=), with the misses below.
+        _showBenchChart: function () {
+            var self = this, f = self._benchFmt;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchChart', { width: Math.min(980, Math.max(320, (window.innerWidth || 980) - 24)) + 'px', height: 'auto', title: 'Model Bench: Projections Against the FC Tests',
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+            var wrap = $('<div></div>').css({ maxHeight: '36rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+            var bar = $('<div></div>').appendTo(wrap).css({ display: 'flex', flexWrap: 'wrap', gap: '.8rem', alignItems: 'center', fontSize: '.9em', marginBottom: '.3rem' });
+            var sel = function (label, items, def) {
+                var s = $('<span></span>').appendTo(bar);
+                $('<span></span>').text(label + ' ').appendTo(s);
+                var x = $('<select></select>').appendTo(s);
+                items.forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(x); });
+                x.val(def);
+                return x;
+            };
+            var selDays = sel('Last', [['30', '30 days'], ['60', '60 days'], ['120', '120 days'], ['365', '365 days'], ['548', '18 months']], String(self._benchChartDays || 60));
+            var selRows = sel('Rows', [['live', 'Live'], ['replay', 'Replay']], self._benchChartRows || 'live');
+            var selHorizon = sel('Horizon', [['next', 'Next test'], ['skip', 'Skip one test']], 'next');
+            var selMode = sel('Mode', [['nowcast', 'Nowcast (the weather that happened)'], ['forecast', 'Forecast (what was known at the check)']], 'nowcast');
+            var chart = $('<div></div>').appendTo(wrap);
+            var legend = $('<div></div>').appendTo(wrap).css({ display: 'flex', flexWrap: 'wrap', gap: '.3rem .9rem', fontSize: '.85em', margin: '.3rem 0' });
+            $('<div></div>').appendTo(wrap).css({ fontSize: '.8em', color: '#888' })
+                .text('Black dots: the FC tests. Each model\'s projection for a test is drawn at that test (lines join a model\'s projections; they are not a path between tests). The shaded band is your FC range. Below: the misses (test minus projection). Hover a point for its numbers; click a model in the legend to hide or show it. The live SWG Assist projection is scored at the next test only.');
+            var rows = [], hidden = self._benchChartHidden || (self._benchChartHidden = {});
+            var draw = function () {
+                var useReplay = selRows.val() === 'replay', horizon = selHorizon.val(), mode = selMode.val();
+                var vsById = {};
+                ((self._bench && self._bench.variants) || []).forEach(function (v) { vsById[v.id + '|' + v.version] = v; });
+                var series = {}, order = [], tests = {};
+                rows.forEach(function (r) {
+                    if (!!r.replay !== useReplay || r.horizon !== horizon) return;
+                    if (r.mode !== (r.id === 'live' ? 'live' : mode)) return;
+                    var k = r.id + '|' + r.v;
+                    if (!series[k]) { series[k] = []; order.push(k); }
+                    series[k].push(r);
+                    tests[r.t] = r.test;
+                });
+                order.sort(function (a, c) { return (a.indexOf('live|') === 0 ? -1 : 0) - (c.indexOf('live|') === 0 ? -1 : 0) || (a < c ? -1 : a > c ? 1 : 0); });
+                var colors = {};
+                order.forEach(function (k, i) { colors[k] = self._benchPalette[i % self._benchPalette.length]; });
+                legend.empty();
+                order.forEach(function (k) {
+                    var v = vsById[k], id = k.split('|');
+                    var item = $('<span></span>').appendTo(legend).css({ cursor: 'pointer', opacity: hidden[k] ? 0.35 : 1, whiteSpace: 'nowrap' })
+                        .attr('title', v ? (v.label || v.id) : k);
+                    $('<span></span>').appendTo(item).css({ display: 'inline-block', width: '.8rem', height: '.8rem', background: colors[k], borderRadius: '.15rem', marginRight: '.3rem', verticalAlign: 'middle' });
+                    $('<span></span>').appendTo(item).text(id[0] + ' v' + id[1] + ' (' + series[k].length + ')');
+                    item.on('click', function () { hidden[k] = !hidden[k]; draw(); });
+                });
+                var tKeys = Object.keys(tests).map(Number).sort(function (a, c) { return a - c; });
+                if (!tKeys.length) { chart.empty(); $('<div></div>').appendTo(chart).css({ fontStyle: 'italic', color: '#888', padding: '1rem' }).text('No scores for this view in the period.'); return; }
+                var shown = order.filter(function (k) { return !hidden[k]; });
+                var range = self._fcRange || {};
+                var ys = tKeys.map(function (t) { return tests[t]; });
+                var ms = [];
+                shown.forEach(function (k) { series[k].forEach(function (r) { ys.push(r.proj); ms.push(r.miss); }); });
+                if (typeof range.low === 'number') ys.push(range.low);
+                if (typeof range.high === 'number') ys.push(range.high);
+                var y0 = Math.floor(Math.min.apply(null, ys)) - 0.5, y1 = Math.ceil(Math.max.apply(null, ys)) + 0.5;
+                var mAbs = Math.max(1, Math.ceil(Math.max.apply(null, ms.map(Math.abs).concat([1])) * 2) / 2);
+                var x0 = tKeys[0], x1 = tKeys[tKeys.length - 1];
+                if (x1 - x0 < 86400000) { x0 -= 43200000; x1 += 43200000; }
+                var W = 900, L = 44, R = 10, T = 8, H1 = 260, G = 26, H2 = 110, B = 22, H = T + H1 + G + H2 + B;
+                var px = function (t) { return L + (t - x0) / (x1 - x0) * (W - L - R); };
+                var py = function (y) { return T + (y1 - y) / (y1 - y0) * H1; };
+                var mTop = T + H1 + G;
+                var pm = function (m) { return mTop + (mAbs - m) / (2 * mAbs) * H2; };
+                var s = [];
+                // the FC range
+                if (typeof range.low === 'number' && typeof range.high === 'number')
+                    s.push('<rect x="' + L + '" y="' + py(range.high).toFixed(1) + '" width="' + (W - L - R) + '" height="' + (py(range.low) - py(range.high)).toFixed(1) + '" fill="#2ca02c" fill-opacity="0.08"></rect>');
+                // y grid and labels (FC)
+                var step = (y1 - y0) > 8 ? 2 : 1;
+                for (var y = Math.ceil(y0); y <= y1; y += step) {
+                    s.push('<line x1="' + L + '" x2="' + (W - R) + '" y1="' + py(y).toFixed(1) + '" y2="' + py(y).toFixed(1) + '" stroke="#888" stroke-opacity="0.2"></line>');
+                    s.push('<text x="' + (L - 4) + '" y="' + (py(y) + 3).toFixed(1) + '" font-size="10" text-anchor="end" fill="currentColor">' + y + '</text>');
+                }
+                s.push('<text x="4" y="' + (T + 10) + '" font-size="10" fill="currentColor">FC</text>');
+                // misses panel: zero line and +-mAbs
+                [mAbs, 0, -mAbs].forEach(function (m) {
+                    s.push('<line x1="' + L + '" x2="' + (W - R) + '" y1="' + pm(m).toFixed(1) + '" y2="' + pm(m).toFixed(1) + '" stroke="#888" stroke-opacity="' + (m === 0 ? 0.6 : 0.2) + '"></line>');
+                    s.push('<text x="' + (L - 4) + '" y="' + (pm(m) + 3).toFixed(1) + '" font-size="10" text-anchor="end" fill="currentColor">' + (m > 0 ? '+' : '') + m + '</text>');
+                });
+                s.push('<text x="4" y="' + (mTop + 10) + '" font-size="10" fill="currentColor">miss</text>');
+                // x labels: about 6 dates
+                var nT = 6;
+                for (var i = 0; i <= nT; i++) {
+                    var t = x0 + (x1 - x0) * i / nT, x = px(t);
+                    s.push('<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + T + '" y2="' + (H - B) + '" stroke="#888" stroke-opacity="0.12"></line>');
+                    s.push('<text x="' + x.toFixed(1) + '" y="' + (H - 6) + '" font-size="10" text-anchor="' + (i === 0 ? 'start' : i === nT ? 'end' : 'middle') + '" fill="currentColor">' + self._benchEsc(new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' })) + '</text>');
+                }
+                // each model: a thin line through its projections, a dot at each, and its misses below
+                shown.forEach(function (k) {
+                    var c = colors[k], pts = series[k].slice().sort(function (a, b2) { return a.t - b2.t; });
+                    var name = self._benchEsc(k.replace('|', ' v'));
+                    s.push('<polyline fill="none" stroke="' + c + '" stroke-opacity="0.45" stroke-width="1" points="' + pts.map(function (r) { return px(r.t).toFixed(1) + ',' + py(r.proj).toFixed(1); }).join(' ') + '"></polyline>');
+                    pts.forEach(function (r) {
+                        var tip = name + '\n' + self._benchEsc(f.when(r.t)) + ': projected ' + f.n2(r.proj) + ', tested ' + f.n2(r.test) + ', miss ' + f.signed(r.miss) + '\nfrom ' + f.n2(r.f1) + ' ' + f.n2(r.days) + ' days before';
+                        s.push('<circle cx="' + px(r.t).toFixed(1) + '" cy="' + py(r.proj).toFixed(1) + '" r="3" fill="' + c + '"><title>' + tip + '</title></circle>');
+                        s.push('<circle cx="' + px(r.t).toFixed(1) + '" cy="' + pm(Math.max(-mAbs, Math.min(mAbs, r.miss))).toFixed(1) + '" r="2.5" fill="' + c + '"><title>' + tip + '</title></circle>');
+                    });
+                });
+                // the tests on top
+                tKeys.forEach(function (t) {
+                    s.push('<circle cx="' + px(t).toFixed(1) + '" cy="' + py(tests[t]).toFixed(1) + '" r="3.5" fill="currentColor"><title>FC test ' + self._benchEsc(f.when(t)) + ': ' + f.n2(tests[t]) + '</title></circle>');
+                });
+                chart.empty();
+                var svg = $('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block">' + s.join('') + '</svg>');
+                svg.appendTo(chart);
+            };
+            var load = function () {
+                self._benchChartDays = parseInt(selDays.val(), 10);
+                chart.empty();
+                $('<div></div>').appendTo(chart).css({ fontStyle: 'italic', color: '#888', padding: '1rem' }).text('Loading the scores...');
+                var go = function () {
+                    $.getApiService('/state/autoSwg/bench/scores?days=' + self._benchChartDays, null, function (r) { rows = Array.isArray(r) ? r : []; draw(); });
+                };
+                // the variant labels come with the scoreboard
+                if (self._bench && self._bench.variants) go();
+                else $.getApiService('/state/autoSwg/bench', null, function (b) { self._bench = b || {}; go(); });
+            };
+            selDays.on('change', load);
+            selRows.on('change', function () { self._benchChartRows = selRows.val(); draw(); });
+            selHorizon.on('change', draw);
+            selMode.on('change', draw);
+            load();
+        },
+        // The CYA path (GET /state/autoSwg/bench/cya?days=): the path as known now, the tests and their status, the stabilizer additions, the rain k and the advice.
+        _showBenchCya: function () {
+            var self = this, f = self._benchFmt;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchCya', { width: Math.min(900, Math.max(320, (window.innerWidth || 900) - 24)) + 'px', height: 'auto', title: 'Model Bench: CYA Path',
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+            var wrap = $('<div></div>').css({ maxHeight: '36rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+            var bar = $('<div></div>').appendTo(wrap).css({ fontSize: '.9em', marginBottom: '.3rem' });
+            $('<span></span>').text('Last ').appendTo(bar);
+            var selDays = $('<select></select>').appendTo(bar);
+            [['60', '60 days'], ['120', '120 days'], ['240', '240 days'], ['400', '400 days']].forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(selDays); });
+            selDays.val(String(self._benchCyaDays || 120));
+            var body = $('<div></div>').appendTo(wrap);
+            var statusColor = { first: '#7f7f7f', accepted: '#2ca02c', confirmed: '#1f77b4', doubtful: '#ff7f0e' };
+            var statusText = { first: 'first test', accepted: 'accepted', confirmed: 'confirmed by a second test', doubtful: 'doubtful (not used until a second test agrees)' };
+            var render = function (c) {
+                body.empty();
+                var line = function (text, css) { return $('<div></div>').appendTo(body).css($.extend({ fontSize: '.9em', padding: '.1rem 0' }, css || {})).text(text); };
+                var src = { none: 'none', rain: 'rain (gauge rain x k per inch)', salt: 'salt (the chlorinator\'s salt reading, salt additions removed)', both: 'rain and salt (rain between salt steps, salt anchoring the level)' }[c.source] || c.source;
+                line('CYA on the path now: ' + (typeof c.now === 'number' ? c.now.toFixed(1) + ' ppm' : '--') + (c.anchor ? ', standing on the test of ' + f.day(c.anchor.t) + ' (' + c.anchor.ppm + ' ppm)' : ''), { fontWeight: 'bold' });
+                line('Dilution: ' + src + '.');
+                if (typeof c.rainK === 'number') line('Rain k: ' + (c.rainK * 100).toFixed(2) + '% of the water per inch of rain' + (typeof c.defaultK === 'number' ? '; the default from the pool\'s area and gallons is ' + (c.defaultK * 100).toFixed(2) + '%' : '')
+                    + (c.settings && c.settings.autoK ? ', re-estimated from ' + (c.pairs || 0) + ' test pair' + (c.pairs === 1 ? '' : 's') + ' with rain and no addition between them' : ', fixed') + '.');
+                var a = c.advice;
+                if (a && a.due) {
+                    $('<div></div>').appendTo(body).css({ color: '#0b3d5c', background: '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).text('ℹ CYA test advised: ' + a.reason);
+                    (a.rules || []).filter(function (r) { return r.rule !== a.rule; }).forEach(function (r) { line('Also (rule ' + r.rule + '): ' + r.reason, { color: '#666', fontSize: '.85em' }); });
+                }
+                else line('No CYA test is advised now.', { color: '#666' });
+                // the chart: the path, the tests (colour by status, a tick from what the path expected), the additions
+                var path = Array.isArray(c.path) ? c.path.map(function (p) { return [new Date(p[0]).getTime(), p[1]]; }).filter(function (p) { return isFinite(p[0]) && typeof p[1] === 'number'; }) : [];
+                var tests = (c.tests || []).map(function (n) { return $.extend({}, n, { tt: new Date(n.t).getTime() }); });
+                var adds = (c.additions || []).map(function (x) { return { tt: new Date(x.t).getTime(), ppm: x.ppm }; });
+                if (path.length || tests.length) {
+                    var xs = path.map(function (p) { return p[0]; }).concat(tests.map(function (n) { return n.tt; }), adds.map(function (x) { return x.tt; }));
+                    var ys = path.map(function (p) { return p[1]; }).concat(tests.map(function (n) { return n.ppm; }), tests.filter(function (n) { return typeof n.projected === 'number'; }).map(function (n) { return n.projected; }));
+                    var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+                    if (x1 - x0 < 86400000) { x0 -= 43200000; x1 += 43200000; }
+                    var y0 = Math.floor((Math.min.apply(null, ys) - 3) / 5) * 5, y1 = Math.ceil((Math.max.apply(null, ys) + 3) / 5) * 5;
+                    var W = 860, L = 40, R = 10, T = 14, H1 = 240, B = 22, H = T + H1 + B;
+                    var px = function (t) { return L + (t - x0) / (x1 - x0) * (W - L - R); };
+                    var py = function (y) { return T + (y1 - y) / (y1 - y0) * H1; };
+                    var s = [];
+                    var step = (y1 - y0) > 40 ? 10 : 5;
+                    for (var y = y0; y <= y1; y += step) {
+                        s.push('<line x1="' + L + '" x2="' + (W - R) + '" y1="' + py(y).toFixed(1) + '" y2="' + py(y).toFixed(1) + '" stroke="#888" stroke-opacity="0.2"></line>');
+                        s.push('<text x="' + (L - 4) + '" y="' + (py(y) + 3).toFixed(1) + '" font-size="10" text-anchor="end" fill="currentColor">' + y + '</text>');
+                    }
+                    s.push('<text x="4" y="10" font-size="10" fill="currentColor">CYA</text>');
+                    for (var i = 0; i <= 6; i++) {
+                        var t = x0 + (x1 - x0) * i / 6;
+                        s.push('<text x="' + px(t).toFixed(1) + '" y="' + (H - 6) + '" font-size="10" text-anchor="' + (i === 0 ? 'start' : i === 6 ? 'end' : 'middle') + '" fill="currentColor">' + self._benchEsc(new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' })) + '</text>');
+                    }
+                    adds.forEach(function (x) {
+                        s.push('<line x1="' + px(x.tt).toFixed(1) + '" x2="' + px(x.tt).toFixed(1) + '" y1="' + T + '" y2="' + (T + H1) + '" stroke="#9467bd" stroke-dasharray="4 3"><title>Stabilizer added ' + self._benchEsc(f.when(x.tt)) + ': about ' + x.ppm + ' ppm</title></line>');
+                        s.push('<text x="' + (px(x.tt) + 3).toFixed(1) + '" y="' + (T + 9) + '" font-size="10" fill="#9467bd">+' + Math.round(x.ppm) + '</text>');
+                    });
+                    if (path.length) s.push('<polyline fill="none" stroke="#1f77b4" stroke-width="1.5" points="' + path.map(function (p) { return px(p[0]).toFixed(1) + ',' + py(p[1]).toFixed(1); }).join(' ') + '"></polyline>');
+                    tests.forEach(function (n) {
+                        var col = statusColor[n.status] || '#333';
+                        var tip = 'CYA test ' + self._benchEsc(f.when(n.tt)) + ': ' + n.ppm + ' ppm' + (typeof n.projected === 'number' ? ', the path expected ' + n.projected.toFixed(1) : '') + '\n' + self._benchEsc(statusText[n.status] || n.status || '') + (n.reason ? '\n' + self._benchEsc(n.reason) : '');
+                        if (typeof n.projected === 'number') s.push('<line x1="' + px(n.tt).toFixed(1) + '" x2="' + px(n.tt).toFixed(1) + '" y1="' + py(n.projected).toFixed(1) + '" y2="' + py(n.ppm).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5"></line>');
+                        s.push('<circle cx="' + px(n.tt).toFixed(1) + '" cy="' + py(n.ppm).toFixed(1) + '" r="4.5" fill="' + (n.status === 'doubtful' ? 'none' : col) + '" stroke="' + col + '" stroke-width="2"><title>' + tip + '</title></circle>');
+                    });
+                    $('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;margin:.4rem 0">' + s.join('') + '</svg>').appendTo(body);
+                    var leg = $('<div></div>').appendTo(body).css({ display: 'flex', flexWrap: 'wrap', gap: '.3rem .9rem', fontSize: '.8em', color: '#666' });
+                    $('<span></span>').appendTo(leg).text('Blue line: the path as known now. Purple dashes: stabilizer additions. Tests:');
+                    Object.keys(statusColor).forEach(function (k) {
+                        var it = $('<span></span>').appendTo(leg);
+                        $('<span></span>').appendTo(it).css({ display: 'inline-block', width: '.7rem', height: '.7rem', borderRadius: '50%', border: '2px solid ' + statusColor[k], background: k === 'doubtful' ? 'transparent' : statusColor[k], marginRight: '.25rem', verticalAlign: 'middle' });
+                        $('<span></span>').appendTo(it).text(statusText[k]);
+                    });
+                }
+                var table = function (title, cols, data) {
+                    if (!data.length) return;
+                    $('<div></div>').appendTo(body).css({ fontWeight: 'bold', margin: '.6rem 0 .2rem 0' }).text(title);
+                    var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(body);
+                    var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                    cols.forEach(function (cc) { $('<th></th>').text(cc[0]).css({ textAlign: cc[1], padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
+                    var tb = $('<tbody></tbody>').appendTo(tbl);
+                    data.forEach(function (row) {
+                        var tr = $('<tr></tr>').appendTo(tb);
+                        row.forEach(function (val, i) { $('<td></td>').text(val).css({ textAlign: cols[i][1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: i === row.length - 1 ? 'normal' : 'nowrap' }).appendTo(tr); });
+                    });
+                };
+                table('CYA tests in the period', [['Test', 'left'], ['CYA', 'right'], ['Path expected', 'right'], ['Status', 'left'], ['Why', 'left']],
+                    tests.slice().reverse().map(function (n) { return [f.when(n.tt), String(n.ppm), typeof n.projected === 'number' ? n.projected.toFixed(1) : '--', statusText[n.status] || n.status || '', n.reason || '']; }));
+                table('Stabilizer additions in the period', [['Added', 'left'], ['About (ppm)', 'right']],
+                    adds.slice().reverse().map(function (x) { return [f.when(x.tt), String(x.ppm)]; }));
+                table('Recorded CYA tests (newest 10): the path just before each, the rain k before and after, the advice rule then in force', [['Test', 'left'], ['CYA', 'right'], ['Path before', 'right'], ['k before', 'right'], ['k after', 'right'], ['Rule', 'right'], ['Revised scores', 'right'], ['Status', 'left']],
+                    (c.records || []).slice().reverse().map(function (r) {
+                        var k = function (x) { return typeof x === 'number' ? (x * 100).toFixed(2) + '%' : '--'; };
+                        return [f.when(r.t), String(r.ppm), typeof r.projected === 'number' ? r.projected.toFixed(1) : '--', k(r.rainKBefore), k(r.rainKAfter), typeof r.adviceRule === 'number' ? String(r.adviceRule) : '--', r.baseline ? 'baseline' : String(r.revised || 0), (statusText[r.status] || r.status || '') + (r.reason ? ': ' + r.reason : '')];
+                    }));
+                table('Model drift at the last checks (the burn of the last two weeks with CYA left free)', [['Check', 'left'], ['CYA implied', 'right'], ['Path', 'right'], ['Intervals', 'right'], ['Off', 'left']],
+                    (c.drift || []).slice().reverse().map(function (d) { return [f.when(d.t), typeof d.implied === 'number' ? d.implied.toFixed(1) : '--', typeof d.path === 'number' ? d.path.toFixed(1) : '--', String(d.n), d.off ? 'yes' : 'no']; }));
+            };
+            var load = function () {
+                self._benchCyaDays = parseInt(selDays.val(), 10);
+                body.empty();
+                $('<div></div>').appendTo(body).css({ fontStyle: 'italic', color: '#888', padding: '1rem' }).text('Loading the CYA path...');
+                self._benchGet('/state/autoSwg/bench/cya?days=' + self._benchCyaDays, function (c) { render(c || {}); }, function (status) {
+                    body.empty();
+                    $('<div></div>').appendTo(body).css({ fontStyle: 'italic', color: '#888', padding: '1rem' })
+                        .text(status === 404 ? 'This njsPC does not have the bench\'s CYA path yet: its models hold CYA at the last test. The CYA path comes with a newer SWG Assist Model Bench.' : 'The CYA path could not be loaded (' + (status || 'no answer') + ').');
+                });
+            };
+            selDays.on('change', load);
+            load();
+        },
+        // The models (copy, edit, retire), the pool geometry and the CYA settings (GET/PUT /config/autoSwg/bench).
+        _showBenchSettings: function () {
+            var self = this;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchSettings', { width: Math.min(900, Math.max(320, (window.innerWidth || 900) - 24)) + 'px', height: 'auto', title: 'Model Bench: Models and Settings',
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); self._loadBench(); } }] });
+            var wrap = $('<div></div>').css({ maxHeight: '36rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+            var msg = $('<div></div>').css({ fontWeight: 'bold', color: '#2a7', padding: '.2rem 0' }).hide();
+            var put = function (body, what, done) {
+                $.putApiService('/config/autoSwg/bench', body, 'Saving the bench settings...', function (s) {
+                    msg.text(what).show();
+                    render(s || {});
+                    if (done) done(s);
+                });
+            };
+            var section = function (title) { return $('<div></div>').appendTo(wrap).css({ fontWeight: 'bold', margin: '.7rem 0 .25rem 0', borderBottom: '1px solid #999' }).text(title); };
+            var field = function (parent, label, input, note) {
+                var row = $('<div></div>').appendTo(parent).css({ display: 'flex', alignItems: 'center', gap: '.5rem', margin: '.15rem 0', fontSize: '.9em' });
+                $('<label></label>').appendTo(row).text(label).css({ width: '15rem', flex: '0 0 auto' });
+                input.appendTo(row);
+                if (note) $('<span></span>').appendTo(row).css({ color: '#888', fontSize: '.9em' }).text(note);
+                return input;
+            };
+            var num = function (val, w) { return $('<input type="number" step="any">').val(typeof val === 'number' ? val : '').css({ width: w || '6rem' }); };
+            var render = function (s) {
+                wrap.empty();
+                msg.appendTo(wrap);
+                var vs = Array.isArray(s.variants) ? s.variants : [];
+                // enabled
+                var line = $('<div></div>').appendTo(wrap).css({ margin: '.2rem 0' });
+                var cbEnabled = $('<input type="checkbox">').prop('checked', s.enabled !== false).appendTo(line);
+                $('<span></span>').appendTo(line).text(' The bench is on (it fits every model at each automatic check and scores them at each new FC test)').css({ fontSize: '.9em' });
+                cbEnabled.on('change', function () { put({ enabled: cbEnabled.is(':checked') }, cbEnabled.is(':checked') ? 'The bench is on.' : 'The bench is off. Its files are kept.'); });
+                section('Models');
+                $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', marginBottom: '.3rem' })
+                    .text('An edit that changes how a model works makes a new version: the old version\'s scores are kept and scored apart, so a change never mixes with what came before. A label alone keeps the version. Retire stops fitting and scoring a model and keeps its scores; Restore starts it again.');
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                [['Model', 'left'], ['Version', 'right'], ['What it does', 'left'], ['', 'left']].forEach(function (c) { $('<th></th>').text(c[0]).css({ textAlign: c[1], padding: '.2rem .5rem', borderBottom: '1px solid #999' }).appendTo(head); });
+                var tb = $('<tbody></tbody>').appendTo(tbl);
+                vs.forEach(function (v) {
+                    var tr = $('<tr></tr>').appendTo(tb);
+                    if (v.retired) tr.css({ color: '#999' });
+                    $('<td></td>').appendTo(tr).css({ padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' }).append($('<div></div>').css({ fontWeight: 'bold' }).text(v.id + (v.retired ? ' (retired)' : ''))).append($('<div></div>').text(v.label || ''));
+                    $('<td></td>').appendTo(tr).css({ padding: '.2rem .5rem', borderBottom: '1px solid #ddd', textAlign: 'right' }).text('v' + v.version);
+                    $('<td></td>').appendTo(tr).css({ padding: '.2rem .5rem', borderBottom: '1px solid #ddd' }).text(self._benchDescribe(v));
+                    var act = $('<td></td>').appendTo(tr).css({ padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: 'nowrap' });
+                    var link = function (text, fn) { $('<span></span>').appendTo(act).text(text).css({ cursor: 'pointer', textDecoration: 'underline', marginRight: '.6rem', color: '#2a6fa8' }).on('click', fn); };
+                    link('Edit', function () { self._showBenchVariantEditor(v, false, vs, function (nv) { put({ variants: [nv] }, 'Saved ' + nv.id + '.'); }); });
+                    if (v.kind !== 'live') link('Copy', function () { self._showBenchVariantEditor(v, true, vs, function (nv) { put({ variants: [nv] }, 'Added ' + nv.id + ' (version 1).'); }); });
+                    link(v.retired ? 'Restore' : 'Retire', function () {
+                        var nv = $.extend({}, v);
+                        if (v.retired) delete nv.retired; else nv.retired = true;
+                        put({ variants: [nv] }, (v.retired ? 'Restored ' : 'Retired ') + v.id + '. Its scores are kept.');
+                    });
+                });
+                // geometry
+                var g = s.geometry || {};
+                section('Pool geometry (the sun on the water: the wall\'s shade and the screen)');
+                $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', marginBottom: '.3rem' })
+                    .text('Used for the pool sun of every model with a pool sun term, from the next check on. It does not start new model versions. Distances along the wall are in feet from the outline\'s origin.');
+                var gBox = $('<div></div>').appendTo(wrap);
+                var gf = {
+                    wallFacingDeg: field(gBox, 'The wall faces (degrees from north)', num(g.wallFacingDeg)),
+                    edgeHeightIn: field(gBox, 'Wall (roof edge) height', num(g.edgeHeightIn), 'inches above the deck'),
+                    deckToWaterIn: field(gBox, 'Deck to water', num(g.deckToWaterIn), 'inches'),
+                    nearestIn: field(gBox, 'Wall to the nearest water', num(g.nearestIn), 'inches'),
+                    pitchDeg: field(gBox, 'Screen roof pitch', num(g.pitchDeg), 'degrees'),
+                    meshOpen: field(gBox, 'Screen mesh lets through', num(g.meshOpen), '0 to 1, sun straight on'),
+                    frameShade: field(gBox, 'Cage frame shades', num(g.frameShade), '0 to 0.9 of the beam'),
+                    gridFt: field(gBox, 'Grid spacing', num(g.gridFt), 'feet (0.25 to 5)')
+                };
+                var e = g.enclosure || {};
+                var ex0 = field(gBox, 'Screen cage starts at', num(e.x0), 'feet along the wall');
+                var ew = field(gBox, 'Screen cage width', num(e.width), 'feet along the wall');
+                var ed = field(gBox, 'Screen cage depth', num(e.depth), 'feet from the wall');
+                var outline = field(gBox, 'Pool outline [[x, y], ...] in feet', $('<textarea rows="3"></textarea>').css({ width: '100%', fontFamily: 'monospace', fontSize: '.85em' }).val(JSON.stringify(g.outline || [])));
+                var gBtn = $('<div class="picBtnPanel btn-panel"></div>').appendTo(wrap);
+                $('<div></div>').appendTo(gBtn).actionButton({ text: 'Save Geometry', icon: '<i class="fas fa-save"></i>' }).on('click', function () {
+                    var body = { enclosure: {} };
+                    Object.keys(gf).forEach(function (k) { var x = parseFloat(gf[k].val()); if (isFinite(x)) body[k] = x; });
+                    [['x0', ex0], ['width', ew], ['depth', ed]].forEach(function (p) { var x = parseFloat(p[1].val()); if (isFinite(x)) body.enclosure[p[0]] = x; });
+                    var ol;
+                    try { ol = JSON.parse(outline.val()); } catch (err) { ol = undefined; }
+                    if (!Array.isArray(ol) || ol.length < 3 || !ol.every(function (p) { return Array.isArray(p) && p.length >= 2 && isFinite(Number(p[0])) && isFinite(Number(p[1])); })) {
+                        $.pic.modalDialog.createConfirm('dlgAutoSwgBenchOutline', { message: 'The outline must be a list of at least three [x, y] points in feet, for example [[0, 0], [10, 0], [10, 5]].', width: '420px', height: 'auto', title: 'Pool Outline',
+                            buttons: [{ text: 'OK', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+                        return;
+                    }
+                    body.outline = ol;
+                    put({ geometry: body }, 'Saved the geometry. It applies from the next check.');
+                });
+                // CYA (step 2 of the bench; an older njsPC has no cya block and ignores it)
+                if (s.cya) {
+                    var c = s.cya;
+                    section('CYA path');
+                    $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', marginBottom: '.3rem' })
+                        .text('How the CYA between tests is worked out for the models on the CYA path, and when a test is doubtful. Stabilizer additions logged in PoolMath are steps on the path.');
+                    var cBox = $('<div></div>').appendTo(wrap);
+                    var selSrc = $('<select></select>');
+                    [['none', 'None (held between tests and additions)'], ['rain', 'Rain (gauge rain x k per inch)'], ['salt', 'Salt (the chlorinator\'s salt reading)'], ['both', 'Rain and salt']].forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(selSrc); });
+                    selSrc.val(c.source);
+                    field(cBox, 'Dilution from', selSrc);
+                    var rainK = field(cBox, 'Rain k (% of the water per inch)', num(typeof c.rainK === 'number' ? Math.round(c.rainK * 10000) / 100 : undefined), 'blank: from the pool\'s area and gallons; 0 to 5');
+                    var cbAutoK = field(cBox, 'Re-estimate k from the tests', $('<input type="checkbox">').prop('checked', c.autoK !== false), 'from test pairs with rain and no addition between them');
+                    var priorPairs = field(cBox, 'The default k counts as', num(c.priorPairs), 'test pairs (pulls the estimate toward it while there are few)');
+                    var jump = field(cBox, 'A rise with nothing added is doubtful above', num(c.jumpPpm), 'ppm (3 to 50)');
+                    var cBtn = $('<div class="picBtnPanel btn-panel"></div>').appendTo(wrap);
+                    $('<div></div>').appendTo(cBtn).actionButton({ text: 'Save CYA Settings', icon: '<i class="fas fa-save"></i>' }).on('click', function () {
+                        var body = { source: selSrc.val(), autoK: cbAutoK.is(':checked') };
+                        var k = parseFloat(rainK.val());
+                        body.rainK = isFinite(k) ? k / 100 : null;
+                        var pp = parseFloat(priorPairs.val()); if (isFinite(pp)) body.priorPairs = pp;
+                        var j = parseFloat(jump.val()); if (isFinite(j)) body.jumpPpm = j;
+                        put({ cya: body }, 'Saved the CYA settings. They apply from the next check.');
+                    });
+                }
+            };
+            $.getApiService('/config/autoSwg/bench', null, 'Loading the bench settings...', function (s) { render(s || {}); });
+        },
+        // Edits a model, or (copy) makes a new one from it. `done` gets the variant to PUT.
+        _showBenchVariantEditor: function (v, copy, all, done) {
+            var self = this;
+            var buttons = [
+                { text: copy ? 'Add Model' : 'Save Model', icon: '<i class="fas fa-save"></i>', click: function () { save(this); } },
+                { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+            ];
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchVariantEdit', { width: '560px', height: 'auto', title: copy ? 'Copy Model ' + v.id : 'Edit Model ' + v.id + ' (v' + v.version + ')', buttons: buttons });
+            var err = $('<div></div>').appendTo(dlg).css({ color: '#c0392b', fontWeight: 'bold', padding: '.2rem 0' }).hide();
+            var field = function (label, input, note) {
+                var row = $('<div></div>').appendTo(dlg).css({ display: 'flex', alignItems: 'center', gap: '.5rem', margin: '.2rem 0', fontSize: '.9em' });
+                $('<label></label>').appendTo(row).text(label).css({ width: '11rem', flex: '0 0 auto' });
+                input.appendTo(row);
+                if (note) $('<span></span>').appendTo(row).css({ color: '#888', fontSize: '.9em' }).text(note);
+                return input;
+            };
+            var num = function (val) { return $('<input type="number" step="any">').val(typeof val === 'number' ? val : '').css({ width: '5rem' }); };
+            var select = function (items, val) { var s = $('<select></select>'); items.forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(s); }); s.val(val); return s; };
+            var newId = v.id + '-copy';
+            for (var k = 2; all.some(function (x) { return x.id === newId; }); k++) newId = v.id + '-copy' + k;
+            var fId = field('Name (id)', $('<input type="text" maxlength="40">').val(copy ? newId : v.id).prop('disabled', !copy).css({ width: '14rem' }), copy ? 'letters, digits, . _ -' : '');
+            var fLabel = field('Label', $('<input type="text" maxlength="80">').val((copy ? 'Copy of ' : '') + (v.label || '')).css({ width: '20rem' }));
+            var x = {};
+            if (v.kind === 'plain') x.windowDays = field('Average over', num(v.windowDays), 'days (1 to 60)');
+            if (v.kind === 'model') {
+                x.sun = field('Sun term', select([['pool', 'Pool sun (on the water)'], ['station', 'Station sun'], ['poolHourHigh', 'Pool sun from the hour highs'], ['clearPool', 'Clear-sky pool sun x clearness'], ['none', 'No sun term']], v.sun || 'pool'));
+                x.fcTerm = field('Burn scales with', select([['fcCya', 'FC/CYA'], ['fc', 'FC alone']], v.fcTerm || 'fcCya'));
+                x.cya = field('CYA', select([['path', 'The path between tests'], ['held', 'Held at the last test']], v.cya || 'held'));
+                x.fcPath = field('FC inside the gap', select([['model', 'Follows the model'], ['held', 'Held at the start reading']], v.fcPath || 'model'));
+                x.fitDays = field('Fit on the last', num(v.fitDays), 'days (7 to 120)');
+                x.ridge = field('Ridge strength', num(v.ridge), '0 to 100 (pulls each fit toward the one before)');
+                x.minIntervals = field('Fewest FC intervals', num(v.minIntervals), 'below this it uses the 14-day average (2 to 50)');
+                x.minGapDays = field('Shortest interval', num(v.minGapDays), 'days (0 to 3)');
+                x.temp = field('Water temperature factor', $('<input type="checkbox">').prop('checked', v.temp === true));
+                x.rainWash = field('Rain wash-in term', $('<input type="checkbox">').prop('checked', v.rainWash === true));
+            }
+            $('<div></div>').appendTo(dlg).css({ fontSize: '.85em', color: '#666', marginTop: '.4rem' })
+                .text(copy ? 'The copy starts at version 1 and is fitted from the next check. Replay scores it over the past.' : 'If this changes how the model works it becomes version ' + (v.version + 1) + '; the scores of version ' + v.version + ' are kept and scored apart.');
+            var save = function (dlgEl) {
+                var nv = { id: copy ? String(fId.val()).trim() : v.id, kind: v.kind, label: String(fLabel.val()).trim() };
+                if (!/^[A-Za-z0-9._-]{1,40}$/.test(nv.id)) { err.text('The name may use letters, digits, dot, dash and underscore (up to 40).').show(); return; }
+                if (copy && all.some(function (y) { return y.id === nv.id; })) { err.text('A model named ' + nv.id + ' already exists.').show(); return; }
+                if (!copy && v.retired) nv.retired = true;
+                Object.keys(x).forEach(function (key) {
+                    var inp = x[key];
+                    if (inp.is('select')) nv[key] = inp.val();
+                    else if (inp.is(':checkbox')) { if (inp.is(':checked')) nv[key] = true; }
+                    else { var n = parseFloat(inp.val()); if (isFinite(n)) nv[key] = n; }
+                });
+                $.pic.modalDialog.closeDialog(dlgEl);
+                done(nv);
+            };
+        },
+        // Works the scores out over the past (POST /state/autoSwg/bench/replay?since=days).
+        _showBenchReplay: function () {
+            var self = this;
+            var days;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchReplay', { width: '480px', height: 'auto', title: 'Model Bench: Replay',
+                buttons: [
+                    { text: 'Start Replay', icon: '<i class="fas fa-play"></i>', click: function () {
+                        var n = parseInt(days.val(), 10);
+                        if (!(n >= 7 && n <= 548)) n = 120;
+                        $.pic.modalDialog.closeDialog(this);
+                        $.postApiService('/state/autoSwg/bench/replay?since=' + n, {}, 'Starting the replay...', function () {
+                            if (!makeBool(self._benchAcc.attr('data-expanded'))) self._benchAcc[0].expanded(true);
+                            setTimeout(function () { self._loadBench(); }, 1500);
+                        });
+                    } },
+                    { text: 'Cancel', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                ] });
+            $('<div></div>').appendTo(dlg).css({ fontSize: '.9em', marginBottom: '.5rem' })
+                .text('Works every model\'s fits and scores out over the past, as if the bench had been running, each test scored with the fit as of the 10:00 or 22:00 check before it. '
+                    + 'Replay rows replace the earlier replay rows and are kept apart from live rows, which are never touched. It runs in the background on njsPC; the status line follows it. It never changes the SWG %.');
+            var row = $('<div></div>').appendTo(dlg).css({ display: 'flex', alignItems: 'center', gap: '.5rem' });
+            $('<label></label>').appendTo(row).text('Replay the last');
+            days = $('<input type="number" min="7" max="548" step="1">').val(120).css({ width: '5rem' }).appendTo(row);
+            $('<span></span>').appendTo(row).text('days (7 to 548)');
+        },
+        // Every score row as CSV (GET /state/autoSwg/bench/scores?days=548&format=csv; the server names the file).
+        _downloadBenchCsv: function () {
+            var self = this;
+            var link = document.createElement('a');
+            link.href = self._benchUrl('/state/autoSwg/bench/scores?days=548&format=csv');
+            link.setAttribute('download', 'autoSwgBenchScores.csv');
+            document.body.appendChild(link);
+            link.click();
+            $(link).remove();
+        },
+        // The CYA test advice (state.autoSwg.benchCyaAdvice, from the Model Bench) beside the salt note; nothing when no test is due.
+        _renderBenchCyaAdvice: function (result) {
+            var self = this;
+            var a = result && result.benchCyaAdvice;
+            if (a && a.due && a.reason) {
+                var more = (Array.isArray(a.rules) ? a.rules : []).filter(function (r) { return r.rule !== a.rule; }).map(function (r) { return r.reason; });
+                self._elBenchCyaNote.text('ℹ CYA test advised: ' + a.reason + (more.length ? ' Also: ' + more.join(' ') : '')).show();
+            }
+            else self._elBenchCyaNote.hide();
         }
     });
 })(jQuery);
