@@ -330,17 +330,76 @@
             self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 6.2rem' }).hide();
             // PoolMath's pool name and volume against the body: a note when they agree, a warning (and, on Nixie, a copy button) when not.
             self._elVolume = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '0 0 .3rem 6.2rem' }).hide();
+            // Of Interest: which kinds of PoolMath data are shown as history. Everything PoolMath sends is kept whatever is ticked here.
+            self._elInterest = $('<div class="cfgPoolMathInterest"></div>').appendTo(pnl).css({ margin: '.3rem 0 .3rem 6.2rem', fontSize: '.85em' }).hide();
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
+            var btnRefresh = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Refresh Now', icon: '<i class="fas fa-sync-alt"></i>' })
+                .attr('title', 'Read the newest entries from PoolMath now (njsPC also reads them on its own every 45 minutes).');
+            btnRefresh.on('click', function (e) {
+                $.putApiService('/state/poolMath/refresh', {}, 'Reading PoolMath...', function (r, status, xhr) {
+                    var msg = '';
+                    if (r && r.error) msg = 'PoolMath could not be read: ' + r.error;
+                    else if (r && r.fresh === false) msg = 'PoolMath was read ' + new Date(r.ranAt).toLocaleTimeString([], { timeStyle: 'short' }) + '; that read is the newest.';
+                    else if (r && r.topUp) msg = 'Read PoolMath: ' + r.topUp.added + ' new, ' + r.topUp.updated + ' changed, ' + r.topUp.removed + ' removed.';
+                    else if (r && r.sync) msg = 'Read PoolMath: ' + r.sync.total + ' entries archived.';
+                    self._refreshMessage = msg;
+                    self._loadStatus(self._cfg);
+                });
+            });
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save PoolMath', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
                 var v = dataBinder.fromElement(pnl);
-                $.putApiService('/config/poolMath', { shareCode: v.shareCode || '', poolName: v.poolName || '' }, 'Saving PoolMath...', function (c, status, xhr) {
+                var obj = { shareCode: v.shareCode || '', poolName: v.poolName || '' };
+                var kinds = self._interestKinds();
+                if (kinds) obj.historyKinds = kinds;
+                $.putApiService('/config/poolMath', obj, 'Saving PoolMath...', function (c, status, xhr) {
                     self.dataBind(c);
                 });
             });
         },
+        // The ticked kinds, plus chosen kinds the archive has no data for yet (kept as they were); undefined when nothing was changed.
+        _interestKinds: function () {
+            var self = this;
+            if (!self._interestChanged || !self._elInterest) return undefined;
+            var shown = {}, out = [];
+            self._elInterest.find('div.picCheckbox[data-kind]').each(function () {
+                var kind = $(this).attr('data-kind');
+                shown[kind] = true;
+                if (this.val()) out.push(kind);
+            });
+            (self._selectedKinds || []).forEach(function (k) { if (!shown[k] && out.indexOf(k) === -1) out.push(k); });
+            return out;
+        },
+        // One checkbox per kind of data in the archive, by group, ticked when it is shown as history.
+        _loadInterest: function (selected) {
+            var self = this, box = self._elInterest;
+            if (!box) return;
+            self._selectedKinds = Array.isArray(selected) ? selected.slice() : [];
+            self._interestChanged = false;
+            $.getApiService('/state/poolMath/history/kinds', null, function (kinds, status, xhr) {
+                box.empty();
+                if (!Array.isArray(kinds) || !kinds.length) { box.hide(); return; }
+                $('<div></div>').appendTo(box).css({ fontWeight: 'bold' }).text('Of Interest')
+                    .attr('title', 'The PoolMath data shown as history. Everything PoolMath sends is kept, ticked or not.');
+                var groups = [['test', 'Tests'], ['addition', 'Additions'], ['weather', 'Weather'], ['log', 'Other']];
+                groups.forEach(function (g) {
+                    var inGroup = kinds.filter(function (k) { return k.group === g[0]; });
+                    if (!inGroup.length) return;
+                    var row = $('<div></div>').appendTo(box).css({ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 .75rem', marginTop: '.2rem' });
+                    $('<span></span>').appendTo(row).css({ width: '5rem', color: '#666' }).text(g[1]);
+                    inGroup.forEach(function (k) {
+                        var cb = $('<div></div>').appendTo(row).checkbox({ labelText: k.name + (k.unit ? ' (' + k.unit + ')' : ''), value: k.selected === true })
+                            .attr('data-kind', k.kind)
+                            .attr('title', k.count + ' entr' + (k.count === 1 ? 'y' : 'ies') + (k.first ? ', ' + new Date(k.first).toLocaleDateString([], { dateStyle: 'medium' }) + ' to ' + new Date(k.last).toLocaleDateString([], { dateStyle: 'medium' }) : ''));
+                        cb.on('changed', function () { self._interestChanged = true; });
+                    });
+                });
+                box.show();
+            });
+        },
         dataBind: function (obj) {
             var self = this, el = self.element;
+            self._cfg = obj;
             dataBinder.bind(el.find('div.picAccordian-contents:first'), { shareCode: obj.shareCode || '', poolName: obj.poolName || '' });
             self._setShareLink(obj.shareCode || '');
             self._loadStatus(obj);
@@ -363,16 +422,25 @@
             var hasCode = !!(cfg && cfg.shareCode);
             var cols = self.element.find('div.picAccordian:first')[0].columns();
             cols[1].elText().text(hasCode ? 'On' : 'Off');
-            if (!hasCode) { self._elStatus.hide(); if (self._elVolume) self._elVolume.empty().hide(); return; }
+            if (!hasCode) {
+                self._elStatus.hide();
+                if (self._elVolume) self._elVolume.empty().hide();
+                if (self._elInterest) self._elInterest.empty().hide();
+                return;
+            }
             $.getApiService('/state/poolMath', null, function (st, status, xhr) {
                 if (!st || typeof st !== 'object') return;
                 var parts = [];
                 var fmt = function (iso) { return new Date(iso).toLocaleDateString([], { dateStyle: 'medium' }); };
-                if (st.syncedAt) parts.push(st.count + ' log entries archived' + (st.oldest ? ', back to ' + fmt(st.oldest) : '') + '; read ' + fmt(st.toppedUpAt || st.syncedAt) + '.');
+                var fmtTime = function (iso) { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+                if (st.syncedAt) parts.push(st.count + ' log entries archived' + (st.oldest ? ', back to ' + fmt(st.oldest) : '') + '; '
+                    + (st.checkedAt ? 'last read ' + fmtTime(st.checkedAt) : 'read ' + fmt(st.toppedUpAt || st.syncedAt)) + '.');
                 else parts.push('Not read yet; the first read starts a few minutes after saving or starting njsPC.');
                 if (st.pool && st.pool.gallons > 0) parts.push('Volume ' + st.pool.gallons.toLocaleString() + ' gal' + (st.pool.swgLbsPerDay > 0 ? ', SWG rating ' + st.pool.swgLbsPerDay + ' lb/day' : '') + '.');
                 if (st.error) parts.push('Last error: ' + st.error);
+                if (self._refreshMessage) { parts.push(self._refreshMessage); self._refreshMessage = ''; }
                 self._elStatus.text(parts.join(' ')).show();
+                if (st.syncedAt) self._loadInterest(st.historyKinds);
                 self._comparePool({ name: (st.pool && st.pool.name) || cfg.poolName || '', gallons: st.pool && st.pool.gallons > 0 ? st.pool.gallons : 0 });
             });
         },
