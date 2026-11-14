@@ -177,6 +177,18 @@
       "build": true
     },
     {
+      "name": "feature/historyPanel",
+      "kind": "feature",
+      "status": "active",
+      "purpose": "History panel (scripts/history.js) in the Water panel's place on the dashboard, with Temperature and FC views set up from its gear; reads njsPC /state/history. water.js stays but is not loaded.",
+      "depends": [
+        "feature/chlorinator-log",
+        "feature/temp-average-24h"
+      ],
+      "upstream": "",
+      "build": true
+    },
+    {
       "name": "feature/power-tracking",
       "kind": "feature",
       "status": "active",
