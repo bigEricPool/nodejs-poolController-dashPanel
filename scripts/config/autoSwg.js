@@ -171,6 +171,19 @@
             self._awayTipBase = self._cbAway.attr('title');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Storm or outage adds at most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How many points a storm (a sharp fall in the salt reading) or an outage may add to the SWG % your plan would have used without it. It does not limit the glide up to the vacation target you set. The SWG % never goes below the maintenance %.');
+            // While the Away box is ticked: the burn and maintenance % as of the last FC test and a suggested Trip Maintenance Multiplier (from the last check; see
+            // /state/autoSwg awaySuggestedMultiplier), with a button that puts the suggestion in the multiplier field (saved with the settings, like any edit).
+            self._elAwaySuggest = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '.2rem 0' }).hide();
+            self._elAwaySuggestText = $('<span></span>').appendTo(self._elAwaySuggest);
+            self._btnAwaySuggest = $('<button type="button"></button>').appendTo(self._elAwaySuggest).text('Use suggested').css({ marginLeft: '.5rem', fontSize: '.95em' })
+                .attr('title', 'Put the suggested multiplier in the Trip Maintenance Multiplier field. Save the settings to keep it.')
+                .on('click', function () {
+                    var m = self._awaySuggested;
+                    if (!(m > 0) || !self._elAwayMult) return;
+                    self._elAwayMult.valueSpinner('val', m);
+                    self._applyAwayMultiplier(m);
+                });
+            self._cbAway.on('change', function () { self._refreshAwaySuggest(); });
             // These steer Away protection's glide to the vacation target (normal operation keeps FC inside the range, so they have no effect outside Away). Which window applies depends on which side of the
             // vacation target the projected FC is on -- the above one is listed first. Same label width so the two spinners line up.
             var daysLabel = { style: { width: '22rem' } };   // wide enough for 'Run Periods (days) to Target (FC above target)' (about 21 rem)
@@ -505,6 +518,29 @@
             self._elAwayTarget.css({ opacity: on ? 0.45 : '', pointerEvents: on ? 'none' : '' })
                 .attr('title', on ? 'Not used while the Trip Maintenance Multiplier is on: Away protection holds the maintenance % times the multiplier instead. Set the multiplier to 0 to use the Vacation Target FC.' : self._awayTargetTip);
         },
+        // The burn line and suggested multiplier, shown while the Away box is ticked (saved or not).
+        _refreshAwaySuggest: function () {
+            var self = this;
+            if (!self._elAwaySuggest || !self._cbAway) return;
+            var ticked = self._cbAway.find('input[type=checkbox]').is(':checked');
+            if (!ticked) { self._elAwaySuggest.hide(); return; }
+            $.getApiService('/state/autoSwg', null, function (st) {
+                if (!st || typeof st.awayBurnPpmPerDay !== 'number' || typeof st.awaySuggestedMultiplier !== 'number') {
+                    self._awaySuggested = null;
+                    self._elAwaySuggestText.text('No burn yet: run Check Now (or wait for the next check) to see the burn and a suggested multiplier.');
+                    self._btnAwaySuggest.hide();
+                    self._elAwaySuggest.show();
+                    return;
+                }
+                var fmtDate = function (iso) { return iso ? new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '?'; };
+                self._awaySuggested = st.awaySuggestedMultiplier;
+                self._elAwaySuggestText.text('As of the last FC test (' + fmtDate(st.awayBasisAt) + '): burn ' + st.awayBurnPpmPerDay.toFixed(2) + ' ppm/day, maintenance ' + st.awayMaintenancePct + '%. Suggested multiplier ' + st.awaySuggestedMultiplier
+                    + ' (peak 14-day burn ' + (typeof st.awayPeakBurnPpmPerDay === 'number' ? st.awayPeakBurnPpmPerDay.toFixed(2) : '?') + ' ppm/day on ' + fmtDate(st.awayPeakBurnAt) + ', the highest in the last 60 days, plus 10%).');
+                self._elAwaySuggest.attr('title', 'The suggestion is the highest 14-day burn in the last 60 days divided by the burn at your last test, plus 10%, rounded up to the next 0.5 (1 to 3). With it, the flat % covers a return to that burn. It comes from the last check.');
+                self._btnAwaySuggest.show();
+                self._elAwaySuggest.show();
+            });
+        },
         // The Away protection status line under its settings; while it is on, the settings it pauses are grayed out.
         _applyAwayStatus: function (cfg) {
             var self = this;
@@ -512,6 +548,7 @@
             var mult = cfg && typeof cfg.awayMaintMultiplier === 'number' ? cfg.awayMaintMultiplier : 0;
             self._awayControlMode = cfg && cfg.controlMode;
             self._applyAwayMultiplier(mult);
+            self._refreshAwaySuggest();
             var status = cfg && cfg.awayStatus, text = '', color = '#666';
             if (status === 'active') {
                 var since = cfg.awayStartedAt ? new Date(cfg.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
