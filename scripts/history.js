@@ -19,7 +19,7 @@
         set: function (key, val) { try { window.localStorage.setItem(key, val); } catch (err) { /* not remembered */ } }
     };
     $.widget('pic.historyPanel', {
-        options: { refreshMs: 60 * 1000, slowRefreshMs: 10 * 60 * 1000, kindsRefreshMs: 10 * 60 * 1000, range: 'day' },
+        options: { refreshMs: 60 * 1000, slowRefreshMs: 10 * 60 * 1000, kindsRefreshMs: 10 * 60 * 1000, range: 'day', popup: false },
         _ranges: [['day', 'Day', 1], ['week', 'Week', 7], ['month', 'Month', 30], ['year', 'Year', 365]],
         _create: function () {
             var self = this, el = self.element;
@@ -56,13 +56,20 @@
             if (self._ranges.some(function (x) { return x[0] === r; })) o.range = r;
             o.kinds = undefined; o.cfg = undefined; o.data = undefined;
             var title = $('<div class="picCircuitTitle control-panel-title"></div>').appendTo(el);
-            $('<span class="picCircuitTitle">History</span>').appendTo(title);
-            $('<span class="picHistoryGear" role="button" tabindex="0" title="Set up the views of this panel"><i class="fas fa-cog"></i></span>').appendTo(title)
-                .on('click keydown', function (evt) {
-                    if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
-                    evt.preventDefault();
-                    self._openSettings();
-                });
+            // The larger copy in its popup has the dialog's title, and neither the enlarge button nor the settings.
+            if (!o.popup) {
+                $('<span class="picCircuitTitle">History</span>').appendTo(title);
+                var btn = function (icon, tip, fn) {
+                    $('<span class="picHistoryGear" role="button" tabindex="0"></span>').attr('title', tip).append($('<i></i>').addClass(icon)).appendTo(title)
+                        .on('click keydown', function (evt) {
+                            if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
+                            evt.preventDefault();
+                            fn();
+                        });
+                };
+                btn('fas fa-expand-alt', 'Show larger', function () { self._openLarge(); });
+                btn('fas fa-cog', 'Set up the views of this panel', function () { self._openSettings(); });
+            }
             var tabs = $('<span class="picWaterTabs"></span>').appendTo(title);
             self._ranges.forEach(function (x) { $('<span class="picWaterTab" role="button" tabindex="0"></span>').attr('data-range', x[0]).text(x[1]).appendTo(tabs); });
             tabs.on('click keydown', 'span.picWaterTab', function (evt) {
@@ -256,6 +263,12 @@
             kinds.forEach(function (k) { (series[k.id] || []).forEach(function (p) { if (p.t < tMin) tMin = p.t; if (p.t > tMax) tMax = p.t; }); });
             var t1 = Math.min(to, Math.max(now, tMax));
             var t0 = days === 1 || tMin === Infinity ? from : Math.max(from, tMin - DAY / 2);
+            // In the popup the charts are taller, and the drawing keeps the proportions of the space it fills, so dots stay round.
+            if (o.popup) {
+                var rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+                var wpx = Math.max(150, body.width() - 4.5 * rem), hpx = rem * (window.innerWidth < 600 ? 12 : 18);
+                o.chartH = Math.max(20, Math.min(160, 200 * hpx / wpx));
+            }
             var styles = {};
             charts.forEach(function (c) { self._chart(body, c, series, color, t0, t1, styles); });
             self._note(body, self._noteText(styles, days));
@@ -338,7 +351,7 @@
         //   markers  a mark along the bottom for each point, with its text as the tooltip
         _chart: function (parent, c, series, color, t0, t1, styles) {
             var self = this, now = Date.now();
-            var W = 200, H = 46, pad = 2;
+            var W = 200, H = this.options.chartH || 46, pad = 2;
             var box = $('<div class="picWaterChart"></div>').appendTo(parent);
             var head = $('<div class="picWaterChartLabel"></div>').appendTo(box);
             var names = $('<span></span>').appendTo(head);
@@ -533,6 +546,7 @@
                 height: 'auto',
                 title: 'History Views',
                 position: { my: 'center top', at: 'center top', of: window },
+                close: function () { try { $(this).modalDialog('destroy'); } catch (err) { /* not a dialog any more */ } $(this).remove(); },
                 buttons: [
                     {
                         text: 'Save', icon: '<i class="fas fa-save"></i>',
@@ -584,6 +598,31 @@
                 });
             };
             draw();
+        },
+        // A larger copy of the panel in a popup: the same views and periods (a choice made in either is remembered for both), with taller charts.
+        _openLarge: function () {
+            var self = this, o = self.options;
+            if ($('div#dlgHistoryLarge div.picHistoryLarge').length > 0) return;   // already open
+            var inner;
+            var dlg = $.pic.modalDialog.createDialog('dlgHistoryLarge', {
+                width: Math.max(320, Math.min(window.innerWidth - 16, 1200)) + 'px',
+                height: 'auto',
+                title: 'History',
+                position: { my: 'center top', at: 'center top+8', of: window },
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }],
+                close: function () {
+                    try { if (inner) inner.historyPanel('destroy'); } catch (err) { /* already gone */ }
+                    try { $(this).modalDialog('destroy'); } catch (err) { /* not a dialog any more */ } $(this).remove();
+                    // The view or period may have been changed in the popup.
+                    o.viewId = store.get('picHistoryView');
+                    var r = store.get('picHistoryRange');
+                    if (self._ranges.some(function (x) { return x[0] === r; })) o.range = r;
+                    self._showTabs();
+                    self._loadData();
+                }
+            });
+            inner = $('<div class="picHistory picHistoryLarge"></div>').appendTo(dlg).historyPanel({ popup: true });
+            inner[0].initWater({});
         },
         _newId: function () { return 'v' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); },
         _settingsView: function (list, views, v, i, open, draw) {

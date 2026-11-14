@@ -2361,3 +2361,24 @@ div.picHistoryAdd {
     font-size: .85rem;
     padding: .2rem 0;
 }
+
+/* The larger History in its popup. */
+div.picHistoryLarge {
+    font-size: 1.05rem;
+}
+div.picHistoryLarge div.picWaterY,
+div.picHistoryLarge svg.picWaterSvg {
+    height: 18rem;
+}
+div.picHistoryLarge div.picWaterChartLabel,
+div.picHistoryLarge div.picWaterY,
+div.picHistoryLarge div.picWaterX,
+div.picHistoryLarge div.picHistoryMarks {
+    font-size: .8rem;
+}
+@media (max-width: 599px) {
+    div.picHistoryLarge div.picWaterY,
+    div.picHistoryLarge svg.picWaterSvg {
+        height: 12rem;
+    }
+}
