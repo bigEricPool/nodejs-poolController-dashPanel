@@ -358,6 +358,8 @@
             $('<div></div>').appendTo(line).valueSpinner({ value:3, labelText: 'Stop Temp Delta', binding: binding + 'stopTempDelta', min: 2, max: 5, step: 1, units: '&deg;' + o.tempUnits.name, inputAttrs: { maxlength: 4 }, labelAttrs: { style: { marginLeft:'2rem', marginRight: '.25rem' } } });
             line = $('<div></div>').appendTo(el);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Nocturnal Cooling', binding: 'coolingEnabled' }).attr('title', 'Check this to enable cooling when the body is on/r/nand the solar temperature is less than the water temperature.');
+            line = $('<div></div>').appendTo(el);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Valve Closed', binding: 'solarBlocked' }).attr('title', 'Check this while a valve keeps water out of the solar collector (closed for the winter, or for work on the panels). Solar then does not run whatever the heat mode, and the body shows why. Clear it, and save, once the valve is open again. It stays set across restarts.');
         },
         dataBind: function (obj) {
             var self = this, o = self.options, el = self.element;
