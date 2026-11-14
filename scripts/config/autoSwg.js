@@ -541,8 +541,8 @@
                 var fmtDate = function (iso) { return iso ? new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '?'; };
                 self._awaySuggested = st.awaySuggestedMultiplier;
                 self._elAwaySuggestText.text('As of the last FC test (' + fmtDate(st.awayBasisAt) + '): burn ' + st.awayBurnPpmPerDay.toFixed(2) + ' ppm/day, maintenance ' + st.awayMaintenancePct + '%. Suggested multiplier ' + st.awaySuggestedMultiplier
-                    + ' (peak 14-day burn ' + (typeof st.awayPeakBurnPpmPerDay === 'number' ? st.awayPeakBurnPpmPerDay.toFixed(2) : '?') + ' ppm/day on ' + fmtDate(st.awayPeakBurnAt) + ', the highest in the last 60 days, plus 10%).');
-                self._elAwaySuggest.attr('title', 'The suggestion is the highest 14-day burn in the last 60 days divided by the burn at your last test, plus 10%, rounded up to the next 0.5 (1 to 3). With it, the flat % covers a return to that burn. It comes from the last check.');
+                    + ' (peak 14-day burn ' + (typeof st.awayPeakBurnPpmPerDay === 'number' ? st.awayPeakBurnPpmPerDay.toFixed(2) : '?') + ' ppm/day on ' + fmtDate(st.awayPeakBurnAt) + ', the highest in the last 30 days).');
+                self._elAwaySuggest.attr('title', 'The suggestion is the highest 14-day burn in the last 30 days divided by the burn at your last test, rounded up to the next 0.5 (1 to 3). With it, the flat % covers a return to that burn. It comes from the last check.');
                 self._btnAwaySuggest.show();
                 self._elAwaySuggest.show();
             });
