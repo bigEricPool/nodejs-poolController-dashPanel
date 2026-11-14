@@ -2254,3 +2254,110 @@ div.picWaterNoteToggle i {
     margin-right: .3rem;
     width: .7rem;
 }
+
+/* The History panel (scripts/history.js), in the Water panel's place; its charts use the Water panel's styles above. */
+div.picHistoryViews {
+    font-size: .8rem;
+    margin: .1rem 0 .2rem 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .1rem .2rem;
+}
+span.picHistoryGear {
+    cursor: pointer;
+    margin-left: .4rem;
+    font-size: .8rem;
+    opacity: .6;
+}
+span.picHistoryGear:hover {
+    opacity: 1;
+}
+svg.picWaterSvg line.picHistoryNow {
+    stroke: currentColor;
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+    opacity: .5;
+    vector-effect: non-scaling-stroke;
+}
+svg.picWaterSvg line.picHistoryMark {
+    stroke: currentColor;
+    stroke-width: 2;
+    opacity: .8;
+    vector-effect: non-scaling-stroke;
+}
+div.picHistoryMarks {
+    font-size: .7rem;
+    opacity: .85;
+    margin-top: .1rem;
+}
+div.picHistoryMarks > div {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+span.picHistoryMarkWhen {
+    display: inline-block;
+    min-width: 5.5rem;
+    opacity: .8;
+}
+div.picHistorySettings div.picHistoryHelp {
+    font-size: .8rem;
+    opacity: .85;
+    margin-bottom: .4rem;
+}
+div.picHistoryView {
+    border: 1px solid rgba(128, 128, 128, .35);
+    border-radius: .3rem;
+    padding: .25rem .4rem;
+    margin-bottom: .3rem;
+}
+div.picHistoryViewHead {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+input.picHistoryName {
+    flex: 1;
+    min-width: 6rem;
+}
+span.picHistoryCount {
+    font-size: .75rem;
+    opacity: .7;
+    white-space: nowrap;
+}
+span.picHistoryBtn {
+    cursor: pointer;
+    padding: 0 .2rem;
+}
+span.picHistoryBtn.disabled {
+    opacity: .3;
+    cursor: default;
+}
+div.picHistoryItems {
+    margin: .3rem 0 .1rem 1.2rem;
+    font-size: .8rem;
+}
+div.picHistoryGroup {
+    display: flex;
+    gap: .5rem;
+    margin-bottom: .2rem;
+}
+span.picHistoryGroupName {
+    flex: none;
+    width: 6.5rem;
+    opacity: .7;
+}
+span.picHistoryChecks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 .8rem;
+}
+label.picHistoryCheck {
+    white-space: nowrap;
+    cursor: pointer;
+}
+div.picHistoryAdd {
+    cursor: pointer;
+    font-size: .85rem;
+    padding: .2rem 0;
+}

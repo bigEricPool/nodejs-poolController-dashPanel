@@ -1392,7 +1392,8 @@
                     let elVarName = '';
                     let disp = '';
                     elVarName = `--${id}-order`;
-                    disp = id.substring(3);
+                    // The History panel sits in the Water panel's place (div.picWater).
+                    disp = id === 'picWater' ? 'History' : id.substring(3);
                     console.log(elVarName);
                     // Logic for Large Screen Format
                     let orderLg = getStorage(elVarName, parseInt($(':root').css(elVarName)));
