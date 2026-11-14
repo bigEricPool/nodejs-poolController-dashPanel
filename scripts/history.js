@@ -268,6 +268,7 @@
             if (s.dots) parts.push('Dots are single readings, such as tests.');
             if (s.band) parts.push('A shaded band with dotted edges is a range in force at the time; it steps where it changed.');
             if (s.markers) parts.push('The marks along the bottom are additions and notes: hover over one for its text; the newest are listed under the chart.');
+            if (s.segs) parts.push('Where a line was worked out again (a new calculation), each one is its own line.');
             if (s.future) parts.push('The part right of the "now" line is projected.');
             if (s.right) parts.push('Items in colour on a second unit use the scale at the right.');
             return parts.join(' ') || 'Nothing recorded in this period yet.';
@@ -435,43 +436,50 @@
                     });
                     return;
                 }
-                var vals = pts.filter(function (p) { return num(p.v) && !p.o; });
-                if (vals.length < pts.filter(function (p) { return num(p.v); }).length) styles.gap = true;
-                var gap = gapOf(vals);
-                // The band from the low to the high of each hour or day, one shape for each run of points.
-                if (k.style !== 'steps' && vals.some(function (p) { return num(p.lo) && num(p.hi) && p.hi > p.lo; })) {
-                    var run = [], d = '';
-                    var flush = function () {
-                        if (run.length === 1) add('line', { x1: x(run[0].t), x2: x(run[0].t), y1: y(run[0].hi), y2: y(run[0].lo), 'class': 'picWaterBandBar' }, stroke);
-                        if (run.length > 1) d += 'M' + run.map(function (p) { return x(p.t).toFixed(1) + ' ' + y(p.hi).toFixed(1); }).join('L')
-                            + 'L' + run.slice().reverse().map(function (p) { return x(p.t).toFixed(1) + ' ' + y(p.lo).toFixed(1); }).join('L') + 'Z';
-                        run = [];
-                    };
-                    vals.forEach(function (p) {
-                        if (!num(p.lo) || !num(p.hi)) { flush(); return; }
-                        if (run.length > 0 && p.t - run[run.length - 1].t > gap) flush();
-                        run.push(p);
-                    });
-                    flush();
-                    if (d) add('path', { d: d, 'class': 'picWaterBand' }, fill);
-                    styles.lineBand = true;
-                }
-                var path = '', prev;
-                vals.forEach(function (p, i) {
-                    var before = i > 0 && p.t - vals[i - 1].t <= gap, after = i < vals.length - 1 && vals[i + 1].t - p.t <= gap;
-                    if (k.style !== 'steps' && !before && !after)
-                        add('ellipse', { cx: x(p.t).toFixed(1), cy: y(p.v).toFixed(1), rx: 1.5, ry: 1.5, 'class': 'picWaterDot' }, fill);
-                    if (i > 0 && !before) styles.gap = true;
-                    if (k.style === 'steps') {
-                        // A setting holds until the next one, so the line runs flat to it and then jumps; the last one holds until now.
-                        path += (i === 0 ? 'M' : 'L') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
-                        var next = i + 1 < vals.length ? vals[i + 1].t : Math.min(t1, Math.max(now, p.t));
-                        path += 'L' + x(next).toFixed(1) + ' ' + y(p.v).toFixed(1);
+                var allVals = pts.filter(function (p) { return num(p.v) && !p.o; });
+                if (allVals.length < pts.filter(function (p) { return num(p.v); }).length) styles.gap = true;
+                // Points with different seg values are separate lines (a projection remade by each calculation).
+                var segs = [], bySeg = {};
+                allVals.forEach(function (p) { var key = num(p.seg) ? String(p.seg) : ''; if (!bySeg[key]) { bySeg[key] = []; segs.push(key); } bySeg[key].push(p); });
+                if (segs.length > 1) styles.segs = true;
+                segs.forEach(function (key) {
+                    var vals = bySeg[key];
+                    var gap = gapOf(vals);
+                    // The band from the low to the high of each hour or day, one shape for each run of points.
+                    if (k.style !== 'steps' && vals.some(function (p) { return num(p.lo) && num(p.hi) && p.hi > p.lo; })) {
+                        var run = [], d = '';
+                        var flush = function () {
+                            if (run.length === 1) add('line', { x1: x(run[0].t), x2: x(run[0].t), y1: y(run[0].hi), y2: y(run[0].lo), 'class': 'picWaterBandBar' }, stroke);
+                            if (run.length > 1) d += 'M' + run.map(function (p) { return x(p.t).toFixed(1) + ' ' + y(p.hi).toFixed(1); }).join('L')
+                                + 'L' + run.slice().reverse().map(function (p) { return x(p.t).toFixed(1) + ' ' + y(p.lo).toFixed(1); }).join('L') + 'Z';
+                            run = [];
+                        };
+                        vals.forEach(function (p) {
+                            if (!num(p.lo) || !num(p.hi)) { flush(); return; }
+                            if (run.length > 0 && p.t - run[run.length - 1].t > gap) flush();
+                            run.push(p);
+                        });
+                        flush();
+                        if (d) add('path', { d: d, 'class': 'picWaterBand' }, fill);
+                        styles.lineBand = true;
                     }
-                    else path += (before ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
-                    prev = p;
+                    var path = '', prev;
+                    vals.forEach(function (p, i) {
+                        var before = i > 0 && p.t - vals[i - 1].t <= gap, after = i < vals.length - 1 && vals[i + 1].t - p.t <= gap;
+                        if (k.style !== 'steps' && !before && !after)
+                            add('ellipse', { cx: x(p.t).toFixed(1), cy: y(p.v).toFixed(1), rx: 1.5, ry: 1.5, 'class': 'picWaterDot' }, fill);
+                        if (i > 0 && !before) styles.gap = true;
+                        if (k.style === 'steps') {
+                            // A setting holds until the next one, so the line runs flat to it and then jumps; the last one holds until now.
+                            path += (i === 0 ? 'M' : 'L') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
+                            var next = i + 1 < vals.length ? vals[i + 1].t : Math.min(t1, Math.max(now, p.t));
+                            path += 'L' + x(next).toFixed(1) + ' ' + y(p.v).toFixed(1);
+                        }
+                        else path += (before ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
+                        prev = p;
+                    });
+                    if (path) add('path', { d: path, 'class': 'picWaterLine' + (k.style === 'steps' ? ' picHistorySteps' : '') }, stroke);
                 });
-                if (path) add('path', { d: path, 'class': 'picWaterLine' + (k.style === 'steps' ? ' picHistorySteps' : '') }, stroke);
                 if (k.style === 'steps') styles.steps = true; else styles.line = true;
             });
             // Additions and notes along the bottom, each with its text as the tooltip; the newest are listed under the chart.
