@@ -174,16 +174,16 @@
             // These steer Away protection's glide to the vacation target (normal operation keeps FC inside the range, so they have no effect outside Away). Which window applies depends on which side of the
             // vacation target the projected FC is on -- the above one is listed first. Same label width so the two spinners line up.
             var daysLabel = { style: { width: '22rem' } };   // wide enough for 'Run Periods (days) to Target (FC above target)' (about 21 rem)
-            line = $('<div></div>').appendTo(pnl);
+            line = self._elRowPeriodsAbove = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to the vacation target when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to the vacation target when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
-            line = $('<div></div>').appendTo(pnl);
+            line = self._elRowOvernight = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep FC at the target through the night', binding: 'protectOvernightLow' })
                 .attr('title', 'FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
-            line = $('<div></div>').appendTo(pnl);
+            line = self._elRowNewTargetThreshold = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', 'If the projected FC is MORE than this many ppm above or below the Vacation Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
 
@@ -494,10 +494,14 @@
                 .attr('title', 'The rated lbs/day scaled to the run window, for this pool volume. The recommended SWG % is the share of this that is needed.').show();
         },
         // The Vacation Target FC is not used while the Trip Maintenance Multiplier is on (above 0): gray it out.
+        // These rows only steer the glide to the Vacation Target FC (and the single-target mode), so they are hidden while the multiplier is on under range
+        // control. The settings stay in the config for now (multiplier 0 brings the glide back); they are to be removed once the glide is retired.
         _applyAwayMultiplier: function (mult) {
             var self = this;
             if (!self._elAwayTarget) return;
             var on = parseFloat(mult) > 0;
+            var hideGlide = on && self._awayControlMode !== 'target';
+            [self._elRowPeriodsAbove, self._elRowOvernight, self._elRowNewTargetThreshold].forEach(function (el) { if (el) el.toggle(!hideGlide); });
             self._elAwayTarget.css({ opacity: on ? 0.45 : '', pointerEvents: on ? 'none' : '' })
                 .attr('title', on ? 'Not used while the Trip Maintenance Multiplier is on: Away protection holds the maintenance % times the multiplier instead. Set the multiplier to 0 to use the Vacation Target FC.' : self._awayTargetTip);
         },
@@ -506,6 +510,7 @@
             var self = this;
             if (!self._elAwayStatus) return;
             var mult = cfg && typeof cfg.awayMaintMultiplier === 'number' ? cfg.awayMaintMultiplier : 0;
+            self._awayControlMode = cfg && cfg.controlMode;
             self._applyAwayMultiplier(mult);
             var status = cfg && cfg.awayStatus, text = '', color = '#666';
             if (status === 'active') {
