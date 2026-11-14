@@ -291,7 +291,7 @@
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
                         $.getApiService('/state/autoSwg', null, function (result) {
-                            if (result && result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+                            if (result && result.nextAutoCheckAt) self._elNextAutoCheck.text('Next auto check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
                             else self._elNextAutoCheck.hide();
                         });
                     });
@@ -343,6 +343,7 @@
             // them (what the applied % was based on, and the latest calculation) are the footnote below these lines.
             self._elRunningNow = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' }).hide();
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
+            self._elHolding = $('<div></div>').appendTo(results).css({ margin: '.2rem 0' }).hide();
             self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60', margin: '.2rem 0' }).hide();
             self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             // The background PoolMath history archive (up to 48 months of logs, pulled from PoolMath's
@@ -443,7 +444,7 @@
             // was applied, the pending step (what happens next), the next automatic check and the archive line, and last the long description the applied % was
             // based on, which is the footnote. The elements are created in a different order above; appending an existing element moves it.
             results.append(self._elResultDivider);
-            [self._elRunningNow, self._elLastApplied, self._elPendingStep, self._elNextAutoCheck, self._elArchiveStatus, self._elAppliedRationaleHeader, self._elAppliedRationale]
+            [self._elRunningNow, self._elLastApplied, self._elHolding, self._elPendingStep, self._elNextAutoCheck, self._elArchiveStatus, self._elAppliedRationaleHeader, self._elAppliedRationale]
                 .forEach(function (el) { results.append(el); });
             self._buildBench();
         },
@@ -916,19 +917,83 @@
                 if (p[0][0].style.display !== 'none') p[1].toggle(open);
             });
         },
-        // The applied status at the top of the results: what is running now, when it was last applied and when the next automatic check is due, plus the pending
-        // step, which comes right after the last applied line because it is what happens next. Redrawn by every result and, so the countdown and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
+        // The applied status at the top of the results. Under range control (the usual mode): what was applied and when, what that means now (held at 0% above the range, holding
+        // the maintenance %, raised below the range), when the next automatic check is due, and last, small, the fallback step (what the SWG does if nothing is applied by then: it is no
+        // forecast, every apply sets it a day ahead again). With a target: what is running now, when it was last applied, the pending step (what happens next) and the next check.
+        // Redrawn by every result and, so the countdowns and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
         _renderSectionA: function (result) {
             var self = this;
+            var fmt = function (d) { return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); };
+            var inRange = result.controlMode === 'band' && result.awayStatus !== 'active' && typeof result.fcLow === 'number' && typeof result.fcHigh === 'number';
+            if (inRange) {
+                self._elRunningNow.hide();
+                if (result.lastAppliedAt) self._elLastApplied.text('SWG Assist applied ' + result.lastAppliedPct + '% on ' + fmt(new Date(result.lastAppliedAt))).css({ fontSize: '', color: '' }).show();
+                else self._elLastApplied.hide();
+                var holding = self._describeBandHold(result);
+                if (holding) self._elHolding.text(holding).show();
+                else self._elHolding.hide();
+                if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next auto check: ' + fmt(new Date(result.nextAutoCheckAt))).show();
+                else self._elNextAutoCheck.hide();
+                var fallback = result.stepAt && typeof result.stepPct === 'number' ? self._describeFallbackStep(result) : '';
+                if (fallback) self._elPendingStep.text(fallback).css({ fontWeight: 'normal', color: '#888', fontSize: '.8em', margin: 0 }).show();
+                else self._elPendingStep.hide();
+                self._elHolding.insertAfter(self._elLastApplied);
+                self._elNextAutoCheck.insertAfter(self._elHolding);
+                self._elPendingStep.insertAfter(self._elNextAutoCheck);
+                return;
+            }
             if (typeof result.lastAppliedPct === 'number') self._elRunningNow.text('Current SWG %: ' + result.lastAppliedPct + '%').show();
             else self._elRunningNow.hide();
-            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).show();
+            self._elHolding.hide();
+            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).css({ fontWeight: 'bold', color: '#a60', fontSize: '', margin: '.2rem 0' }).show();
             else self._elPendingStep.hide();
-            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + fmt(new Date(result.lastAppliedAt))).css({ fontSize: '.85em', color: '#666' }).show();
             else self._elLastApplied.hide();
             // When the periodic automatic check is next due (only present while it's running).
-            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next auto check: ' + fmt(new Date(result.nextAutoCheckAt))).show();
             else self._elNextAutoCheck.hide();
+            self._elPendingStep.insertAfter(self._elLastApplied);
+            self._elNextAutoCheck.insertAfter(self._elPendingStep);
+        },
+        // What range control did in the applied calculation, in a sentence or two (the server keeps the numbers with the applied %; none until the first apply after an update).
+        // The hold at 0% above the range ends when the projection (no more chlorine made) is half a ppm under the top (BAND_RELEASE_PPM on the server), or when the last reading is
+        // 3 days old, whichever is first; the server works out both times.
+        _describeBandHold: function (result) {
+            var self = this;
+            var mode = result.lastAppliedBandMode, proj = result.lastAppliedProjectedFc;
+            if (!mode || typeof proj !== 'number' || typeof result.lastAppliedPct !== 'number') return '';
+            var hi = result.fcHigh, rng = result.fcLow + '-' + hi + ' ppm range', pct = result.lastAppliedPct;
+            var fmt = function (d) { return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); };
+            var away = function (ms) {
+                if (ms <= 3600000) return 'less than an hour';
+                var h = ms / 3600000;
+                return h < 36 ? Math.round(h) + ' hours' : Math.round(h / 24) + ' days';
+            };
+            if (mode === 'coast') {
+                var s = 'Holding at ' + pct + '%: FC is projected at ' + proj.toFixed(1) + ' ppm, above the ' + rng + '. ';
+                var release = (hi - 0.5).toFixed(1);
+                var reach = result.lastAppliedBandReachAt ? new Date(result.lastAppliedBandReachAt) : null;
+                var stale = result.lastAppliedBandStaleAt ? new Date(result.lastAppliedBandStaleAt) : null;
+                var avg = typeof result.lastAppliedAvgConsumption === 'number' ? ' at the current ' + result.lastAppliedAvgConsumption + ' ppm/day' : '';
+                var now = Date.now();
+                if (reach && !isNaN(reach.getTime()) && (!stale || reach.getTime() <= stale.getTime()))
+                    return s + 'The SWG comes back on when the projection reaches ' + release + ' ppm, about ' + away(reach.getTime() - now) + ' away' + avg + '.';
+                if (stale && !isNaN(stale.getTime()))
+                    return s + 'The SWG comes back on by ' + fmt(stale) + ', when the last FC reading is 3 days old, at about the maintenance %' + (reach && !isNaN(reach.getTime()) ? ' (the projection would not reach ' + release + ' ppm until about ' + away(reach.getTime() - now) + ' from now' + avg + ')' : '') + '.';
+                return s + 'The SWG comes back on when the projection reaches ' + release + ' ppm.';
+            }
+            if (mode === 'boost') return 'Raised to ' + pct + '%: FC is projected at ' + proj.toFixed(1) + ' ppm, below the ' + rng + ', so the SWG is set to bring it back toward the middle.';
+            return 'Holding at ' + pct + '%: FC is projected at ' + proj.toFixed(1) + ' ppm, inside the ' + rng + '.';
+        },
+        // The fallback step under range control, as a clock time: if nothing is applied (an automatic check, or by hand) before then, the SWG goes to the maintenance %.
+        _describeFallbackStep: function (result) {
+            var at = new Date(result.stepAt), now = new Date();
+            if (isNaN(at.getTime())) return '';
+            if (at.getTime() <= now.getTime()) return 'Fallback: the SWG goes to the maintenance ' + result.stepPct + '% as soon as the step runs (nothing was applied in time).';
+            var time = at.toLocaleTimeString([], { timeStyle: 'short' });
+            var day = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(), atDay = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+            var when = atDay === day ? time + ' today' : atDay === day + 86400000 ? time + ' tomorrow' : time + ' on ' + at.toLocaleDateString([], { dateStyle: 'short' });
+            return 'Fallback: if nothing is applied (automatic or manual) before ' + when + ', the SWG goes to the maintenance ' + result.stepPct + '%.';
         },
         // Reloads what the server has now: section A (what is applied, the pending step, the next check) always, and the whole calculation and its details
         // when a newer one has been made (an automatic check, or Away protection acting) and there is no unapplied preview here waiting for your Apply.
@@ -965,9 +1030,6 @@
             var verb = result.stepPct > result.lastAppliedPct ? 'rises to ' : 'drops to ';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
-            // Under range control the automatic checks decide the %, and every apply sets this step a day ahead again, so it is no forecast of when the SWG resumes: it is what happens if the checks stop.
-            if (result.controlMode === 'band' && result.awayStatus !== 'active' && typeof result.fcLow === 'number' && typeof result.fcHigh === 'number')
-                return 'if no automatic check has run by then (FC range ' + result.fcLow + ' to ' + result.fcHigh + ' ppm), SWG ' + verb + result.stepPct + '% (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', in ' + remaining + ')';
             // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
             // this step -- not necessarily today's config, which may have changed since.
             var s = 'at the end of the target period' + (typeof result.lastAppliedTargetFc === 'number' ? ' (target FC ' + result.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + result.stepPct + '%';
