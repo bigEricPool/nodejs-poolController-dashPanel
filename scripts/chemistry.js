@@ -253,6 +253,8 @@
                     .hide().appendTo(self._elAutoSwgSummary.parent());
             }
             var parts = [];
+            // Super chlorinate is on: njsPC holds every SWG Assist change until it ends (state.autoSwg.superChlorHold).
+            if (data.superChlorHold) parts.push('Super chlorinate on; SWG Assist changes held until it ends.');
             if (data.lastAppliedAt) parts.push('applied ' + data.lastAppliedPct + '% on ' + new Date(data.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
             if (data.stepAt) parts.push('Pending step: ' + describeAutoSwgStep(data, false));
             // Only present while the periodic automatic check is armed (Auto-Apply + automatic checking on).
@@ -339,6 +341,7 @@
             if (data.awayStatus === 'active') {
                 addLine('Away Mode Active' + (typeof data.awayTargetFc === 'number' ? ' -- vacation target ' + data.awayTargetFc + ' ppm' : ''), { fontWeight: 'bold', color: '#fff', background: '#117a8b', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             }
+            if (data.superChlorHold) addLine('Super chlorinate on; SWG Assist changes held until it ends.', { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             if (data.awayChangeNote) addLine('ℹ ' + data.awayChangeNote, { color: '#fff', background: '#2a6fa8', padding: '.4rem .6rem', borderRadius: '.25rem', marginBottom: '.3rem' });
             if (data.lastAutoApplyLargeChange) {
                 addLine('⚠ AUTOMATIC CHANGE EXCEEDED THRESHOLD: moved ' + autoSwgLargeChangeText(data) + ' with no manual review.',
