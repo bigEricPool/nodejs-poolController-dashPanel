@@ -13,6 +13,7 @@
     var DAY = 86400000;
     var COLORS = ['#2b8cbe', '#e6550d', '#31a354', '#756bb1', '#d6616b', '#8c6d31', '#17becf', '#bcbd22'];
     var NS = 'http://www.w3.org/2000/svg';
+    var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     var num = function (v) { return typeof v === 'number' && isFinite(v); };
     var store = {
         get: function (key) { try { return window.localStorage.getItem(key); } catch (err) { return null; } },
@@ -76,7 +77,7 @@
                 if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
                 evt.preventDefault();
                 o.range = $(evt.currentTarget).attr('data-range');
-                o.month = undefined;
+                o.months = undefined;
                 store.set('picHistoryRange', o.range);
                 self._showTabs();
                 self._loadData();
@@ -156,31 +157,96 @@
         },
         _showTabs: function () {
             var self = this, o = self.options, el = self.element;
-            // While a calendar month is shown no period is selected; the popup's title names the month.
-            el.find('span.picWaterTabs span.picWaterTab').each(function () { var on = !num(o.month) && $(this).attr('data-range') === o.range; $(this).toggleClass('selected', on).attr('aria-pressed', on); });
-            if (o.popup) { try { el.parent().modalDialog('option', 'title', num(o.month) ? 'History · ' + self._monthName(o.month) : 'History'); } catch (err) { /* not in a dialog */ } }
+            // While calendar months are shown no period is selected; the popup's title names the months, and a row of the last year's
+            // months picks them.
+            var months = self._months();
+            el.find('span.picWaterTabs span.picWaterTab').each(function () { var on = !months && $(this).attr('data-range') === o.range; $(this).toggleClass('selected', on).attr('aria-pressed', on); });
+            if (o.popup) {
+                try { el.parent().modalDialog('option', 'title', months ? 'History · ' + self._monthsTitle(months) : 'History'); } catch (err) { /* not in a dialog */ }
+                var row = el.find('div.picHistoryMonths');
+                if (!months) row.remove();
+                else {
+                    if (row.length === 0) {
+                        row = $('<div class="picHistoryMonths" role="group" aria-label="Months shown"></div>').insertAfter(el.find('div.picHistoryViews'));
+                        row.on('click keydown', 'span.picWaterTab', function (evt) {
+                            if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
+                            evt.preventDefault();
+                            self._toggleMonth(+$(evt.currentTarget).attr('data-month'));
+                        });
+                    }
+                    row.empty();
+                    var thisYear = new Date().getFullYear();
+                    self._lastYearMonths().forEach(function (m) {
+                        var d = new Date(m), on = months.indexOf(m) !== -1;
+                        $('<span class="picWaterTab" role="button" tabindex="0"></span>').attr({ 'data-month': m, title: self._monthName(m), 'aria-pressed': on })
+                            .text(MONTHS[d.getMonth()].substring(0, 3) + (d.getFullYear() !== thisYear ? ' ’' + String(d.getFullYear()).slice(-2) : ''))
+                            .toggleClass('selected', on).appendTo(row);
+                    });
+                }
+            }
             var v = self._currentView();
             el.find('div.picHistoryViews span.picWaterTab').each(function () { var on = !!v && $(this).attr('data-view') === v.id; $(this).toggleClass('selected', on).attr('aria-pressed', on); });
         },
-        // A calendar month shown in place of the period (set by a month's label in the Year view): its start and end, and its name.
+        // Calendar months shown in place of the period (a month's label in the Year view opens the popup on that month; more can be picked
+        // from the last year's there): the starts of the selected months in order, or undefined while a period is shown.
+        _months: function () {
+            var m = this.options.months;
+            return Array.isArray(m) && m.length > 0 ? m.slice().sort(function (a, b) { return a - b; }) : undefined;
+        },
         _monthSpan: function (start) {
             var d = new Date(start);
             return { from: new Date(d.getFullYear(), d.getMonth(), 1).getTime(), to: new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() };
         },
         _monthName: function (t) {
             var d = new Date(t);
-            return ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()] + ' ' + d.getFullYear();
+            return MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+        },
+        // The months the Year view covers: the one a year ago through this one.
+        _lastYearMonths: function () {
+            var now = new Date(), out = [];
+            for (var i = 12; i >= 0; i--) out.push(new Date(now.getFullYear(), now.getMonth() - i, 1).getTime());
+            return out;
+        },
+        _monthsTitle: function (months) {
+            if (months.length === 1) return this._monthName(months[0]);
+            var self = this, short = function (t) { var d = new Date(t); return MONTHS[d.getMonth()].substring(0, 3) + ' ' + d.getFullYear(); };
+            if (months.length <= 3) return months.map(short).join(', ');
+            return short(months[0]) + ' to ' + short(months[months.length - 1]) + ' (' + months.length + ' months)';
+        },
+        // The stretches between the first and the last selected month that are not selected: left blank in the charts.
+        _skips: function () {
+            var self = this, months = self._months(), out = [];
+            if (!months) return out;
+            var first = self._monthSpan(months[0]).from, last = self._monthSpan(months[months.length - 1]).to;
+            for (var m = first; m < last; m = self._monthSpan(m).to) {
+                if (months.indexOf(m) !== -1) continue;
+                var end = self._monthSpan(m).to;
+                if (out.length && out[out.length - 1][1] === m) out[out.length - 1][1] = end; else out.push([m, end]);
+            }
+            return out;
         },
         _showMonth: function (start) {
             var self = this, o = self.options;
             if (!o.popup) { self._openLarge(start); return; }
-            o.month = start;
+            o.months = [self._monthSpan(start).from];
+            self._showTabs();
+            self._loadData();
+        },
+        // A month in the popup's row is added or taken away; the last one selected stays.
+        _toggleMonth: function (start) {
+            var self = this, o = self.options, months = self._months() || [];
+            if (!num(start)) return;
+            var i = months.indexOf(start);
+            if (i === -1) months.push(start);
+            else if (months.length > 1) months.splice(i, 1);
+            else return;
+            o.months = months.sort(function (a, b) { return a - b; });
             self._showTabs();
             self._loadData();
         },
         _days: function () {
-            var o = this.options, days = 1;
-            if (num(o.month)) { var ms = this._monthSpan(o.month); return (ms.to - ms.from) / DAY; }
+            var o = this.options, days = 1, months = this._months();
+            if (months) return (this._monthSpan(months[months.length - 1]).to - this._monthSpan(months[0]).from) / DAY;
             this._ranges.forEach(function (r) { if (r[0] === o.range) days = r[2]; });
             return days;
         },
@@ -196,7 +262,8 @@
             var days = self._days(), now = Date.now();
             var future = ids.some(function (id) { return map[id].future === true; });
             var from = now - days * DAY, to = future ? now + Math.max(DAY / 4, days * DAY / 4) : now;
-            if (num(o.month)) { var ms = self._monthSpan(o.month); from = ms.from; to = ms.to; }
+            var months = self._months();
+            if (months) { from = self._monthSpan(months[0]).from; to = self._monthSpan(months[months.length - 1]).to; }
             var path = '/state/history?kinds=' + encodeURIComponent(ids.join(',')) + '&from=' + Math.round(from) + '&to=' + Math.round(to);
             $.ajax({ url: self._url(path), type: 'get', dataType: 'json' })
                 .done(function (d) { if (seq !== o.loadSeq) return; o.data = d && typeof d === 'object' ? d : { series: {} }; o.data.reqFrom = from; o.data.reqTo = to; self._render(); })
@@ -246,13 +313,16 @@
             var now = Date.now(), days = self._days();
             var from = o.data && num(o.data.reqFrom) ? o.data.reqFrom : now - days * DAY;
             var to = o.data && num(o.data.reqTo) ? o.data.reqTo : now;
+            // Months between the selected ones are left out: of the values summed up, and blank in the charts.
+            var skips = o.skips = self._skips();
+            var inSkip = function (t) { return skips.some(function (s) { return t >= s[0] && t < s[1]; }); };
             // A colour for each item: the first one drawn in the text colour (as the Water panel drew the water temperature), the others from the palette.
             var color = {}, ci = 0;
             kinds.forEach(function (k) { color[k.id] = ci === 0 ? 'currentColor' : COLORS[(ci - 1) % COLORS.length]; ci++; });
             // The latest value of each item that has values, with the high, the low and the average of the period.
             kinds.forEach(function (k) {
                 if (k.style === 'band' || k.style === 'markers') return;
-                var pts = (series[k.id] || []).filter(function (p) { return num(p.v) && !p.o && p.t >= from && p.t <= Math.min(now, to); });
+                var pts = (series[k.id] || []).filter(function (p) { return num(p.v) && !p.o && p.t >= from && p.t <= Math.min(now, to) && !inSkip(p.t); });
                 if (pts.length === 0) return;
                 var row = $('<div class="picWaterRow"></div>').appendTo(body);
                 $('<span class="picWaterIcon"></span>').appendTo(row).append($('<i></i>').addClass(self._icon(k))).css('color', color[k.id] === 'currentColor' ? '' : color[k.id]);
@@ -283,9 +353,8 @@
             var tMin = Infinity, tMax = -Infinity;
             kinds.forEach(function (k) { (series[k.id] || []).forEach(function (p) { if (p.t < tMin) tMin = p.t; if (p.t > tMax) tMax = p.t; }); });
             var t1 = Math.min(to, Math.max(now, tMax));
-            var t0 = days === 1 || num(o.month) || tMin === Infinity ? from : Math.max(from, tMin - DAY / 2);
-            // A calendar month runs to its end; the current one stops at now, or at the last point of an item that looks ahead.
-            if (num(o.month)) t1 = Math.min(to, Math.max(now, tMax));
+            var t0 = days === 1 || self._months() || tMin === Infinity ? from : Math.max(from, tMin - DAY / 2);
+            // Calendar months run to the end of the last one; the current one stops at now, or at the last point of an item that looks ahead.
             // In the popup the charts are taller, and the drawing keeps the proportions of the space it fills, so dots stay round.
             if (o.popup) {
                 var rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
@@ -302,6 +371,7 @@
             if (s.gap) parts.push('A line breaks where nothing was recorded (for example while the pump was off).');
             if (s.steps) parts.push('A stepped line is a setting, held until it changed.');
             if (s.dots) parts.push('Dots are single readings, such as tests.');
+            if (s.skip) parts.push('A shaded stretch is a month that is not selected; nothing is drawn there.');
             if (s.band) parts.push('A shaded band with dotted edges is a range in force at the time; it steps where it changed.');
             if (s.markers) parts.push('The marks along the bottom are additions and notes: hover over one for its text; the newest are listed under the chart.');
             if (s.segs) parts.push('Where a line was worked out again (a new calculation), each one is its own line.');
@@ -396,8 +466,25 @@
                 var all = (series[k.id] || []).filter(function (p) { return p && num(p.t) && p.t <= t1; }), out = all.filter(inSpan);
                 var before = all.filter(function (p) { return p.t < t0; }).pop();
                 if (before && (k.style === 'band' || k.style === 'steps') && !(out.length && out[0].t <= t0)) out.unshift($.extend({}, before, { t: t0 }));
-                return out;
+                if (skips.length === 0) return out;
+                // Months not selected are blank: their points are left out; a range or setting ends where one starts (a point with no
+                // value) and picks up again, as it stood then, where it ends.
+                var kept = out.filter(function (p) { return !inSkip(p.t); });
+                if (k.style === 'band' || k.style === 'steps') {
+                    skips.forEach(function (s) {
+                        if (s[0] <= t0 || s[0] >= t1) return;
+                        kept.push({ t: s[0] });
+                        var last = all.filter(function (p) { return p.t < s[1]; }).pop();
+                        if (last && s[1] < t1 && !kept.some(function (p) { return p.t === s[1]; })) kept.push($.extend({}, last, { t: s[1] }));
+                    });
+                    kept.sort(function (a, b) { return a.t - b.t; });
+                }
+                return kept;
             };
+            var skips = this.options.skips || [];
+            var inSkip = function (t) { return skips.some(function (s) { return t >= s[0] && t < s[1]; }); };
+            // Whether a stretch of months not selected lies between two times, so a line does not run across it.
+            var skipBetween = function (a, b) { return skips.some(function (s) { return s[0] > a && s[0] < b; }); };
             // The spread of each unit's values in the period.
             var scales = c.units.map(function (u) {
                 var min = Infinity, max = -Infinity;
@@ -434,6 +521,14 @@
             if (left) left.ticks.forEach(function (v) { var yy = yOf(left)(v); add('line', { x1: 0, x2: W, y1: yy, y2: yy, 'class': 'picWaterGrid' }); });
             xTicks.forEach(function (tk) { var xx = x(tk.t); add('line', { x1: xx, x2: xx, y1: 0, y2: H, 'class': 'picWaterGrid' }); });
             if (t1 > now + 60000) { styles.future = true; add('line', { x1: x(now), x2: x(now), y1: 0, y2: H, 'class': 'picHistoryNow' }); }
+            // Months not selected, between the selected ones: shaded, and left blank.
+            skips.forEach(function (s) {
+                var a = Math.max(t0, s[0]), b = Math.min(t1, s[1]);
+                if (b <= a) return;
+                add('rect', { x: x(a).toFixed(1), y: 0, width: (x(b) - x(a)).toFixed(1), height: H, 'class': 'picHistorySkip' }, '',
+                    self._monthsTitle([s[0]]) + (s[1] - s[0] > 32 * DAY ? ' to ' + self._monthsTitle([new Date(new Date(s[1]).getFullYear(), new Date(s[1]).getMonth() - 1, 1).getTime()]) : '') + ': not selected');
+                styles.skip = true;
+            });
             // The longest step between two points a line runs across: the period's own (a few minutes for a day, two hours for a week, two
             // days beyond), or two and a half times the usual step of that item, whichever is longer.
             var span = (t1 - t0) / DAY;
@@ -500,7 +595,7 @@
                         };
                         vals.forEach(function (p) {
                             if (!num(p.lo) || !num(p.hi)) { flush(); return; }
-                            if (run.length > 0 && p.t - run[run.length - 1].t > gap) flush();
+                            if (run.length > 0 && (p.t - run[run.length - 1].t > gap || skipBetween(run[run.length - 1].t, p.t))) flush();
                             run.push(p);
                         });
                         flush();
@@ -509,14 +604,17 @@
                     }
                     var path = '', prev;
                     vals.forEach(function (p, i) {
-                        var before = i > 0 && p.t - vals[i - 1].t <= gap, after = i < vals.length - 1 && vals[i + 1].t - p.t <= gap;
+                        var before = i > 0 && p.t - vals[i - 1].t <= gap && !skipBetween(vals[i - 1].t, p.t);
+                        var after = i < vals.length - 1 && vals[i + 1].t - p.t <= gap && !skipBetween(p.t, vals[i + 1].t);
                         if (k.style !== 'steps' && !before && !after)
                             add('ellipse', { cx: x(p.t).toFixed(1), cy: y(p.v).toFixed(1), rx: 1.5, ry: 1.5, 'class': 'picWaterDot' }, fill);
                         if (i > 0 && !before) styles.gap = true;
                         if (k.style === 'steps') {
                             // A setting holds until the next one, so the line runs flat to it and then jumps; the last one holds until now.
-                            path += (i === 0 ? 'M' : 'L') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
+                            path += (i === 0 || skipBetween(vals[i - 1].t, p.t) ? 'M' : 'L') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
                             var next = i + 1 < vals.length ? vals[i + 1].t : Math.min(t1, Math.max(now, p.t));
+                            // ...and stops where months not selected start.
+                            skips.forEach(function (s) { if (s[0] > p.t && s[0] < next) next = s[0]; });
                             path += 'L' + x(next).toFixed(1) + ' ' + y(p.v).toFixed(1);
                         }
                         else path += (before ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1);
@@ -529,7 +627,7 @@
             // Additions and notes along the bottom, each with its text as the tooltip; the newest are listed under the chart.
             var list = [];
             (c.markers || []).forEach(function (k) {
-                (series[k.id] || []).filter(inSpan).forEach(function (p) {
+                (series[k.id] || []).filter(function (p) { return inSpan(p) && !inSkip(p.t); }).forEach(function (p) {
                     var text = p.text || (num(p.v) ? self._fmt(p.v, k.unit) : '');
                     var xx = x(p.t);
                     add('line', { x1: xx, x2: xx, y1: H, y2: H - 7, 'class': 'picHistoryMark' }, color[k.id] === 'currentColor' ? '' : 'stroke:' + color[k.id],
@@ -663,7 +761,7 @@
                     self._loadData();
                 }
             });
-            inner = $('<div class="picHistory picHistoryLarge"></div>').appendTo(dlg).historyPanel({ popup: true, month: num(month) ? month : undefined });
+            inner = $('<div class="picHistory picHistoryLarge"></div>').appendTo(dlg).historyPanel({ popup: true, months: num(month) ? [self._monthSpan(month).from] : undefined });
             inner[0].initWater({});
         },
         _newId: function () { return 'v' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); },

@@ -2394,3 +2394,24 @@ div.picWaterX > span.picHistoryMonth:focus {
     opacity: 1;
     text-decoration-style: solid;
 }
+
+/* The months picked in the larger popup, and the months between them that are not picked. */
+div.picHistoryMonths {
+    font-size: .8rem;
+    margin: .1rem 0 .3rem 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem;
+}
+div.picHistoryMonths > span.picWaterTab {
+    border: 1px solid rgba(128, 128, 128, .4);
+}
+div.picHistoryMonths > span.picWaterTab.selected {
+    text-decoration: none;
+    background: rgba(43, 140, 190, .18);
+    border-color: rgba(43, 140, 190, .7);
+}
+svg.picWaterSvg rect.picHistorySkip {
+    fill: currentColor;
+    opacity: .07;
+}
