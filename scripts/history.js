@@ -331,13 +331,20 @@
             }
             return out;
         },
-        // A scale for some values: its ends and its marks. A narrow spread is widened so a flat line sits in the middle.
+        // A scale for some values: its ends and its marks. A narrow spread is widened so a flat line sits in the middle; how far depends
+        // on the size of the values (a tenth of the largest, between 0.2 and 2), so 85° keeps its 2° and a CSI near 0 gets 0.2. Widening
+        // never crosses below 0 when no value does, and never cuts a value off.
         _scale: function (min, max) {
             if (!(max >= min)) return null;
-            if (max - min < 2) { var mid = (max + min) / 2; min = mid - 1; max = mid + 1; if (min < 0 && mid >= 0) { min = 0; max = 2; } }
-            var st = this._step(max - min, [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000], 4);
-            min = Math.floor(min / st) * st;
-            max = Math.ceil(max / st) * st;
+            var least = Math.min(2, Math.max(0.2, Math.max(Math.abs(min), Math.abs(max)) / 10));
+            if (max - min < least) {
+                var mid = (max + min) / 2, lo = mid - least / 2, hi = mid + least / 2;
+                if (lo < 0 && min >= 0) { hi -= lo; lo = 0; }
+                min = lo; max = hi;
+            }
+            var st = this._step(max - min, [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000], 4);
+            min = Math.round(Math.floor(min / st + 1e-9) * st * 1000) / 1000;
+            max = Math.round(Math.ceil(max / st - 1e-9) * st * 1000) / 1000;
             var ticks = [];
             for (var v = min; v <= max + 1e-9; v += st) ticks.push(Math.round(v * 1000) / 1000);
             return { min: min, max: max, ticks: ticks };
