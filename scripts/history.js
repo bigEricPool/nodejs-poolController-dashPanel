@@ -76,6 +76,7 @@
                 if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
                 evt.preventDefault();
                 o.range = $(evt.currentTarget).attr('data-range');
+                o.month = undefined;
                 store.set('picHistoryRange', o.range);
                 self._showTabs();
                 self._loadData();
@@ -155,12 +156,31 @@
         },
         _showTabs: function () {
             var self = this, o = self.options, el = self.element;
-            el.find('span.picWaterTabs span.picWaterTab').each(function () { var on = $(this).attr('data-range') === o.range; $(this).toggleClass('selected', on).attr('aria-pressed', on); });
+            // While a calendar month is shown no period is selected; the popup's title names the month.
+            el.find('span.picWaterTabs span.picWaterTab').each(function () { var on = !num(o.month) && $(this).attr('data-range') === o.range; $(this).toggleClass('selected', on).attr('aria-pressed', on); });
+            if (o.popup) { try { el.parent().modalDialog('option', 'title', num(o.month) ? 'History · ' + self._monthName(o.month) : 'History'); } catch (err) { /* not in a dialog */ } }
             var v = self._currentView();
             el.find('div.picHistoryViews span.picWaterTab').each(function () { var on = !!v && $(this).attr('data-view') === v.id; $(this).toggleClass('selected', on).attr('aria-pressed', on); });
         },
+        // A calendar month shown in place of the period (set by a month's label in the Year view): its start and end, and its name.
+        _monthSpan: function (start) {
+            var d = new Date(start);
+            return { from: new Date(d.getFullYear(), d.getMonth(), 1).getTime(), to: new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() };
+        },
+        _monthName: function (t) {
+            var d = new Date(t);
+            return ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][d.getMonth()] + ' ' + d.getFullYear();
+        },
+        _showMonth: function (start) {
+            var self = this, o = self.options;
+            if (!o.popup) { self._openLarge(start); return; }
+            o.month = start;
+            self._showTabs();
+            self._loadData();
+        },
         _days: function () {
             var o = this.options, days = 1;
+            if (num(o.month)) { var ms = this._monthSpan(o.month); return (ms.to - ms.from) / DAY; }
             this._ranges.forEach(function (r) { if (r[0] === o.range) days = r[2]; });
             return days;
         },
@@ -176,6 +196,7 @@
             var days = self._days(), now = Date.now();
             var future = ids.some(function (id) { return map[id].future === true; });
             var from = now - days * DAY, to = future ? now + Math.max(DAY / 4, days * DAY / 4) : now;
+            if (num(o.month)) { var ms = self._monthSpan(o.month); from = ms.from; to = ms.to; }
             var path = '/state/history?kinds=' + encodeURIComponent(ids.join(',')) + '&from=' + Math.round(from) + '&to=' + Math.round(to);
             $.ajax({ url: self._url(path), type: 'get', dataType: 'json' })
                 .done(function (d) { if (seq !== o.loadSeq) return; o.data = d && typeof d === 'object' ? d : { series: {} }; o.data.reqFrom = from; o.data.reqTo = to; self._render(); })
@@ -231,7 +252,7 @@
             // The latest value of each item that has values, with the high, the low and the average of the period.
             kinds.forEach(function (k) {
                 if (k.style === 'band' || k.style === 'markers') return;
-                var pts = (series[k.id] || []).filter(function (p) { return num(p.v) && !p.o && p.t >= from && p.t <= now; });
+                var pts = (series[k.id] || []).filter(function (p) { return num(p.v) && !p.o && p.t >= from && p.t <= Math.min(now, to); });
                 if (pts.length === 0) return;
                 var row = $('<div class="picWaterRow"></div>').appendTo(body);
                 $('<span class="picWaterIcon"></span>').appendTo(row).append($('<i></i>').addClass(self._icon(k))).css('color', color[k.id] === 'currentColor' ? '' : color[k.id]);
@@ -262,7 +283,9 @@
             var tMin = Infinity, tMax = -Infinity;
             kinds.forEach(function (k) { (series[k.id] || []).forEach(function (p) { if (p.t < tMin) tMin = p.t; if (p.t > tMax) tMax = p.t; }); });
             var t1 = Math.min(to, Math.max(now, tMax));
-            var t0 = days === 1 || tMin === Infinity ? from : Math.max(from, tMin - DAY / 2);
+            var t0 = days === 1 || num(o.month) || tMin === Infinity ? from : Math.max(from, tMin - DAY / 2);
+            // A calendar month runs to its end; the current one stops at now, or at the last point of an item that looks ahead.
+            if (num(o.month)) t1 = Math.min(to, Math.max(now, tMax));
             // In the popup the charts are taller, and the drawing keeps the proportions of the space it fills, so dots stay round.
             if (o.popup) {
                 var rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
@@ -327,7 +350,8 @@
                 }
             }
             else {
-                for (var m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m.getTime() <= t1; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) out.push({ t: m.getTime(), text: names[m.getMonth()] });
+                // Each month's mark carries its start, so its label can open that month larger.
+                for (var m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m.getTime() <= t1; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) out.push({ t: m.getTime(), text: names[m.getMonth()], month: m.getTime() });
             }
             return out;
         },
@@ -529,7 +553,17 @@
                 var frac = (tk.t - t0) / (t1 - t0);
                 // A mark at the very edge keeps its line but not its label, which would hang outside the chart.
                 if (frac < 0.04 || frac > 0.96) return;
-                $('<span></span>').text(tk.text).css('left', (100 * frac) + '%').appendTo(xbox);
+                var lab = $('<span></span>').text(tk.text).css('left', (100 * frac) + '%').appendTo(xbox);
+                // A month's label opens that calendar month in the larger popup (or shows it there, in the popup itself).
+                if (num(tk.month)) {
+                    var mName = self._monthName(tk.month);
+                    lab.addClass('picHistoryMonth').attr({ role: 'button', tabindex: '0', title: 'Show ' + mName + ' larger' })
+                        .on('click keydown', function (evt) {
+                            if (evt.type === 'keydown' && evt.key !== 'Enter' && evt.key !== ' ') return;
+                            evt.preventDefault();
+                            self._showMonth(tk.month);
+                        });
+                }
             });
             if (list.length > 0) {
                 var ul = $('<div class="picHistoryMarks"></div>').appendTo(box);
@@ -607,7 +641,8 @@
             draw();
         },
         // A larger copy of the panel in a popup: the same views and periods (a choice made in either is remembered for both), with taller charts.
-        _openLarge: function () {
+        // Given a month's start (a month's label in the Year view), the popup opens on that calendar month.
+        _openLarge: function (month) {
             var self = this, o = self.options;
             if ($('div#dlgHistoryLarge div.picHistoryLarge').length > 0) return;   // already open
             var inner;
@@ -628,7 +663,7 @@
                     self._loadData();
                 }
             });
-            inner = $('<div class="picHistory picHistoryLarge"></div>').appendTo(dlg).historyPanel({ popup: true });
+            inner = $('<div class="picHistory picHistoryLarge"></div>').appendTo(dlg).historyPanel({ popup: true, month: num(month) ? month : undefined });
             inner[0].initWater({});
         },
         _newId: function () { return 'v' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); },

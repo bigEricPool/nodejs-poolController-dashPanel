@@ -2382,3 +2382,15 @@ div.picHistoryLarge div.picHistoryMarks {
         height: 12rem;
     }
 }
+
+/* A month's label in the Year view opens that month in the larger popup. */
+div.picWaterX > span.picHistoryMonth {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+div.picWaterX > span.picHistoryMonth:hover,
+div.picWaterX > span.picHistoryMonth:focus {
+    opacity: 1;
+    text-decoration-style: solid;
+}
