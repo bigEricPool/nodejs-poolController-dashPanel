@@ -290,6 +290,8 @@
             });
             // The pool's PoolMath share: njsPC reads the pool's log history from it (cell usage before the output log began, the pool volume).
             $('<div></div>').appendTo(el).pnlPoolMathConfig({});
+            // Writing SWG % changes to the owner's PoolMath log.
+            $('<div></div>').appendTo(el).pnlPoolMathSwgLog({});
         }
     });
     $.widget('pic.pnlPoolMathConfig', {
@@ -502,6 +504,80 @@
                     });
                 });
                 el.show();
+            });
+        }
+    });
+    // Writing SWG entries to the owner's PoolMath log when the SWG % changes (njsPC controller/PoolMathSwgLog.ts). The sign-in comes from an
+    // encrypted file on the controller, never from here: this panel only shows whether the file was found, the last sign-in and the last error.
+    $.widget('pic.pnlPoolMathSwgLog', {
+        options: {},
+        _create: function () {
+            var self = this, o = self.options, el = self.element;
+            self._buildControls();
+            self._load();
+        },
+        _buildControls: function () {
+            var self = this, o = self.options, el = self.element;
+            el.empty();
+            el.addClass('picConfigCategory cfgPoolMathSwgLog');
+            var acc = $('<div></div>').appendTo(el).accordian({
+                columns: [{ binding: 'title', glyph: 'fas fa-pen', style: { width: '14rem' } }, { binding: 'status', glyph: '', style: {} }]
+            });
+            var cols = acc[0].columns();
+            cols[0].elText().text('PoolMath SWG Log');
+            var pnl = acc.find('div.picAccordian-contents');
+            var line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).checkbox({ labelText: 'Write SWG % changes to my PoolMath log', binding: 'swgLogEnabled' })
+                .attr('title', 'Adds an SWG entry to your PoolMath log each time the chlorinator\'s pool % changes (after it has held for 2 minutes), and two entries when a super chlorinate ends. Never at a start of njsPC.');
+            line = $('<div></div>').appendTo(pnl);
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: 1, units: 'hours a day', inputAttrs: { maxlength: 2, style: { width: '3rem' } }, labelAttrs: { style: { width: '5.9rem', marginRight: '.25rem' } } })
+                .attr('title', 'The hours a day the cell runs, sent with each entry (whole hours). Nothing is written while this is 0.');
+            self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 6.2rem' });
+            var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
+            var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save SWG Log', icon: '<i class="fas fa-save"></i>' });
+            btnSave.on('click', function (e) {
+                var v = dataBinder.fromElement(pnl);
+                var hours = Math.round(Number(v.swgLogHours) || 0);
+                $.putApiService('/config/poolMath', { swgLogEnabled: v.swgLogEnabled === true, swgLogHours: hours }, 'Saving SWG Log...', function (c, status, xhr) {
+                    self.dataBind(c);
+                });
+            });
+        },
+        _load: function () {
+            var self = this;
+            $.getApiService('/config/poolMath', null, function (cfg, status, xhr) {
+                if (cfg && typeof cfg === 'object') self.dataBind(cfg);
+            });
+        },
+        dataBind: function (obj) {
+            var self = this, el = self.element;
+            obj = obj || {};
+            dataBinder.bind(el.find('div.picAccordian-contents:first'), { swgLogEnabled: obj.swgLogEnabled === true, swgLogHours: obj.swgLogHours > 0 ? obj.swgLogHours : 0 });
+            var cols = el.find('div.picAccordian:first')[0].columns();
+            cols[1].elText().text(obj.swgLogEnabled === true ? 'On' : 'Off');
+            self._loadStatus();
+        },
+        // Whether the credentials file was found, the last sign-in, the last error and what is waiting; never the user, password or token.
+        _loadStatus: function () {
+            var self = this;
+            if (!self._elStatus) return;
+            $.getApiService('/state/poolMath/swgLog', null, function (st, status, xhr) {
+                var box = self._elStatus.empty();
+                if (!st || typeof st !== 'object') return;
+                var fmtTime = function (iso) { return new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }); };
+                var row = function (text, warn) {
+                    var d = $('<div></div>').appendTo(box);
+                    if (warn) d.css({ color: '#b35900' }).html('<i class="fas fa-exclamation-triangle"></i> ').append($('<span></span>').text(text));
+                    else d.text(text);
+                };
+                var found = st.credentialsFile === 'found';
+                if (typeof st.credentialsFile === 'string') row(found ? 'Credentials file found on the controller.' : 'No credentials file on the controller; create it there with the one-line command in the poolmath-rig README.', !found && st.enabled);
+                if (st.lastSignIn) row('Last sign-in ' + (st.lastSignIn.ok ? 'OK' : 'FAILED') + (st.lastSignIn.at ? ', ' + fmtTime(st.lastSignIn.at) : '') + '.', !st.lastSignIn.ok);
+                else if (st.enabled) row('Not signed in yet; njsPC signs in when it first writes an entry.');
+                if (st.lastWritten) row('Last written: SWG ' + st.lastWritten.hours + ' h @ ' + st.lastWritten.percent + '%, ' + st.lastWritten.ppm + ' ppm, for ' + fmtTime(st.lastWritten.ts) + '.');
+                if (st.pending > 0) row(st.pending + ' entr' + (st.pending === 1 ? 'y' : 'ies') + ' waiting to be written.');
+                if (st.note && !(!found && /credentials file/i.test(st.note))) row(st.note, true);
+                if (st.lastError) row('Last error' + (st.lastErrorAt ? ' (' + fmtTime(st.lastErrorAt) + ')' : '') + ': ' + st.lastError, true);
             });
         }
     });
