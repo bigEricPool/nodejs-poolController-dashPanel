@@ -17,7 +17,8 @@
                         bodies: opts.bodies,
                         scheduleTimeTypes: opts.scheduleTimeTypes, maxSchedules: opts.maxSchedules,
                         scheduleTypes: opts.scheduleTypes, scheduleDays: opts.scheduleDays, heatSources: opts.heatSources,
-                        tempUnits: opts.tempUnits, circuits: opts.circuits, clockMode: opts.clockMode, displayTypes: opts.displayTypes
+                        tempUnits: opts.tempUnits, circuits: opts.circuits, clockMode: opts.clockMode, displayTypes: opts.displayTypes,
+                        sunWindowPlacements: opts.sunWindowPlacements || []
                     })[0].dataBind(schedules[i]);
                 }
                 var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(el);
@@ -27,7 +28,8 @@
                     var pnl = $('<div></div>').insertBefore(btnPnl).pnlScheduleConfig({
                         scheduleTimeTypes: opts.scheduleTimeTypes, maxSchedules: opts.maxSchedules,
                         scheduleTypes: opts.scheduleTypes, scheduleDays: opts.scheduleDays, heatSources: opts.heatSources, bodies: opts.bodies,
-                        tempUnits: opts.tempUnits, circuits: opts.circuits, clockMode: opts.clockMode, displayTypes: opts.displayTypes
+                        tempUnits: opts.tempUnits, circuits: opts.circuits, clockMode: opts.clockMode, displayTypes: opts.displayTypes,
+                        sunWindowPlacements: opts.sunWindowPlacements || []
                     });
                     var st = opts.scheduleTypes.find(elem => elem.name === 'repeat') || opts.scheduleTypes[0];
                     var tt = opts.scheduleTimeTypes.find(elem => elem.name === 'manual') || opts.scheduleTimeTypes[0];
@@ -140,7 +142,8 @@
             $('<div></div>').appendTo(line).pickList({
                 required: true, bindColumn: 0, displayColumn: 1, labelText: '', binding: binding + 'endTimeType',
                 columns: [{ binding: 'val', hidden: true, text: 'Id', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'End Type', style: { whiteSpace: 'nowrap' } }],
-                items: o.scheduleTimeTypes, inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { display: 'none' } }
+                // A sun window is chosen as the start type and sets both ends.
+                items: o.scheduleTimeTypes.filter(function (elem) { return elem.name !== 'sunWindow'; }), inputAttrs: { style: { width: '4rem' } }, labelAttrs: { style: { display: 'none' } }
             }).css({ marginRight: '.25rem' });
             $('<div></div>').appendTo(line).timeSpinner({ labelText: '', binding: binding + 'endTime', min: 0, max: 1440, step: 30, fmtMask: o.fmtTime, emptyMask: o.fmtTimeEmpty, inputAttrs: { maxlength: 7 }, labelAttrs: {} });
             $('<div></div>').appendTo(line).pickList({
@@ -154,7 +157,21 @@
             $('<div></div>').appendTo(line1).valueSpinner({ canEdit: true, labelText: '', binding: binding + 'endTimeOffsetHours', min: 0, max: 6, step: 1, units: 'hrs', inputAttrs: { maxlength: 2 }, labelAttrs: { style: { marginLeft: '.25rem', width: '5rem' } }, style: { marginRight: '.25rem' } });
             $('<div></div>').appendTo(line1).valueSpinner({ canEdit: true, labelText: '', binding: binding + 'endTimeOffsetMins', min: 0, max: 59, step: 1, units: 'min', inputAttrs: { maxlength: 3 }, labelAttrs: {} });
 
-            inline = $('<div></div>').addClass('inline-line').appendTo(pnlTime).css({ display: 'table-cell', paddingRight: '7px' });
+            // Sun window settings.  Only shown when the start type is Sun Window.
+            line = $('<div></div>').addClass('sun-window').appendTo(inline).css({ marginTop: '3px' }).hide();
+            $('<label></label>').appendTo(line).text('Length').css({ marginLeft: '.25rem', width: '5rem', display: 'inline-block' });
+            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Multiple of', binding: binding + 'sunWindowHours', min: 1, max: 24, step: 1, units: 'hrs', inputAttrs: { maxlength: 2 }, labelAttrs: { style: { marginRight: '.25rem' } } });
+            line = $('<div></div>').addClass('sun-window').appendTo(inline).css({ marginTop: '3px' }).hide();
+            $('<label></label>').appendTo(line).text('Placement').css({ marginLeft: '.25rem', width: '5rem', display: 'inline-block' });
+            $('<div></div>').appendTo(line).pickList({
+                bindColumn: 0, displayColumn: 1, labelText: '', binding: binding + 'sunWindowPlacement',
+                columns: [{ binding: 'val', hidden: true, text: 'Id', style: { whiteSpace: 'nowrap' } }, { binding: 'desc', text: 'Placement', style: { whiteSpace: 'nowrap' } }],
+                items: o.sunWindowPlacements || [], inputAttrs: { style: { width: '11rem' } }, labelAttrs: { style: { display: 'none' } }
+            });
+            line = $('<div></div>').addClass('sun-window').appendTo(inline).css({ marginTop: '3px', marginLeft: '.25rem', fontSize: '.8rem', fontStyle: 'italic' }).hide();
+            $('<span></span>').appendTo(line).text('Covers sunrise to sunset in whole multiples of the hours above.  The controller rewrites the start and end times each day.');
+
+            inline =$('<div></div>').addClass('inline-line').appendTo(pnlTime).css({ display: 'table-cell', paddingRight: '7px' });
             $('<div></div>').appendTo(inline).pnlScheduleDays({ singleSelect: false, days: o.scheduleDays, binding: binding + 'scheduleDays' }).css({ paddingLeft: '.25rem' });
             line = $('<div></div>').appendTo(inline);
             $('<label style="display:inline-block;width:7rem;font-weight:bold;white-space:nowrap">Schedule Date</label>').appendTo(line);
@@ -178,7 +195,16 @@
                 var mult = p.find('div.picPickList[data-bind$=Mult]:first');
                 var off = p.find('div.timeoffset:first');
                 let ct = $('body').attr('data-controllertype');
-                if (evt.newItem.name !== 'manual') {
+                let isStart = $(evt.currentTarget).attr('data-bind') === binding + 'startTimeType';
+                if (typeof evt.newItem !== 'undefined' && evt.newItem.name === 'sunWindow') {
+                    // The times are fixed values the controller fills in, so there is nothing to enter.
+                    spin.hide();
+                    mult.hide();
+                    off.hide();
+                    spin[0].required(false);
+                }
+                else if (typeof evt.newItem === 'undefined') { /* No selection; leave the inputs as they are. */ }
+                else if (evt.newItem.name !== 'manual') {
                     spin.hide();
                     if (ct === 'nixie') { mult.show(); off.show(); }
                     else { mult.hide(); off.hide(); }
@@ -190,6 +216,7 @@
                     off.hide();
                     spin[0].required(true);
                 }
+                if (isStart) self._setSunWindow(typeof evt.newItem !== 'undefined' && evt.newItem.name === 'sunWindow');
             });
             el.on('selchanged', 'div.picPickList[data-bind=scheduleType]', function (evt) { self._setScheduleType(evt.newItem.val); });
             btnSave.on('click', function (e) {
@@ -199,41 +226,60 @@
                 let et = o.scheduleTimeTypes.find(elem => elem.val === v.endTimeType);
                 let ct = $('body').attr('data-controllertype');
                 if (dataBinder.checkRequired(el, true)) {
-                    // Ok so lets calculate the startTime offset.
-                    if (st.name !== 'manual') {
-                        if (ct !== 'nixie' && st.name === 'sunset' && et.name === 'sunrise') {
+                    if (typeof st !== 'undefined' && st.name === 'sunWindow') {
+                        // The controller works out the times; send the window settings instead.
+                        var hrs = Number(v.sunWindowHours);
+                        if (!Number.isInteger(hrs) || hrs < 1 || hrs > 24) {
                             $('<div></div>')
-                                .appendTo(p.find('div[data-bind$=startTime]'))
-                                .fieldTip({ message: 'The start time must be less than the end time' });
+                                .appendTo(p.find('div[data-bind$=sunWindowHours]'))
+                                .fieldTip({ message: 'Use a whole number of hours<br/>from 1 to 24' });
                             return;
                         }
-                        v.startTimeOffset = v.startTimeMult * ((v.startTimeOffsetHours * 60) + v.startTimeOffsetMins);
-                        if (Math.abs(v.startTimeOffset) > (6 * 60)) {
-                            $('<div></div>')
-                                .appendTo(p.find('div[data-bind$=startTimeOffsetHours]'))
-                                .fieldTip({ message: 'You may only provide an offset<br/>of 6 hours or less' });
-                            return;
-                        }
+                        v.sunWindowHours = hrs;
+                        if (typeof v.sunWindowPlacement !== 'number' || isNaN(v.sunWindowPlacement)) v.sunWindowPlacement = 0;
+                        v.endTimeType = st.val;
+                        v.startTimeOffset = 0;
+                        v.endTimeOffset = 0;
                     }
                     else {
-                        v.startTimeOffset = 0;
-                        if (ct !== 'nixie' && et.name === 'manual' && v.startTime > v.endTime) {
-                            $('<div></div>')
-                                .appendTo(p.find('div[data-bind$=startTime]'))
-                                .fieldTip({ message: 'The start time must be less than the end time' });
-                            return;
+                        delete v.sunWindowHours;
+                        delete v.sunWindowPlacement;
+                        // Ok so lets calculate the startTime offset.
+                        if (st.name !== 'manual') {
+                            if (ct !== 'nixie' && st.name === 'sunset' && et.name === 'sunrise') {
+                                $('<div></div>')
+                                    .appendTo(p.find('div[data-bind$=startTime]'))
+                                    .fieldTip({ message: 'The start time must be less than the end time' });
+                                return;
+                            }
+                            v.startTimeOffset = v.startTimeMult * ((v.startTimeOffsetHours * 60) + v.startTimeOffsetMins);
+                            if (Math.abs(v.startTimeOffset) > (6 * 60)) {
+                                $('<div></div>')
+                                    .appendTo(p.find('div[data-bind$=startTimeOffsetHours]'))
+                                    .fieldTip({ message: 'You may only provide an offset<br/>of 6 hours or less' });
+                                return;
+                            }
                         }
-                    }
-                    if (et.name !== 'manual') {
-                        v.endTimeOffset = v.endTimeMult * ((v.endTimeOffsetHours * 60) + v.endTimeOffsetMins);
-                        if (Math.abs(v.endTimeOffset) > (6 * 60)) {
-                            $('<div></div>')
-                                .appendTo(p.find('div[data-bind$=endTimeOffsetHours]'))
-                                .fieldTip({ message: 'You may only provide an offset<br/>of 6 hours or less' });
-                            return;
+                        else {
+                            v.startTimeOffset = 0;
+                            if (ct !== 'nixie' && et.name === 'manual' && v.startTime > v.endTime) {
+                                $('<div></div>')
+                                    .appendTo(p.find('div[data-bind$=startTime]'))
+                                    .fieldTip({ message: 'The start time must be less than the end time' });
+                                return;
+                            }
                         }
+                        if (et.name !== 'manual') {
+                            v.endTimeOffset = v.endTimeMult * ((v.endTimeOffsetHours * 60) + v.endTimeOffsetMins);
+                            if (Math.abs(v.endTimeOffset) > (6 * 60)) {
+                                $('<div></div>')
+                                    .appendTo(p.find('div[data-bind$=endTimeOffsetHours]'))
+                                    .fieldTip({ message: 'You may only provide an offset<br/>of 6 hours or less' });
+                                return;
+                            }
+                        }
+                        else v.endTimeOffset = 0;
                     }
-                    else v.endTimeOffset = 0;
                     delete v.endTimeMult;
                     delete v.endTimeOffsetHours;
                     delete v.endTimeOffsetMins;
@@ -297,7 +343,8 @@
             
             shouldShowStartDate ? el.find('input[data-bind=startDate]').closest('div').show() : el.find('input[data-bind=startDate]').closest('div').hide();
             schedType.startTime ? el.find('div.schedule-time.start-time').show().find('div.picValueSpinner[data-bind=startTime]')[0].required(true) : el.find('div.schedule-time.start-time').hide().find('div.picValueSpinner[data-bind=startTime]')[0].required(false);
-            schedType.endTime ? el.find('div.schedule-time.end-time').show().find('div.picValueSpinner[data-bind=endTime]')[0].required(true) : el.find('div.schedule-time.end-time').hide().find('div.picValueSpinner[data-bind=endTime]')[0].required(false);
+            o.schedType = schedType;
+            schedType.endTime && !o.isSunWindow ? el.find('div.schedule-time.end-time').show().find('div.picValueSpinner[data-bind=endTime]')[0].required(true) : el.find('div.schedule-time.end-time').hide().find('div.picValueSpinner[data-bind=endTime]')[0].required(false);
             el.find('div.pnl-scheduleDays').each(function () {
                 switch (schedType.days) {
                     case 'single':
@@ -314,6 +361,32 @@
                 }
             });
             return schedType;
+        },
+        _setSunWindow: function (isSun) {
+            // A sun window replaces the end time inputs with the hour multiple and placement.
+            var self = this, o = self.options, el = self.element;
+            var endLine = el.find('div.schedule-time.end-time');
+            var endType = endLine.find('div.picPickList[data-bind=endTimeType]');
+            var endSpin = endLine.find('div.picValueSpinner[data-bind=endTime]');
+            o.isSunWindow = isSun === true;
+            if (o.isSunWindow) {
+                endLine.hide();
+                if (endType.length > 0) endType[0].required(false);
+                if (endSpin.length > 0) endSpin[0].required(false);
+                el.find('div.sun-window').show();
+            }
+            else {
+                el.find('div.sun-window').hide();
+                if (endType.length > 0) {
+                    var ev = endType[0].val();
+                    if (typeof ev === 'undefined' || ev === null || ev === '') endType[0].val(0);
+                    endType[0].required(true);
+                }
+                var showEnd = typeof o.schedType === 'undefined' || o.schedType.endTime;
+                if (showEnd) endLine.show();
+                var etName = (o.scheduleTimeTypes.find(function (elem) { return endType.length > 0 && elem.val === endType[0].val(); }) || { name: 'manual' }).name;
+                if (endSpin.length > 0) endSpin[0].required(showEnd && etName === 'manual');
+            }
         },
         getScheduleDays: function (bits, days) {
             var arr = [];
@@ -336,16 +409,27 @@
             var startTimeType = $.extend(true, { val: 0, name: 'manual', desc: 'Manual' }, o.scheduleTimeTypes.find(elem => obj.startTimeType === elem.val));
             var endTimeType = $.extend(true, { val: 0, name: 'manual', desc: 'Manual' }, o.scheduleTimeTypes.find(elem => obj.endTimeType === elem.val));
             var time = '';
-            if (schedType.startTime) {
+            var timeTitle = null;
+            // Sun window defaults, so switching a schedule to Sun Window starts from 3 h centered on solar noon.
+            if (typeof obj.sunWindowHours !== 'number') obj.sunWindowHours = 3;
+            if (obj.sunWindowPlacement !== null && typeof obj.sunWindowPlacement === 'object') obj.sunWindowPlacement = obj.sunWindowPlacement.val;
+            if (typeof obj.sunWindowPlacement !== 'number') obj.sunWindowPlacement = 0;
+            if (startTimeType.name === 'sunWindow') {
+                // The stored times are fixed values the controller rewrites each day, so show them.
+                var plc = (o.sunWindowPlacements || []).find(function (elem) { return elem.val === obj.sunWindowPlacement; });
+                time = (obj.startTime || 0).formatTime(o.fmtTime, '--:--') + ' - ' + (obj.endTime || 0).formatTime(o.fmtTime, '--:--');
+                timeTitle = 'Sun window: multiples of ' + obj.sunWindowHours + ' h' + (plc ? ', ' + plc.desc.toLowerCase() : '');
+            }
+            else if (schedType.startTime) {
                 if (startTimeType.name !== 'manual') time = startTimeType.desc;
                 else time = (obj.startTime || 0).formatTime(o.fmtTime, '--:--');
             }
-            if (schedType.endTime) {
+            if (schedType.endTime && startTimeType.name !== 'sunWindow') {
                 if (time.length > 0) time += ' - ';
                 if (endTimeType.name !== 'manual') time += endTimeType.desc;
                 else time += (obj.endTime || 0).formatTime(o.fmtTime, '--:--');
             }
-            cols[1].elText().text(time);
+            cols[1].elText().text(time).attr('title', timeTitle);
             var days = [];
             var daysTitle = '';
             // Get the days to show on the header.
@@ -383,6 +467,13 @@
             if ($('body').attr('data-controllertype') !== 'nixie') {
                 el.find('div.picPickList[data-bind$=Mult]').hide();
                 el.find('div.timeoffset').hide();
+            }
+            self._setSunWindow(startTimeType.name === 'sunWindow');
+            if (startTimeType.name === 'sunWindow') {
+                var st = el.find('div.schedule-time.start-time');
+                st.find('div.picValueSpinner[data-bind=startTime]').hide();
+                st.find('div.picPickList[data-bind$=Mult]').hide();
+                st.find('div.timeoffset').hide();
             }
         }
     });

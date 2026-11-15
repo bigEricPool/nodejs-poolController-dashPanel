@@ -124,8 +124,11 @@
                 var startTimeType = data.startTimeType || { val: 0, name: 'manual', desc: 'Manual' };
                 var endTimeType = data.endTimeType || { val: 0, name: 'manual', desc: 'Manual' };
                 var clockMode = typeof data.clockMode !== 'undefined' && data.clockMode.val !== 'undefined' ? data.clockMode.val : 12;
-                el.find('.picStartTime').text(startTimeType.name !== 'manual' ? data.startTimeType.desc : startTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
-                el.find('.picEndTime').text(endTimeType.name !== 'manual' ? data.endTimeType.desc : endTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
+                // A sun window keeps fixed times that the controller rewrites daily, so show the times.
+                var isFixed = function (tt) { return tt.name === 'manual' || tt.name === 'sunWindow'; };
+                el.find('.picStartTime').text(!isFixed(startTimeType) ? data.startTimeType.desc : startTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
+                el.find('.picEndTime').text(!isFixed(endTimeType) ? data.endTimeType.desc : endTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
+                el.find('.picSchedTime').attr('title', startTimeType.name === 'sunWindow' ? 'Sun window: times follow sunrise and sunset each day' : null);
                 self._createDays(data).appendTo(el);
             } catch (err) { console.error({ m: 'Error setting schedule', err: err, schedule: data }); }
             if (pnl.find('div.picSchedule[data-active=true]').length > 0)
