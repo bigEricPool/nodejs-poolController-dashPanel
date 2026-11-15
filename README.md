@@ -21,6 +21,7 @@ Base for new branches: master at a5e8c15.
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
 | `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. | none | none |
 | `feature/pump-priming` | feature | Priming for relay driven pumps (two speed, relay switched variable speed); off by default. | none | none |
+| `feature/sun-window-schedule` | feature | Sun Window schedule time type (Nixie): each day the schedule's fixed start and end times are rewritten to the smallest multiple of N whole hours (default 3) covering sunrise to sunset, placed centred on solar noon, from sunrise or to sunset. Cut from upstream master, intended for upstream. | none | none |
 | `feature/pws-weather` | feature | Hourly weather log from a personal weather station, and a Weather panel. | none | none |
 | `feature/solar-enhancements` | feature | Solar log, settle delay, hysteresis, valve delay check, check period, return sensor, Solar Controls; in dashPanel also the Nocturnal Cooling toggle. Stacked on fix/solar-restart in njsPC. | fix/solar-restart, optional: feature/pump-priming, optional: fix/heater-command-inflight | #1248 |
 | `feature/pi-status` | feature | The condition of the computer njsPC runs on: processor temperature, power and heat flags, processor and memory use, free storage, Wi-Fi signal, uptime, installed software, and how late njsPC itself runs, with a longer log (njsPC: GET /state/system). dashPanel: a System panel showing it. | none | none |
