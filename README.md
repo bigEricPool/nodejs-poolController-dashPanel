@@ -18,6 +18,7 @@ Base for new branches: master at a5e8c15.
 | `fix/chlor-spa-setpoint-single-body` | fix | The chlorinator settings show the Spa Setpoint only when the system has a spa (spa, body2 or shared pool/spa); hidden on a single body. Cut from upstream master; upstream candidate. | none | none |
 | `feature/chlorinator-rs485-diag` | feature | RS485 diagnostic view of chlorinator messages in both directions, with the Details popup. | none | tagyoureit/nodejs-poolController#1250 (closed) |
 | `feature/chlorinator-log` | feature | Chlorinator logging UI: the chlorinator panel's cell usage and log settings. Pairs with njsPC feature/chlorinator-log. Cut from upstream master, intended for upstream; SWG Assist builds on it. | none | none |
+| `feature/poolmath-swg-log` | feature | PoolMath SWG log: writes an SWG entry to the owner's PoolMath log when the SWG % changes (off by default; sign-in from an encrypted file on the controller, never in config), with a PoolMath SWG Log panel in dashPanel's chemistry settings. Also: a restart reads PoolMath only when a scheduled top-up was missed; super chlorinate on/off log. Stacked on feature/chlorinator-log. | feature/chlorinator-log | none |
 | `feature/dashboard-sun-times` | feature | Sunrise and sunset beside the Schedules title, and schedule offsets. | none | none |
 | `feature/temp-average-24h` | feature | 24 hour average water temperature for each body. | none | none |
 | `feature/pump-priming` | feature | Priming for relay driven pumps (two speed, relay switched variable speed); off by default. | none | none |
