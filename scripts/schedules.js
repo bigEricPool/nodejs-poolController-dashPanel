@@ -145,8 +145,10 @@
                 var startTimeType = data.startTimeType || { val: 0, name: 'manual', desc: 'Manual' };
                 var endTimeType = data.endTimeType || { val: 0, name: 'manual', desc: 'Manual' };
                 var clockMode = typeof data.clockMode !== 'undefined' && data.clockMode.val !== 'undefined' ? data.clockMode.val : 12;
+                // A sun window keeps fixed times that the controller rewrites daily, so _setTimeText shows the times.
                 self._setTimeText(el.find('.picStartTime'), startTimeType, data.startTimeOffset, startTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
                 self._setTimeText(el.find('.picEndTime'), endTimeType, data.endTimeOffset, endTime.formatTime(clockMode === 12 ? 'hh:mmtt' : 'HH:mm', '--:--'));
+                el.find('.picSchedTime').attr('title', startTimeType.name === 'sunWindow' ? 'Sun window: times follow sunrise and sunset each day' : null);
                 self._createDays(data).appendTo(el);
             } catch (err) { console.error({ m: 'Error setting schedule', err: err, schedule: data }); }
             if (pnl.find('div.picSchedule[data-active=true]').length > 0)
@@ -180,7 +182,7 @@
         // second line below it, so the time stays narrow enough for its column. A fixed time is just the text.
         _setTimeText: function (span, type, offset, manualText) {
             span.empty();
-            if (type.name === 'manual') { span.text(manualText); return; }
+            if (type.name === 'manual' || type.name === 'sunWindow') { span.text(manualText); return; }
             $('<div></div>').text(type.desc).appendTo(span);
             var off = String(this._fmtOffset(offset)).trim();
             if (off !== '') $('<div></div>').addClass('picTimeOffset').text(off).appendTo(span);
