@@ -530,29 +530,60 @@
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Write SWG % changes to my PoolMath log', binding: 'swgLogEnabled' })
                 .attr('title', 'Adds an SWG entry to your PoolMath log each time the chlorinator\'s pool % changes (after it has held for 2 minutes), and two entries when a super chlorinate ends. Never at a start of njsPC.');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: 1, units: 'hours a day', inputAttrs: { maxlength: 2, style: { width: '3rem' } }, labelAttrs: { style: { width: '5.9rem', marginRight: '.25rem' } } })
-                .attr('title', 'The hours a day the cell runs, sent with each entry (whole hours). Nothing is written while this is 0.');
+            self._schedPick = $('<div></div>').appendTo(line).pickList({
+                required: true, bindColumn: 0, displayColumn: 1, labelText: 'SWG Schedule', binding: 'swgLogScheduleId',
+                columns: [{ binding: 'val', hidden: true, text: 'Id' }, { binding: 'desc', text: 'SWG Schedule' }],
+                items: [{ val: -1, desc: 'Manual (use Run Hours below)' }], inputAttrs: { style: { width: '14rem' } }, labelAttrs: { style: { width: '5.9rem' } }
+            }).attr('title', 'The schedule the SWG runs on. Each entry run time is the schedule window for the day (sunrise and sunset as of that day), rounded to whole hours. Pick Manual to use Run Hours instead.');
+            line = $('<div></div>').appendTo(pnl);
+            self._hoursSpin = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: 1, units: 'hours a day', inputAttrs: { maxlength: 2, style: { width: '3rem' } }, labelAttrs: { style: { width: '5.9rem', marginRight: '.25rem' } } })
+                .attr('title', 'The hours a day the cell runs, sent with each entry (whole hours) when no SWG Schedule is chosen, or when the chosen one is missing or disabled. Nothing is written while this is 0 and no schedule gives a window.');
             self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 6.2rem' });
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save SWG Log', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
                 var v = dataBinder.fromElement(pnl);
                 var hours = Math.round(Number(v.swgLogHours) || 0);
-                $.putApiService('/config/poolMath', { swgLogEnabled: v.swgLogEnabled === true, swgLogHours: hours }, 'Saving SWG Log...', function (c, status, xhr) {
+                var schedId = parseInt(v.swgLogScheduleId, 10);
+                if (isNaN(schedId)) schedId = -1;
+                $.putApiService('/config/poolMath', { swgLogEnabled: v.swgLogEnabled === true, swgLogScheduleId: schedId, swgLogHours: hours }, 'Saving SWG Log...', function (c, status, xhr) {
                     self.dataBind(c);
                 });
             });
         },
+        // The schedules to choose from (as SWG Assist lists them), then the settings.
         _load: function () {
             var self = this;
-            $.getApiService('/config/poolMath', null, function (cfg, status, xhr) {
-                if (cfg && typeof cfg === 'object') self.dataBind(cfg);
-            });
+            var loadCfg = function () {
+                $.getApiService('/config/poolMath', null, function (cfg, status, xhr) {
+                    if (cfg && typeof cfg === 'object') self.dataBind(cfg);
+                });
+            };
+            $.getApiService('/config/options/schedules', null, function (sopts) {
+                var circuits = (sopts && sopts.circuits) || [];
+                var schedules = (sopts && sopts.schedules) || [];
+                var timeTypes = (sopts && sopts.scheduleTimeTypes) || [];
+                var fmt = function (typeVal, minutes) {
+                    var tt = timeTypes.find(function (t) { return t.val === typeVal; });
+                    if (tt && tt.name === 'sunrise') return 'Sunrise';
+                    if (tt && tt.name === 'sunset') return 'Sunset';
+                    return typeof minutes === 'number' && typeof minutes.formatTime === 'function' ? minutes.formatTime('h:mmtt', '--:--') : '--:--';
+                };
+                var items = [{ val: -1, desc: 'Manual (use Run Hours below)' }];
+                schedules.forEach(function (s) {
+                    if (s.disabled) return;
+                    var circuit = circuits.find(function (c) { return c.id === s.circuit; }) || { name: 'Circuit ' + s.circuit };
+                    items.push({ val: s.id, desc: circuit.name + ' ' + fmt(s.startTimeType, s.startTime) + '-' + fmt(s.endTimeType, s.endTime) + ' (#' + s.id + ')' });
+                });
+                self._schedPick[0].items(items);
+                loadCfg();
+            }, loadCfg);
         },
         dataBind: function (obj) {
             var self = this, el = self.element;
             obj = obj || {};
-            dataBinder.bind(el.find('div.picAccordian-contents:first'), { swgLogEnabled: obj.swgLogEnabled === true, swgLogHours: obj.swgLogHours > 0 ? obj.swgLogHours : 0 });
+            dataBinder.bind(el.find('div.picAccordian-contents:first'), { swgLogEnabled: obj.swgLogEnabled === true, swgLogScheduleId: obj.swgLogScheduleId >= 0 ? obj.swgLogScheduleId : -1, swgLogHours: obj.swgLogHours > 0 ? obj.swgLogHours : 0 });
+            self._cfgScheduleId = obj.swgLogScheduleId;
             var cols = el.find('div.picAccordian:first')[0].columns();
             cols[1].elText().text(obj.swgLogEnabled === true ? 'On' : 'Off');
             self._loadStatus();
@@ -572,6 +603,8 @@
                 };
                 var found = st.credentialsFile === 'found';
                 if (typeof st.credentialsFile === 'string') row(found ? 'Credentials file found on the controller.' : 'No credentials file on the controller; create it there with the one-line command in the poolmath-rig README.', !found && st.enabled);
+                if (st.hoursNote) row('Run time: ' + st.hoursNote, st.hoursSource !== 'schedule' && (Number(self._cfgScheduleId) >= 0));
+                else if (st.enabled && st.hoursPerDay > 0) row('Run time: ' + st.hoursPerDay + ' h a day, set by hand.');
                 if (st.lastSignIn) row('Last sign-in ' + (st.lastSignIn.ok ? 'OK' : 'FAILED') + (st.lastSignIn.at ? ', ' + fmtTime(st.lastSignIn.at) : '') + '.', !st.lastSignIn.ok);
                 else if (st.enabled) row('Not signed in yet; njsPC signs in when it first writes an entry.');
                 if (st.lastWritten) row('Last written: SWG ' + st.lastWritten.hours + ' h @ ' + st.lastWritten.percent + '%, ' + st.lastWritten.ppm + ' ppm, for ' + fmtTime(st.lastWritten.ts) + '.');
