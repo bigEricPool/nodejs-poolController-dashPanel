@@ -416,6 +416,8 @@
                 color: '#0b3d5c', background: '#d6ecfa',
                 padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0'
             }).hide();
+            // The Model Bench's acid advice (state.autoSwg.benchAcidAdvice): acid recommended or needed, the dose, and why. Advisory only.
+            self._elBenchAcidNote = $('<div></div>').appendTo(results).css({ padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).hide();
             self._elCalcHeader = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#555', marginBottom: '.15rem' }).hide();
             self._elAsOf = $('<div></div>').appendTo(results).css({ fontSize: '.75em', color: '#999' });
             self._elCurrentPct = $('<div></div>').appendTo(results).hide();
@@ -1873,6 +1875,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             self._elBenchCoverage = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
             self._elBenchCya = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
             self._elBenchAdvice = $('<div></div>').appendTo(pnl).css({ color: '#0b3d5c', background: '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).hide();
+            self._elBenchChem = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' }).hide();
+            self._elBenchAcid = $('<div></div>').appendTo(pnl).css({ padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).hide();
             var pick = function (label, items, def) {
                 var line = $('<div></div>').appendTo(pnl).css({ margin: '.6rem 0 .2rem 0' });
                 $('<span></span>').text(label).css({ fontWeight: 'bold', marginRight: '.5rem' }).appendTo(line);
@@ -1900,6 +1904,9 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             $('<div></div>').appendTo(btnPnl).actionButton({ text: 'CYA Path', icon: '<i class="fas fa-chart-area"></i>' })
                 .attr('title', 'The CYA the bench assumes between tests: the path, the tests and how it took them, the stabilizer additions, the rain dilution.')
                 .on('click', function () { self._showBenchCya(); });
+            $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Water Balance', icon: '<i class="fas fa-flask"></i>' })
+                .attr('title', 'The pH and CSI between tests, each pH model\'s scores, the acid advice, and each acid dose against the chemistry.')
+                .on('click', function () { self._showBenchChem(); });
             $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Models and Settings', icon: '<i class="fas fa-sliders"></i>' })
                 .attr('title', 'Copy, edit or retire a model, and the pool geometry and CYA settings. An edit makes a new version of the model, scored apart from the old one.')
                 .on('click', function () { self._showBenchSettings(); });
@@ -1962,6 +1969,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 }
                 else self._elBenchCoverage.text('');
                 self._renderBenchCyaLine(b.cya);
+                self._renderBenchChemLine(b.chem);
                 var sc = b.scoring;
                 self._elBenchFlagsNote.text(sc ? 'Flagged pairs are kept but left out of the bands and the comparison with live: a long gap (over ' + sc.maxGapDays + ' days), thin inputs (under ' + Math.round(sc.minCoverage * 100)
                     + '% of the hours with every input), or an implausible projection (below zero, or above the reading before plus the chlorine credited). A gap band shows its band from ' + sc.minGapN + ' pairs on.' : '');
@@ -1981,7 +1989,9 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             var src = { none: 'no dilution', rain: 'rain dilution', salt: 'salt dilution', both: 'rain and salt dilution' }[cya.source] || cya.source;
             self._elBenchCya.text('CYA on the path now: ' + (typeof cya.now === 'number' ? cya.now.toFixed(0) + ' ppm' : '--')
                 + (cya.anchor ? ' (last test ' + cya.anchor.ppm + ' ppm on ' + f.day(cya.anchor.t) + ')' : '') + ', ' + src
-                + (typeof cya.rainK === 'number' ? ', rain k ' + (cya.rainK * 100).toFixed(2) + '% of the water per inch' + (typeof cya.defaultK === 'number' ? ' (default ' + (cya.defaultK * 100).toFixed(2) + '%' + (cya.pairs ? ', ' + cya.pairs + ' test pair' + (cya.pairs === 1 ? '' : 's') : '') + ')' : '') : '') + '.');
+                + (typeof cya.rainK === 'number' ? ', rain k ' + (cya.rainK * 100).toFixed(2) + '% of the water per inch' : '')
+                + (typeof cya.lossPerMonth === 'number' ? ', TFP\'s loss ' + cya.lossPerMonth.toFixed(1) + ' ppm a month at the water temperature now' : '')
+                + (cya.tfpFc ? '; TFP\'s SWG FC at this CYA: minimum ' + cya.tfpFc.min + ', target ' + cya.tfpFc.lo + '-' + cya.tfpFc.hi + ', SLAM ' + cya.tfpFc.slam : '') + '.');
             var a = cya.advice;
             if (a && a.due && a.reason) self._elBenchAdvice.text('ℹ CYA test advised: ' + a.reason).show();
         },
@@ -2262,16 +2272,18 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             [['60', '60 days'], ['120', '120 days'], ['240', '240 days'], ['400', '400 days']].forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(selDays); });
             selDays.val(String(self._benchCyaDays || 120));
             var body = $('<div></div>').appendTo(wrap);
-            var statusColor = { first: '#7f7f7f', accepted: '#2ca02c', confirmed: '#1f77b4', doubtful: '#ff7f0e' };
-            var statusText = { first: 'first test', accepted: 'accepted', confirmed: 'confirmed by a second test', doubtful: 'doubtful (not used until a second test agrees)' };
+            var statusColor = { first: '#7f7f7f', accepted: '#2ca02c', unexplained: '#ff7f0e' };
+            var statusText = { first: 'first test', accepted: 'on the TFP path', unexplained: 'unexplained (used; a confirming test would help)', confirmed: 'confirmed by a second test', doubtful: 'doubtful (an older bench left it out)' };
             var render = function (c) {
                 body.empty();
                 var line = function (text, css) { return $('<div></div>').appendTo(body).css($.extend({ fontSize: '.9em', padding: '.1rem 0' }, css || {})).text(text); };
                 var src = { none: 'none', rain: 'rain (gauge rain x k per inch)', salt: 'salt (the chlorinator\'s salt reading, salt additions removed)', both: 'rain and salt (rain between salt steps, salt anchoring the level)' }[c.source] || c.source;
                 line('CYA on the path now: ' + (typeof c.now === 'number' ? c.now.toFixed(1) + ' ppm' : '--') + (c.anchor ? ', standing on the test of ' + f.day(c.anchor.t) + ' (' + c.anchor.ppm + ' ppm)' : ''), { fontWeight: 'bold' });
                 line('Dilution: ' + src + '.');
-                if (typeof c.rainK === 'number') line('Rain k: ' + (c.rainK * 100).toFixed(2) + '% of the water per inch of rain' + (typeof c.defaultK === 'number' ? '; the default from the pool\'s area and gallons is ' + (c.defaultK * 100).toFixed(2) + '%' : '')
-                    + (c.settings && c.settings.autoK ? ', re-estimated from ' + (c.pairs || 0) + ' test pair' + (c.pairs === 1 ? '' : 's') + ' with rain and no addition between them' : ', fixed') + '.');
+                if (typeof c.rainK === 'number') line('Rain k: ' + (c.rainK * 100).toFixed(2) + '% of the water per inch of rain' + (typeof c.defaultK === 'number' && Math.abs(c.defaultK - c.rainK) > 1e-6 ? ' (set; the pool\'s area and gallons give ' + (c.defaultK * 100).toFixed(2) + '%)' : ', from the pool\'s area and gallons') + '. It is never fitted from the tests.');
+                if (typeof c.lossPerMonth === 'number') line('CYA loss: ' + c.lossPerMonth.toFixed(1) + ' ppm a month at the water temperature now (TFP: 5 to 10 ppm a month, more with hot water' + (c.settings ? '; ' + c.settings.lossLow + ' at ' + c.settings.tLow + ' F to ' + c.settings.lossHigh + ' at ' + c.settings.tHigh + ' F' : '') + '). Stabilizer dissolves over ' + (c.settings && c.settings.rampDays || 5) + ' days.');
+                if (c.tfpFc) line('TFP\'s SWG FC at CYA ' + Math.round(c.tfpFc.cya) + ': minimum ' + c.tfpFc.min + ', target ' + c.tfpFc.lo + '-' + c.tfpFc.hi + ', SLAM ' + c.tfpFc.slam + '.');
+                if (c.vsTests && c.vsTests.n) line('The TFP path at the tests (no stabilizer between): ' + (c.vsTests.meanMiss > 0 ? '+' : '') + c.vsTests.meanMiss + ' ppm on average, ' + c.vsTests.meanAbsMiss + ' apart, over ' + c.vsTests.n + ' test' + (c.vsTests.n === 1 ? '' : 's') + (c.vsTests.unexplained ? '; ' + c.vsTests.unexplained + ' unexplained' : '') + '.', { color: '#666' });
                 var a = c.advice;
                 if (a && a.due) {
                     $('<div></div>').appendTo(body).css({ color: '#0b3d5c', background: '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).text('ℹ CYA test advised: ' + a.reason);
@@ -2311,14 +2323,14 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                         var col = statusColor[n.status] || '#333';
                         var tip = 'CYA test ' + self._benchEsc(f.when(n.tt)) + ': ' + n.ppm + ' ppm' + (typeof n.projected === 'number' ? ', the path expected ' + n.projected.toFixed(1) : '') + '\n' + self._benchEsc(statusText[n.status] || n.status || '') + (n.reason ? '\n' + self._benchEsc(n.reason) : '');
                         if (typeof n.projected === 'number') s.push('<line x1="' + px(n.tt).toFixed(1) + '" x2="' + px(n.tt).toFixed(1) + '" y1="' + py(n.projected).toFixed(1) + '" y2="' + py(n.ppm).toFixed(1) + '" stroke="' + col + '" stroke-width="1.5"></line>');
-                        s.push('<circle cx="' + px(n.tt).toFixed(1) + '" cy="' + py(n.ppm).toFixed(1) + '" r="4.5" fill="' + (n.status === 'doubtful' ? 'none' : col) + '" stroke="' + col + '" stroke-width="2"><title>' + tip + '</title></circle>');
+                        s.push('<circle cx="' + px(n.tt).toFixed(1) + '" cy="' + py(n.ppm).toFixed(1) + '" r="4.5" fill="' + (n.status === 'unexplained' || n.status === 'doubtful' ? 'none' : col) + '" stroke="' + col + '" stroke-width="2"><title>' + tip + '</title></circle>');
                     });
                     $('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;margin:.4rem 0">' + s.join('') + '</svg>').appendTo(body);
                     var leg = $('<div></div>').appendTo(body).css({ display: 'flex', flexWrap: 'wrap', gap: '.3rem .9rem', fontSize: '.8em', color: '#666' });
                     $('<span></span>').appendTo(leg).text('Blue line: the path as known now. Purple dashes: stabilizer additions. Tests:');
                     Object.keys(statusColor).forEach(function (k) {
                         var it = $('<span></span>').appendTo(leg);
-                        $('<span></span>').appendTo(it).css({ display: 'inline-block', width: '.7rem', height: '.7rem', borderRadius: '50%', border: '2px solid ' + statusColor[k], background: k === 'doubtful' ? 'transparent' : statusColor[k], marginRight: '.25rem', verticalAlign: 'middle' });
+                        $('<span></span>').appendTo(it).css({ display: 'inline-block', width: '.7rem', height: '.7rem', borderRadius: '50%', border: '2px solid ' + statusColor[k], background: k === 'unexplained' ? 'transparent' : statusColor[k], marginRight: '.25rem', verticalAlign: 'middle' });
                         $('<span></span>').appendTo(it).text(statusText[k]);
                     });
                 }
@@ -2338,13 +2350,15 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     tests.slice().reverse().map(function (n) { return [f.when(n.tt), String(n.ppm), typeof n.projected === 'number' ? n.projected.toFixed(1) : '--', statusText[n.status] || n.status || '', n.reason || '']; }));
                 table('Stabilizer additions in the period', [['Added', 'left'], ['About (ppm)', 'right']],
                     adds.slice().reverse().map(function (x) { return [f.when(x.tt), String(x.ppm)]; }));
+                table('Storms of 1.5 in or more the salt could judge (a storm counts up to twice when the salt after it fell beyond what k explains)', [['Storm', 'left'], ['Inches', 'right'], ['Salt before', 'right'], ['Days 3-7 after', 'right'], ['Salt added', 'right'], ['Water replaced', 'right'], ['k explains', 'right'], ['Counted', 'right']],
+                    (c.storms || []).slice().reverse().map(function (e) { var p = function (x) { return typeof x === 'number' ? (x * 100).toFixed(1) + '%' : '--'; }; return [f.when(e.t1), String(e.inches), String(e.saltBefore), String(e.saltAfter), String(e.added || 0), p(e.implied), p(e.expected), e.m > 1 ? 'x' + e.m : 'x1']; }));
                 table('Recorded CYA tests (newest 10): the path just before each, the rain k before and after, the advice rule then in force', [['Test', 'left'], ['CYA', 'right'], ['Path before', 'right'], ['k before', 'right'], ['k after', 'right'], ['Rule', 'right'], ['Revised scores', 'right'], ['Status', 'left']],
                     (c.records || []).slice().reverse().map(function (r) {
                         var k = function (x) { return typeof x === 'number' ? (x * 100).toFixed(2) + '%' : '--'; };
                         return [f.when(r.t), String(r.ppm), typeof r.projected === 'number' ? r.projected.toFixed(1) : '--', k(r.rainKBefore), k(r.rainKAfter), typeof r.adviceRule === 'number' ? String(r.adviceRule) : '--', r.baseline ? 'baseline' : String(r.revised || 0), (statusText[r.status] || r.status || '') + (r.reason ? ': ' + r.reason : '')];
                     }));
-                table('Model drift at the last checks (the burn of the last two weeks with CYA left free)', [['Check', 'left'], ['CYA implied', 'right'], ['Path', 'right'], ['Intervals', 'right'], ['Off', 'left']],
-                    (c.drift || []).slice().reverse().map(function (d) { return [f.when(d.t), typeof d.implied === 'number' ? d.implied.toFixed(1) : '--', typeof d.path === 'number' ? d.path.toFixed(1) : '--', String(d.n), d.off ? 'yes' : 'no']; }));
+                table('Model drift at the last checks (the burn of the last two weeks with CYA left free; it judges only with 6 intervals, sun that varied, a sure fit and a CYA of 20-150)', [['Check', 'left'], ['CYA implied', 'right'], ['Path', 'right'], ['Intervals', 'right'], ['Sun CV', 'right'], ['Off', 'left']],
+                    (c.drift || []).slice().reverse().map(function (d) { return [f.when(d.t), typeof d.implied === 'number' ? d.implied.toFixed(1) : '--', typeof d.path === 'number' ? d.path.toFixed(1) : '--', String(d.n), typeof d.cv === 'number' ? d.cv.toFixed(2) : '--', d.off === true ? 'yes' : d.off === false ? 'no' : 'not judged' + (d.why ? ': ' + d.why : '')]; }));
             };
             var load = function () {
                 self._benchCyaDays = parseInt(selDays.val(), 10);
@@ -2358,6 +2372,133 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             };
             selDays.on('change', load);
             load();
+        },
+        // The water balance (GET /state/autoSwg/bench/chem?days=): the pH and CSI projected between tests, each pH model's fit and scores, the acid
+        // advice, each dose against the chemistry (with the strength that explains it), the borate tests against the dilution, our CSI against PoolMath's.
+        _showBenchChem: function () {
+            var self = this, f = self._benchFmt;
+            var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgBenchChem', { width: Math.min(900, Math.max(320, (window.innerWidth || 900) - 24)) + 'px', height: 'auto', title: 'Model Bench: Water Balance',
+                buttons: [{ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }] });
+            var wrap = $('<div></div>').css({ maxHeight: '36rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+            var bar = $('<div></div>').appendTo(wrap).css({ fontSize: '.9em', marginBottom: '.3rem' });
+            $('<span></span>').text('Scores and checks of the last ').appendTo(bar);
+            var selDays = $('<select></select>').appendTo(bar);
+            [['60', '60 days'], ['120', '120 days'], ['240', '240 days'], ['400', '400 days']].forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(selDays); });
+            selDays.val(String(self._benchChemDays || 120));
+            var body = $('<div></div>').appendTo(wrap);
+            var n = function (v, d) { return typeof v === 'number' && isFinite(v) ? v.toFixed(d) : '--'; };
+            var render = function (c) {
+                body.empty();
+                var st = c.settings || {};
+                var line = function (text, css) { return $('<div></div>').appendTo(body).css($.extend({ fontSize: '.9em', padding: '.1rem 0' }, css || {})).text(text); };
+                var w = c.now || {};
+                line('Now, projected: pH ' + n(w.ph, 2) + ', CSI ' + n(w.csi, 2) + ', TA ' + n(w.ta, 0) + ', CH ' + n(w.ch, 0) + ', CYA ' + n(w.cya, 0) + ', borates ' + n(w.borates, 0)
+                    + ', salt ' + n(w.salt, 0) + ', water ' + n(w.tempF, 1) + ' F.', { fontWeight: 'bold' });
+                line('Last pH test: ' + (w.lastTest ? w.lastTest.ph + ' on ' + f.when(w.lastTest.t) : 'none') + '. The pH rises toward about ' + n(w.settles, 2)
+                    + ' (where the water is in balance with the air\'s CO2, plus the offset the tests fitted), more slowly as it gets near.');
+                var a = c.advice;
+                if (a && a.level && a.level !== 'none') {
+                    var needed = a.level === 'needed';
+                    $('<div></div>').appendTo(body).css({ color: needed ? '#fff' : '#0b3d5c', background: needed ? '#d35400' : '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' })
+                        .text(self._benchAcidText(a));
+                }
+                else line(a && a.reason ? a.reason : 'No acid advice yet (it comes with the next check).', { color: '#666' });
+                var pr = c.pairs || {};
+                line('The pH models are fitted on ' + (pr.n || 0) + ' pH test pair' + (pr.n === 1 ? '' : 's') + ' with no acid between them' + (pr.since ? ', since acid logging began (' + f.day(pr.since) + ')' : '')
+                    + '; ' + (pr.recent || 0) + ' in the last ' + (st.recentDays || 60) + ' days count ' + (st.recentWeight || 3) + ' times. A reading of 8.2 counts as 8.2 or above.', { color: '#666', fontSize: '.85em' });
+                // the projection: pH with the advice levels, CSI with TFP's SWG target
+                var pts = c.projection && Array.isArray(c.projection.points) ? c.projection.points.map(function (p) { return [new Date(p[0]).getTime(), p[1], p[2]]; }).filter(function (p) { return isFinite(p[0]); }) : [];
+                var chart = function (label, idx, lo, hi, band, lines) {
+                    var data = pts.filter(function (p) { return typeof p[idx] === 'number'; });
+                    if (data.length < 2) return;
+                    var x0 = data[0][0], x1 = data[data.length - 1][0];
+                    var ys = data.map(function (p) { return p[idx]; }).concat(lines.map(function (l) { return l.v; }), band ? [band.lo, band.hi] : []);
+                    var y0 = Math.min(lo, Math.min.apply(null, ys)), y1 = Math.max(hi, Math.max.apply(null, ys));
+                    var W = 860, L = 40, R = 10, T = 14, H1 = 120, B = 22, H = T + H1 + B;
+                    var px = function (t) { return L + (t - x0) / (x1 - x0) * (W - L - R); };
+                    var py = function (y) { return T + (y1 - y) / (y1 - y0) * H1; };
+                    var s = [];
+                    if (band) s.push('<rect x="' + L + '" width="' + (W - L - R) + '" y="' + py(band.hi).toFixed(1) + '" height="' + Math.max(1, py(band.lo) - py(band.hi)).toFixed(1) + '" fill="#2ca02c" fill-opacity="0.12"><title>' + self._benchEsc(band.title) + '</title></rect>');
+                    for (var k = 0; k <= 4; k++) {
+                        var y = y0 + (y1 - y0) * k / 4;
+                        s.push('<line x1="' + L + '" x2="' + (W - R) + '" y1="' + py(y).toFixed(1) + '" y2="' + py(y).toFixed(1) + '" stroke="#888" stroke-opacity="0.2"></line>');
+                        s.push('<text x="' + (L - 4) + '" y="' + (py(y) + 3).toFixed(1) + '" font-size="10" text-anchor="end" fill="currentColor">' + y.toFixed(2) + '</text>');
+                    }
+                    lines.forEach(function (l) { s.push('<line x1="' + L + '" x2="' + (W - R) + '" y1="' + py(l.v).toFixed(1) + '" y2="' + py(l.v).toFixed(1) + '" stroke="' + l.color + '" stroke-dasharray="5 3"><title>' + self._benchEsc(l.title) + '</title></line>'); });
+                    var now = Date.now();
+                    if (now > x0 && now < x1) s.push('<line x1="' + px(now).toFixed(1) + '" x2="' + px(now).toFixed(1) + '" y1="' + T + '" y2="' + (T + H1) + '" stroke="#888"><title>now</title></line>');
+                    s.push('<text x="4" y="10" font-size="10" fill="currentColor">' + self._benchEsc(label) + '</text>');
+                    for (var i = 0; i <= 6; i++) {
+                        var t = x0 + (x1 - x0) * i / 6;
+                        s.push('<text x="' + px(t).toFixed(1) + '" y="' + (H - 6) + '" font-size="10" text-anchor="' + (i === 0 ? 'start' : i === 6 ? 'end' : 'middle') + '" fill="currentColor">' + self._benchEsc(new Date(t).toLocaleDateString([], { month: 'short', day: 'numeric' })) + '</text>');
+                    }
+                    s.push('<polyline fill="none" stroke="#1f77b4" stroke-width="1.5" points="' + data.map(function (p) { return px(p[0]).toFixed(1) + ',' + py(p[idx]).toFixed(1); }).join(' ') + '"></polyline>');
+                    $('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block;margin:.4rem 0">' + s.join('') + '</svg>').appendTo(body);
+                };
+                if (pts.length) {
+                    chart('pH', 1, 7.4, 8.3, null, [{ v: st.phRecommended || 8.0, color: '#1f77b4', title: 'acid recommended' }, { v: st.phNeeded || 8.2, color: '#d35400', title: 'acid needed' }]);
+                    chart('CSI', 2, -0.4, 0.4, { lo: -0.3, hi: 0, title: 'TFP\'s CSI target for SWG pools, -0.3 to 0.0' }, [{ v: st.csiRecommended || 0.3, color: '#1f77b4', title: 'acid recommended' }, { v: st.csiNeeded || 0.6, color: '#d35400', title: 'acid needed' }]);
+                    line('From the last pH test, by the model in use (' + (c.projection.variant || '') + ') at the last check (' + f.when(c.projection.run) + '). Dashed lines: the advice levels. Green: TFP\'s CSI target for SWG pools.', { color: '#666', fontSize: '.8em' });
+                }
+                var table = function (title, cols, data) {
+                    if (!data.length) return;
+                    $('<div></div>').appendTo(body).css({ fontWeight: 'bold', margin: '.6rem 0 .2rem 0' }).text(title);
+                    var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(body);
+                    var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                    cols.forEach(function (cc) { $('<th></th>').text(cc[0]).css({ textAlign: cc[1], padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head); });
+                    var tb = $('<tbody></tbody>').appendTo(tbl);
+                    data.forEach(function (row) {
+                        var tr = $('<tr></tr>').appendTo(tb);
+                        row.forEach(function (val, i) { $('<td></td>').text(val).css({ textAlign: cols[i][1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: i === 0 ? 'normal' : 'nowrap' }).appendTo(tr); });
+                    });
+                };
+                var sum = function (x) { return x && x.n ? n(x.mae, 3) + ' (' + x.n + ')' : '--'; };
+                table('pH models: mean miss at the next pH test (tests), live and replay', [['Model', 'left'], ['Fit now', 'left'], ['pH live', 'right'], ['Bias', 'right'], ['90%', 'right'], ['With a dose', 'right'], ['CSI live', 'right'], ['pH replay', 'right'], ['CSI replay', 'right']],
+                    (c.variants || []).map(function (v) {
+                        var ft = v.fit || {};
+                        var fit = v.kind === 'taper' ? 'r ' + n(ft.r, 3) + ', offset ' + n(ft.c, 2) + (ft.prior ? ' (priors)' : '') : v.kind === 'linear' ? n(ft.rate, 3) + ' a day' : '--';
+                        var lv = v.live || {}, rp = v.replay || {};
+                        return [(v.label || v.id) + (v.main ? ' (in use)' : ''), fit, sum(lv.ph), lv.ph && lv.ph.n ? n(lv.ph.bias, 3) : '--', lv.ph && lv.ph.n ? n(lv.ph.p90, 2) : '--',
+                            lv.ph && lv.ph.acid && lv.ph.acid.n ? n(lv.ph.acid.mae, 3) + ' (' + lv.ph.acid.n + ')' : '--', sum(lv.csi), sum(rp.ph), sum(rp.csi)];
+                    }));
+                table('Acid doses: the pH after each, as the chemistry predicts it and as tested, and the strength that would explain the drop', [['Dose', 'left'], ['fl oz', 'right'], ['Logged %', 'right'], ['pH before', 'right'], ['After (test)', 'right'], ['Predicted', 'right'], ['Miss', 'right'], ['Explained by', 'right']],
+                    (c.acid || []).slice().reverse().map(function (x) { return [f.when(x.t), String(x.flOz), String(x.percent), String(x.before), String(x.after), n(x.predicted, 2), n(x.error, 2), typeof x.bestStrength === 'number' ? x.bestStrength + '%' : '--']; }));
+                table('Borate tests against the dilution (borates do not break down, so they check the dilution the CYA path uses)', [['From', 'left'], ['To', 'left'], ['Borates then', 'right'], ['Expected', 'right'], ['Tested', 'right']],
+                    (c.borates || []).slice().reverse().map(function (x) { return [f.day(x.t1), f.day(x.t2), String(x.b1), n(x.expected, 1), String(x.b2)]; }));
+                var cv = c.csiVsPoolMath;
+                if (cv && cv.n) line('Our CSI from each test\'s own values against PoolMath\'s: ' + n(cv.meanDiff, 2) + ' on average (' + n(cv.meanAbsDiff, 2) + ' apart) over ' + cv.n + ' tests.', { color: '#666', fontSize: '.85em', marginTop: '.4rem' });
+            };
+            var load = function () {
+                self._benchChemDays = parseInt(selDays.val(), 10);
+                body.empty();
+                $('<div></div>').appendTo(body).css({ fontStyle: 'italic', color: '#888', padding: '1rem' }).text('Loading the water balance...');
+                self._benchGet('/state/autoSwg/bench/chem?days=' + self._benchChemDays, function (c) { render(c || {}); }, function (status) {
+                    body.empty();
+                    $('<div></div>').appendTo(body).css({ fontStyle: 'italic', color: '#888', padding: '1rem' })
+                        .text(status === 404 ? 'This njsPC does not have the bench\'s water balance yet. It comes with a newer SWG Assist Model Bench.' : 'The water balance could not be loaded (' + (status || 'no answer') + ').');
+                });
+            };
+            selDays.on('change', load);
+            load();
+        },
+        // The acid advice in one line (state.autoSwg.benchAcidAdvice): the level, the dose and why.
+        _benchAcidText: function (a) {
+            if (!a || !a.level || a.level === 'none') return '';
+            var dose = typeof a.doseFlOz === 'number' && a.doseFlOz > 0 ? a.doseFlOz + ' fl oz of ' + a.doseStrength + '% muriatic acid to bring the pH to ' + a.doseTo + (typeof a.taDrop === 'number' ? ' (TA down about ' + a.taDrop + ' ppm)' : '') + '. ' : '';
+            return (a.level === 'needed' ? '⚠ Acid needed: ' : 'ℹ Acid recommended: ') + dose + (a.reason || '');
+        },
+        // The water balance line under the CYA line: the projected pH and CSI now and any acid advice.
+        _renderBenchChemLine: function (chem) {
+            var self = this;
+            self._elBenchAcid.hide();
+            if (!chem) { self._elBenchChem.hide(); return; }
+            self._elBenchChem.show();
+            if (chem.error) { self._elBenchChem.text('Water balance: ' + chem.error); return; }
+            var w = chem.now || {};
+            var n = function (v, d) { return typeof v === 'number' && isFinite(v) ? v.toFixed(d) : '--'; };
+            self._elBenchChem.text('Water balance now, projected: pH ' + n(w.ph, 2) + ', CSI ' + n(w.csi, 2) + ', TA ' + n(w.ta, 0) + (w.lastTest ? ' (last pH test ' + w.lastTest.ph + ')' : '') + '.');
+            var t = self._benchAcidText(chem.advice);
+            if (t) self._elBenchAcid.text(t).css({ color: chem.advice.level === 'needed' ? '#fff' : '#0b3d5c', background: chem.advice.level === 'needed' ? '#d35400' : '#d6ecfa' }).show();
         },
         // The models (copy, edit, retire), the pool geometry and the CYA settings (GET/PUT /config/autoSwg/bench).
         _showBenchSettings: function () {
@@ -2473,24 +2614,56 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     var c = s.cya;
                     section('CYA path');
                     $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', marginBottom: '.3rem' })
-                        .text('How the CYA between tests is worked out for the models on the CYA path, and when a test is doubtful. Stabilizer additions logged in PoolMath are steps on the path.');
+                        .text('How the CYA between tests is worked out for the models on the CYA path: TFP\'s loss by water temperature, rain dilution from the pool\'s size, stabilizer entering over days. Every test is used.');
                     var cBox = $('<div></div>').appendTo(wrap);
                     var selSrc = $('<select></select>');
                     [['none', 'None (held between tests and additions)'], ['rain', 'Rain (gauge rain x k per inch)'], ['salt', 'Salt (the chlorinator\'s salt reading)'], ['both', 'Rain and salt']].forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(selSrc); });
                     selSrc.val(c.source);
                     field(cBox, 'Dilution from', selSrc);
-                    var rainK = field(cBox, 'Rain k (% of the water per inch)', num(typeof c.rainK === 'number' ? Math.round(c.rainK * 10000) / 100 : undefined), 'blank: from the pool\'s area and gallons; 0 to 5');
-                    var cbAutoK = field(cBox, 'Re-estimate k from the tests', $('<input type="checkbox">').prop('checked', c.autoK !== false), 'from test pairs with rain and no addition between them');
-                    var priorPairs = field(cBox, 'The default k counts as', num(c.priorPairs), 'test pairs (pulls the estimate toward it while there are few)');
-                    var jump = field(cBox, 'A rise with nothing added is doubtful above', num(c.jumpPpm), 'ppm (3 to 50)');
+                    var rainK = field(cBox, 'Rain k (% of the water per inch)', num(typeof c.rainK === 'number' ? Math.round(c.rainK * 10000) / 100 : undefined), 'blank: from the pool\'s area and gallons (physical, never fitted); 0 to 5');
+                    var cFields = [
+                        ['runoffMax', 'A storm\'s inches count up to', 'times, when the salt after a storm of 1.5 in or more shows runoff (1 to 3)'],
+                        ['lossLow', 'CYA lost a month at the low temperature', 'ppm (TFP: 5-10 a month, more with hot water)'],
+                        ['tLow', 'Low water temperature', 'F'],
+                        ['lossHigh', 'CYA lost a month at the high temperature', 'ppm'],
+                        ['tHigh', 'High water temperature', 'F (straight between the two)'],
+                        ['rampDays', 'Stabilizer dissolves over', 'days (3 to 7)'],
+                        ['unexplainedPpm', 'A test this far from the path is unexplained', 'ppm (the path still stands on it)'],
+                        ['quietDays', 'For a rise, with no stabilizer logged for', 'days before']
+                    ].map(function (x) { return [x[0], field(cBox, x[1], num(c[x[0]]), x[2])]; });
                     var cBtn = $('<div class="picBtnPanel btn-panel"></div>').appendTo(wrap);
                     $('<div></div>').appendTo(cBtn).actionButton({ text: 'Save CYA Settings', icon: '<i class="fas fa-save"></i>' }).on('click', function () {
-                        var body = { source: selSrc.val(), autoK: cbAutoK.is(':checked') };
+                        var body = { source: selSrc.val() };
                         var k = parseFloat(rainK.val());
                         body.rainK = isFinite(k) ? k / 100 : null;
-                        var pp = parseFloat(priorPairs.val()); if (isFinite(pp)) body.priorPairs = pp;
-                        var j = parseFloat(jump.val()); if (isFinite(j)) body.jumpPpm = j;
+                        cFields.forEach(function (p) { var x = parseFloat(p[1].val()); if (isFinite(x)) body[p[0]] = x; });
                         put({ cya: body }, 'Saved the CYA settings. They apply from the next check.');
+                    });
+                }
+                // the water balance (pH, CSI and the acid advice; an older njsPC has no chem block)
+                if (s.chem) {
+                    var h = s.chem;
+                    section('Water balance (pH, CSI and acid advice)');
+                    $('<div></div>').appendTo(wrap).css({ fontSize: '.85em', color: '#666', marginBottom: '.3rem' })
+                        .text('Advisory only. The defaults are TFP\'s: let the pH rise to 8.0-8.2, then add acid back to the mid 7s (only to 7.8 at TA 60); CSI target -0.6 to +0.6, ideal -0.3 to +0.3.');
+                    var hBox = $('<div></div>').appendTo(wrap);
+                    var selMain = $('<select></select>');
+                    [['ph-const', 'Leveling off, by days'], ['ph-pump', 'Leveling off, by pump-on hours'], ['ph-pump-swg', 'Leveling off, by pump and cell-output hours'], ['ph-temp', 'Leveling off, by days and water temperature']].forEach(function (it) { $('<option></option>').attr('value', it[0]).text(it[1]).appendTo(selMain); });
+                    selMain.val(h.main || 'ph-const');
+                    field(hBox, 'pH model for the advice', selMain);
+                    var hFields = [
+                        ['phRecommended', 'Acid recommended at pH', ''], ['phNeeded', 'Acid needed at pH', ''],
+                        ['csiRecommended', 'Acid recommended at CSI', ''], ['csiNeeded', 'Acid needed at CSI', ''],
+                        ['aheadDays', 'Looking ahead', 'days'], ['doseTargetHighTa', 'Dose to pH', 'when TA is above the split'],
+                        ['doseTargetLowTa', 'Dose to pH', 'when TA is at or below the split'], ['taSplit', 'TA split', 'ppm'],
+                        ['doseStrength', 'Dose in muriatic acid of', '%'], ['recentDays', 'Recent pH pairs are the last', 'days'],
+                        ['recentWeight', 'Recent pairs count', 'times'], ['priorPairs', 'The priors count as', 'pH pairs']
+                    ].map(function (x) { return [x[0], field(hBox, x[1], num(h[x[0]]), x[2])]; });
+                    var hBtn = $('<div class="picBtnPanel btn-panel"></div>').appendTo(wrap);
+                    $('<div></div>').appendTo(hBtn).actionButton({ text: 'Save Water Balance Settings', icon: '<i class="fas fa-save"></i>' }).on('click', function () {
+                        var body = { main: selMain.val() };
+                        hFields.forEach(function (p) { var x = parseFloat(p[1].val()); if (isFinite(x)) body[p[0]] = x; });
+                        put({ chem: body }, 'Saved the water balance settings. They apply from the next check.');
                     });
                 }
             };
@@ -2593,6 +2766,10 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 self._elBenchCyaNote.text('ℹ CYA test advised: ' + a.reason + (more.length ? ' Also: ' + more.join(' ') : '')).show();
             }
             else self._elBenchCyaNote.hide();
+            var acid = result && result.benchAcidAdvice;
+            var t = self._benchAcidText(acid);
+            if (t) self._elBenchAcidNote.text(t).css({ color: acid.level === 'needed' ? '#fff' : '#0b3d5c', background: acid.level === 'needed' ? '#d35400' : '#d6ecfa' }).show();
+            else self._elBenchAcidNote.hide();
         }
     });
 })(jQuery);
