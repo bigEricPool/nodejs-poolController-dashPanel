@@ -534,10 +534,10 @@
                 required: true, bindColumn: 0, displayColumn: 1, labelText: 'SWG Schedule', binding: 'swgLogScheduleId',
                 columns: [{ binding: 'val', hidden: true, text: 'Id' }, { binding: 'desc', text: 'SWG Schedule' }],
                 items: [{ val: -1, desc: 'Manual (use Run Hours below)' }], inputAttrs: { style: { width: '14rem' } }, labelAttrs: { style: { width: '7.5rem' } }
-            }).attr('title', 'The schedule the SWG runs on. Each entry run time is the schedule window for the day (sunrise and sunset as of that day), rounded to whole hours. Pick Manual to use Run Hours instead.');
+            }).attr('title', 'The schedule the SWG runs on. Each entry run time is the schedule window for the day (sunrise and sunset as of that day), to 0.1 h. Pick Manual to use Run Hours instead.');
             line = $('<div></div>').appendTo(pnl);
-            self._hoursSpin = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: 1, units: 'hours a day', inputAttrs: { maxlength: 2, style: { width: '3rem' } }, labelAttrs: { style: { width: '7.5rem', marginRight: '.25rem' } } })
-                .attr('title', 'The hours a day the cell runs, sent with each entry (whole hours) when no SWG Schedule is chosen, or when the chosen one is missing or disabled. Nothing is written while this is 0 and no schedule gives a window.');
+            self._hoursSpin = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: .1, fmtMask: '#,##0.#', dataType: 'number', units: 'hours a day', inputAttrs: { maxlength: 4, style: { width: '3.5rem' } }, labelAttrs: { style: { width: '7.5rem', marginRight: '.25rem' } } })
+                .attr('title', 'The hours a day the cell runs, sent with each entry (to 0.1 h) when no SWG Schedule is chosen, or when the chosen one is missing or disabled. Nothing is written while this is 0 and no schedule gives a window.');
             el.on('selchanged', 'div.picPickList[data-bind=swgLogScheduleId]', function (evt) {
                 self._showHoursUse(evt.newItem && evt.newItem.val);
             });
@@ -546,7 +546,7 @@
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save SWG Log', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
                 var v = dataBinder.fromElement(pnl);
-                var hours = Math.round(Number(v.swgLogHours) || 0);
+                var hours = Math.round((Number(v.swgLogHours) || 0) * 10) / 10;
                 var schedId = parseInt(v.swgLogScheduleId, 10);
                 if (isNaN(schedId)) schedId = -1;
                 $.putApiService('/config/poolMath', { swgLogEnabled: v.swgLogEnabled === true, swgLogScheduleId: schedId, swgLogHours: hours }, 'Saving SWG Log...', function (c, status, xhr) {
@@ -615,7 +615,7 @@
                 };
                 var found = st.credentialsFile === 'found';
                 if (typeof st.credentialsFile === 'string') row(found ? 'Credentials file found on the controller.' : 'No credentials file on the controller; create it there with the one-line command in the poolmath-rig README.', !found && st.enabled);
-                if (st.feeder) row('Changes come from ' + st.feeder + ': each entry carries its time, % and FC rate, with its run hours rounded to whole hours (the schedule and Run Hours below are used only for super chlorinate when the % differs).');
+                if (st.feeder) row('Changes come from ' + st.feeder + ': each entry carries its time, % and FC rate, with its run hours to 0.1 h (the schedule and Run Hours below are used only for super chlorinate when the % differs).');
                 else if (st.hoursNote) row('Run time: ' + st.hoursNote, st.hoursSource !== 'schedule' && (Number(self._cfgScheduleId) >= 0));
                 else if (st.enabled && st.hoursPerDay > 0) row('Run time: ' + st.hoursPerDay + ' h a day, set by hand.');
                 if (st.lastSignIn) row('Last sign-in ' + (st.lastSignIn.ok ? 'OK' : 'FAILED') + (st.lastSignIn.at ? ', ' + fmtTime(st.lastSignIn.at) : '') + '.', !st.lastSignIn.ok);
