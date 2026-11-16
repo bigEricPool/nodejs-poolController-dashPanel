@@ -186,6 +186,17 @@
       "build": true
     },
     {
+      "name": "feature/swg-superchlor-hold",
+      "kind": "feature",
+      "status": "active",
+      "purpose": "SWG Assist card line while super chlorinate holds its automatic changes. On feature/swg-assist.",
+      "depends": [
+        "feature/swg-assist"
+      ],
+      "upstream": "",
+      "build": true
+    },
+    {
       "name": "feature/swg-bench",
       "kind": "feature",
       "status": "active",
