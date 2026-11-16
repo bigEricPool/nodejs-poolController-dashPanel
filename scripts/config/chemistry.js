@@ -620,7 +620,8 @@
                 };
                 var found = st.credentialsFile === 'found';
                 if (typeof st.credentialsFile === 'string') row(found ? 'Credentials file found on the controller.' : 'No credentials file on the controller; create it there with the one-line command in the poolmath-rig README.', !found && st.enabled);
-                if (st.hoursNote) row('Run time: ' + st.hoursNote, st.hoursSource !== 'schedule' && (Number(self._cfgScheduleId) >= 0));
+                if (st.feeder) row('Changes come from ' + st.feeder + ': each entry carries its time, % and FC rate, with its run hours rounded to whole hours (the schedule and Run Hours below are used only for super chlorinate when the % differs).');
+                else if (st.hoursNote) row('Run time: ' + st.hoursNote, st.hoursSource !== 'schedule' && (Number(self._cfgScheduleId) >= 0));
                 else if (st.enabled && st.hoursPerDay > 0) row('Run time: ' + st.hoursPerDay + ' h a day, set by hand.');
                 if (st.lastSignIn) row('Last sign-in ' + (st.lastSignIn.ok ? 'OK' : 'FAILED') + (st.lastSignIn.at ? ', ' + fmtTime(st.lastSignIn.at) : '') + '.', !st.lastSignIn.ok);
                 else if (st.enabled) row('Not signed in yet; njsPC signs in when it first writes an entry.');
