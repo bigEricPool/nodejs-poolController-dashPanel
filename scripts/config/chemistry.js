@@ -538,12 +538,15 @@
             self._schedPick = $('<div></div>').appendTo(line).pickList({
                 required: true, bindColumn: 0, displayColumn: 1, labelText: 'SWG Schedule', binding: 'swgLogScheduleId',
                 columns: [{ binding: 'val', hidden: true, text: 'Id' }, { binding: 'desc', text: 'SWG Schedule' }],
-                items: [{ val: -1, desc: 'Manual (use Run Hours below)' }], inputAttrs: { style: { width: '14rem' } }, labelAttrs: { style: { width: '5.9rem' } }
+                items: [{ val: -1, desc: 'Manual (use Run Hours below)' }], inputAttrs: { style: { width: '14rem' } }, labelAttrs: { style: { width: '7.5rem' } }
             }).attr('title', 'The schedule the SWG runs on. Each entry run time is the schedule window for the day (sunrise and sunset as of that day), rounded to whole hours. Pick Manual to use Run Hours instead.');
             line = $('<div></div>').appendTo(pnl);
-            self._hoursSpin = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: 1, units: 'hours a day', inputAttrs: { maxlength: 2, style: { width: '3rem' } }, labelAttrs: { style: { width: '5.9rem', marginRight: '.25rem' } } })
+            self._hoursSpin = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Hours', binding: 'swgLogHours', min: 0, max: 24, step: 1, units: 'hours a day', inputAttrs: { maxlength: 2, style: { width: '3rem' } }, labelAttrs: { style: { width: '7.5rem', marginRight: '.25rem' } } })
                 .attr('title', 'The hours a day the cell runs, sent with each entry (whole hours) when no SWG Schedule is chosen, or when the chosen one is missing or disabled. Nothing is written while this is 0 and no schedule gives a window.');
-            self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 6.2rem' });
+            el.on('selchanged', 'div.picPickList[data-bind=swgLogScheduleId]', function (evt) {
+                self._showHoursUse(evt.newItem && evt.newItem.val);
+            });
+            self._elStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.3rem 0 .3rem 7.8rem' });
             var btnPnl = $('<div class="picBtnPanel btn-panel"></div>').appendTo(pnl);
             var btnSave = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Save SWG Log', icon: '<i class="fas fa-save"></i>' });
             btnSave.on('click', function (e) {
@@ -555,6 +558,14 @@
                     self.dataBind(c);
                 });
             });
+        },
+        // Run Hours is only the fallback while a schedule is chosen: its label says so and it is dimmed.
+        _showHoursUse: function (schedId) {
+            var self = this;
+            if (!self._hoursSpin) return;
+            var usingSchedule = Number(schedId) >= 0;
+            self._hoursSpin.find('label.picSpinner-label:first').text(usingSchedule ? 'Run Hours if none' : 'Run Hours');
+            self._hoursSpin.css({ opacity: usingSchedule ? .55 : '' });
         },
         // The schedules to choose from (as SWG Assist lists them), then the settings.
         _load: function () {
@@ -589,6 +600,7 @@
             obj = obj || {};
             dataBinder.bind(el.find('div.picAccordian-contents:first'), { swgLogEnabled: obj.swgLogEnabled === true, swgLogScheduleId: obj.swgLogScheduleId >= 0 ? obj.swgLogScheduleId : -1, swgLogHours: obj.swgLogHours > 0 ? obj.swgLogHours : 0 });
             self._cfgScheduleId = obj.swgLogScheduleId;
+            self._showHoursUse(obj.swgLogScheduleId);
             var cols = el.find('div.picAccordian:first')[0].columns();
             cols[1].elText().text(obj.swgLogEnabled === true ? 'On' : 'Off');
             self._loadStatus();
