@@ -1,7 +1,9 @@
 (function ($) {
     // The History panel: charts of anything njsPC keeps or works out over time, read from njsPC's history registry (GET /state/history/kinds
     // and GET /state/history). Each part of njsPC that has history registers its kinds there (each body's water temperature, a chlorinator's
-    // output, the PoolMath data chosen as Of Interest, and whatever other features add), so this panel names none of them.
+    // output, the PoolMath data chosen as Of Interest, and whatever other features add), so this panel names none of them. Kinds drawn as
+    // spans (times something was on, such as a chlorinator's power and its modelled current) are strips under the first chart, on its time
+    // scale; a kind's note from njsPC (how its values come about) is shown under About this chart.
     //
     // The panel shows one view at a time. Views (a name and the kinds it shows, in order) are set up with the gear in the panel's title and
     // saved in dashPanel's own configuration (the historyPanel section), so every browser shows the same views. Until views are set up, the
@@ -321,6 +323,7 @@
             kinds.forEach(function (k) { color[k.id] = ci === 0 ? 'currentColor' : COLORS[(ci - 1) % COLORS.length]; ci++; });
             // The latest value of each item that has values, with the high, the low and the average of the period.
             kinds.forEach(function (k) {
+                if (k.style === 'spans') { self._spanRow(body, k, series[k.id] || [], color[k.id], from, Math.min(now, to), inSkip); return; }
                 if (k.style === 'band' || k.style === 'markers') return;
                 var pts = (series[k.id] || []).filter(function (p) { return num(p.v) && !p.o && p.t >= from && p.t <= Math.min(now, to) && !inSkip(p.t); });
                 if (pts.length === 0) return;
@@ -337,9 +340,10 @@
             });
             // The charts: up to two units in each (a scale at the left and one at the right), in the order of the items. Markers (additions,
             // notes) go along the bottom of the first chart.
-            var charts = [], markers = [];
+            var charts = [], markers = [], spans = [];
             kinds.forEach(function (k) {
                 if (k.style === 'markers') { markers.push(k); return; }
+                if (k.style === 'spans') { spans.push(k); return; }
                 var u = k.unit || '';
                 var c = charts.find(function (x) { return x.units.indexOf(u) !== -1; }) || charts.find(function (x) { return x.units.length < 2; });
                 if (!c) { c = { units: [], kinds: [] }; charts.push(c); }
@@ -348,6 +352,7 @@
             });
             if (charts.length === 0) charts.push({ units: [], kinds: [] });
             charts[0].markers = markers;
+            charts[0].spans = spans;
             // The period: the last 24 hours for Day; a longer one starts at its first point (with half a day of room), so a short record is
             // not squeezed against the right edge. It runs past now to the last point of an item that looks ahead.
             var tMin = Infinity, tMax = -Infinity;
@@ -363,7 +368,33 @@
             }
             var styles = {};
             charts.forEach(function (c) { self._chart(body, c, series, color, t0, t1, styles); });
-            self._note(body, self._noteText(styles, days));
+            var notes = kinds.filter(function (k) { return typeof k.note === 'string' && k.note; }).map(function (k) { return k.note; });
+            self._note(body, [self._noteText(styles, days)].concat(notes).join(' '));
+        },
+        // A spans item's row: the hours on in the period (from its spans, or its daily hours in a long view) and, for spans, the last one.
+        _spanRow: function (body, k, pts, col, from, to, inSkip) {
+            var self = this, ms = 0, n = 0, days = 0, last;
+            pts.forEach(function (p) {
+                if (!num(p.t) || inSkip(p.t)) return;
+                if (num(p.e)) { var a = Math.max(p.t, from), b = Math.min(p.e, to); if (b > a) { ms += b - a; n++; last = p; } }
+                else if (num(p.v) && p.t + DAY > from && p.t < to) { ms += p.v * 3600000; days++; }
+            });
+            if (ms <= 0 && !pts.length) return;
+            var row = $('<div class="picWaterRow"></div>').appendTo(body);
+            $('<span class="picWaterIcon"></span>').appendTo(row).append($('<i class="fas fa-bolt"></i>')).css('color', col === 'currentColor' ? '' : col);
+            $('<label class="picWaterLabel"></label>').text(k.name).attr('title', k.sourceName ? k.sourceName + ': ' + k.name : k.name).appendTo(row);
+            $('<span class="picWaterValue"></span>').text(self._fmt(ms / 3600000, 'h')).attr('title', 'Hours on in the period, in all').appendTo(row);
+            var extra = $('<span class="picWaterExtra"></span>').appendTo(row);
+            if (last) extra.text((n === 1 ? '1 time' : n + ' times') + ' · last ' + self._time(last.t) + '–' + (last.text === 'on now' ? 'now' : self._time(last.e)))
+                .attr('title', 'Last ' + self._spanText(k, last));
+            else if (days > 0) extra.text('in the period · avg ' + self._fmt(ms / 3600000 / days, 'h') + ' a day')
+                .attr('title', 'The hours on of the ' + days + ' day' + (days === 1 ? '' : 's') + ' with a record, in all and a day on average');
+        },
+        // A span's tooltip: its times, the % of its cycle (v) where given, and its note (what ended it).
+        _spanText: function (k, p) {
+            var d0 = new Date(p.t), d1 = new Date(p.e), same = d0.toDateString() === d1.toDateString();
+            return k.name + ' ' + this._when(p.t) + '–' + (p.text === 'on now' ? 'now' : same ? this._time(p.e) : this._when(p.e))
+                + ' (' + this._fmt((p.e - p.t) / 60000) + ' min)' + (num(p.v) ? ' · ' + Math.round(p.v) + '% cycle' : '') + (p.text && p.text !== 'on now' ? ' · ' + p.text : '');
         },
         _noteText: function (s, days) {
             var parts = [];
@@ -373,6 +404,7 @@
             if (s.dots) parts.push('Dots are single readings, such as tests.');
             if (s.skip) parts.push('A shaded stretch is a month that is not selected; nothing is drawn there.');
             if (s.band) parts.push('A shaded band with dotted edges is a range in force at the time; it steps where it changed.');
+            if (s.spans) parts.push('The strips under the chart show when something was on' + (s.spanDays ? '; in a long view each bar is a day, its height the hours on that day' : '') + '. Hover over a bar for its times.');
             if (s.markers) parts.push('The marks along the bottom are additions and notes: hover over one for its text; the newest are listed under the chart.');
             if (s.segs) parts.push('Where a line was worked out again (a new calculation), each one is its own line.');
             if (s.future) parts.push('The part right of the "now" line is projected.');
@@ -497,7 +529,8 @@
                 });
                 return min === Infinity ? null : self._scale(min, max);
             });
-            var any = scales.some(function (s) { return !!s; }) || (c.markers || []).some(function (k) { return (series[k.id] || []).some(inSpan); });
+            var any = scales.some(function (s) { return !!s; }) || (c.markers || []).some(function (k) { return (series[k.id] || []).some(inSpan); })
+                || (c.spans || []).some(function (k) { return (series[k.id] || []).length > 0; });
             if (!any || !(t1 > t0)) { $('<div class="picWaterNote"></div>').text('Nothing recorded in this period yet.').appendTo(box); return box; }
             if (scales[0]) $('<span class="picWaterChartRange"></span>').text(self._fmt(scales[0].min) + '–' + self._fmt(scales[0].max) + (c.units[0] ? ' ' + c.units[0] : '')).appendTo(head);
             var svg = document.createElementNS(NS, 'svg');
@@ -663,6 +696,7 @@
                         });
                 }
             });
+            if ((c.spans || []).length > 0) self._strips(box, plot, xbox, c, series, color, t0, t1, styles, !!(scales[0] && scales[1]), skips);
             if (list.length > 0) {
                 var ul = $('<div class="picHistoryMarks"></div>').appendTo(box);
                 list.sort(function (a, b) { return b.t - a.t; }).slice(0, 5).forEach(function (m) {
@@ -672,6 +706,62 @@
                 });
             }
             return box;
+        },
+        // The spans items of a chart as strips under its plot, one row each, on the same time scale; the time labels move under the last one.
+        // A span is a bar from t to e (at least a little wide, so a short burst shows); a long view's daily points are bars a day wide, as
+        // tall as the hours on that day against the most of any day shown.
+        _strips: function (box, plot, xbox, c, series, color, t0, t1, styles, right, skips) {
+            var self = this, W = 200, SH = 10;
+            var x = function (t) { return W * (t - t0) / (t1 - t0); };
+            var inSkip = function (t) { return skips.some(function (s) { return t >= s[0] && t < s[1]; }); };
+            var xTicks = self._ticks(t0, t1);
+            var row = function () {
+                var r = $('<div class="picWaterPlot picHistoryStripRow"></div>').appendTo(box);
+                $('<div class="picWaterY picHistoryStripY"></div>').appendTo(r);
+                var area = $('<div class="picWaterArea picHistoryStripArea"></div>').appendTo(r);
+                if (right) $('<div class="picWaterY picWaterYR picHistoryStripY"></div>').appendTo(r);
+                return area;
+            };
+            c.spans.forEach(function (k) {
+                var col = color[k.id], fill = col === 'currentColor' ? '' : 'fill:' + col;
+                var pts = (series[k.id] || []).filter(function (p) { return p && num(p.t) && p.t < t1 && (num(p.e) ? p.e : p.t + DAY) > t0 && !inSkip(p.t); });
+                var area = row();
+                var svg = document.createElementNS(NS, 'svg');
+                svg.setAttribute('viewBox', '0 0 ' + W + ' ' + SH);
+                svg.setAttribute('preserveAspectRatio', 'none');
+                svg.setAttribute('class', 'picWaterSvg picHistoryStrip');
+                svg.setAttribute('role', 'img');
+                svg.setAttribute('aria-label', k.name);
+                var add = function (tag, attrs, style, title) {
+                    var e = document.createElementNS(NS, tag);
+                    for (var a in attrs) e.setAttribute(a, attrs[a]);
+                    if (style) e.setAttribute('style', style);
+                    if (title) { var tt = document.createElementNS(NS, 'title'); tt.textContent = title; e.appendChild(tt); }
+                    svg.appendChild(e);
+                };
+                add('rect', { x: 0, y: 0, width: W, height: SH, 'class': 'picHistoryStripBg' });
+                xTicks.forEach(function (tk) { var xx = x(tk.t); add('line', { x1: xx, x2: xx, y1: 0, y2: SH, 'class': 'picWaterGrid' }); });
+                var most = 0;
+                pts.forEach(function (p) { if (!num(p.e) && num(p.v) && p.v > most) most = p.v; });
+                pts.forEach(function (p) {
+                    if (num(p.e)) {
+                        var a = x(Math.max(p.t, t0)), b = x(Math.min(p.e, t1));
+                        add('rect', { x: a.toFixed(2), y: 1, width: Math.max(b - a, W / 400).toFixed(2), height: SH - 2, 'class': 'picHistorySpan' }, fill, self._spanText(k, p));
+                    }
+                    else if (num(p.v) && p.v > 0 && most > 0) {
+                        var da = x(Math.max(p.t, t0)), db = x(Math.min(p.t + DAY, t1)), h = (SH - 1) * p.v / most;
+                        add('rect', { x: (da + 0.1).toFixed(2), y: (SH - h).toFixed(2), width: Math.max(0.2, db - da - 0.2).toFixed(2), height: h.toFixed(2), 'class': 'picHistorySpan' }, fill,
+                            k.name + ' ' + (new Date(p.t).getMonth() + 1) + '/' + new Date(p.t).getDate() + ': ' + self._fmt(p.v, 'h') + ' on');
+                        styles.spanDays = true;
+                    }
+                });
+                if (t1 > Date.now() + 60000) add('line', { x1: x(Date.now()), x2: x(Date.now()), y1: 0, y2: SH, 'class': 'picHistoryNow' });
+                $('<div class="picHistoryStripName"></div>').text(k.name).css('color', col === 'currentColor' ? '' : col).appendTo(area);
+                area[0].appendChild(svg);
+                styles.spans = true;
+            });
+            // the time labels under the last strip
+            xbox.detach().appendTo(row());
         },
         // The settings: the views in order, each with its name and the items it shows, picked from every item njsPC offers (by source).
         _openSettings: function () {

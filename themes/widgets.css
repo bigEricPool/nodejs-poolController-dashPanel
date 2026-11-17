@@ -2415,3 +2415,31 @@ svg.picWaterSvg rect.picHistorySkip {
     fill: currentColor;
     opacity: .07;
 }
+/* The History panel's spans strips (times on, such as a chlorinator's power and its modelled current), under the chart. */
+div.picHistoryStripRow {
+    margin-top: .15rem;
+}
+div.picWaterY.picHistoryStripY {
+    height: auto;
+}
+svg.picWaterSvg.picHistoryStrip {
+    height: .95rem;
+}
+div.picHistoryLarge svg.picWaterSvg.picHistoryStrip {
+    height: 1.2rem;
+}
+svg.picWaterSvg rect.picHistoryStripBg {
+    fill: currentColor;
+    opacity: .06;
+}
+svg.picWaterSvg rect.picHistorySpan {
+    fill: currentColor;
+    opacity: .85;
+}
+div.picHistoryStripName {
+    font-size: .62rem;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    opacity: .85;
+}
