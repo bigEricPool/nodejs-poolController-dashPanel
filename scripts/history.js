@@ -373,21 +373,22 @@
         },
         // A spans item's row: the hours on in the period (from its spans, or its daily hours in a long view) and, for spans, the last one.
         _spanRow: function (body, k, pts, col, from, to, inSkip) {
-            var self = this, ms = 0, n = 0, last;
+            var self = this, ms = 0, n = 0, days = 0, last;
             pts.forEach(function (p) {
                 if (!num(p.t) || inSkip(p.t)) return;
                 if (num(p.e)) { var a = Math.max(p.t, from), b = Math.min(p.e, to); if (b > a) { ms += b - a; n++; last = p; } }
-                else if (num(p.v) && p.t + DAY > from && p.t < to) ms += p.v * 3600000;
+                else if (num(p.v) && p.t + DAY > from && p.t < to) { ms += p.v * 3600000; days++; }
             });
             if (ms <= 0 && !pts.length) return;
             var row = $('<div class="picWaterRow"></div>').appendTo(body);
             $('<span class="picWaterIcon"></span>').appendTo(row).append($('<i class="fas fa-bolt"></i>')).css('color', col === 'currentColor' ? '' : col);
             $('<label class="picWaterLabel"></label>').text(k.name).attr('title', k.sourceName ? k.sourceName + ': ' + k.name : k.name).appendTo(row);
-            $('<span class="picWaterValue"></span>').text(self._fmt(ms / 3600000, 'h')).attr('title', 'Hours on in the period').appendTo(row);
+            $('<span class="picWaterValue"></span>').text(self._fmt(ms / 3600000, 'h')).attr('title', 'Hours on in the period, in all').appendTo(row);
             var extra = $('<span class="picWaterExtra"></span>').appendTo(row);
             if (last) extra.text((n === 1 ? '1 time' : n + ' times') + ' · last ' + self._time(last.t) + '–' + (last.text === 'on now' ? 'now' : self._time(last.e)))
                 .attr('title', 'Last ' + self._spanText(k, last));
-            else extra.text('hours on each day');
+            else if (days > 0) extra.text('in the period · avg ' + self._fmt(ms / 3600000 / days, 'h') + ' a day')
+                .attr('title', 'The hours on of the ' + days + ' day' + (days === 1 ? '' : 's') + ' with a record, in all and a day on average');
         },
         // A span's tooltip: its times, the % of its cycle (v) where given, and its note (what ended it).
         _spanText: function (k, p) {
