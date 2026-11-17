@@ -36,6 +36,8 @@
     // The Model Bench's acid advice (state.autoSwg.benchAcidAdvice) in words: empty when there is none.
     function autoSwgAcidAdviceText(a) {
         if (!a || !a.level || a.level === 'none') return '';
+        // a newer njsPC gives the whole advice in words: when, how much then, and how much if added today
+        if (a.text) return (a.level === 'needed' ? '⚠ Acid needed: ' : 'ℹ Acid recommended: ') + a.text;
         var dose = typeof a.doseFlOz === 'number' && a.doseFlOz > 0 ? a.doseFlOz + ' fl oz of ' + a.doseStrength + '% muriatic acid to bring the pH to ' + a.doseTo + '. ' : '';
         return (a.level === 'needed' ? '⚠ Acid needed: ' : 'ℹ Acid recommended: ') + dose + (a.reason || '');
     }
