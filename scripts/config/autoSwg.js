@@ -2484,6 +2484,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
         // The acid advice in one line (state.autoSwg.benchAcidAdvice): the level, the dose and why.
         _benchAcidText: function (a) {
             if (!a || !a.level || a.level === 'none') return '';
+            // a newer njsPC gives the whole advice in words: when, how much then, and how much if added today
+            if (a.text) return (a.level === 'needed' ? '⚠ Acid needed: ' : 'ℹ Acid recommended: ') + a.text;
             var dose = typeof a.doseFlOz === 'number' && a.doseFlOz > 0 ? a.doseFlOz + ' fl oz of ' + a.doseStrength + '% muriatic acid to bring the pH to ' + a.doseTo + (typeof a.taDrop === 'number' ? ' (TA down about ' + a.taDrop + ' ppm)' : '') + '. ' : '';
             return (a.level === 'needed' ? '⚠ Acid needed: ' : 'ℹ Acid recommended: ') + dose + (a.reason || '');
         },
