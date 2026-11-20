@@ -338,6 +338,77 @@
                     self.dataBind(c);
                 });
             });
+            self._buildWaterLog(pnl);
+        },
+        // Water changes, logged here (in njsPC) until PoolMath can log them: water added (a hose, a fill, an exchange to lower CH) dilutes everything;
+        // water removed (pumped down) lowers the level only. The SWG Assist Model Bench reads them in its water balance (GET/POST/DELETE
+        // /state/autoSwg/bench/water); an njsPC without the bench answers 404 and the section stays hidden.
+        _buildWaterLog: function (pnl) {
+            var self = this;
+            var sec = $('<div></div>').appendTo(pnl).css({ margin: '.8rem 0 .3rem 0', borderTop: '1px solid rgba(128,128,128,.3)', paddingTop: '.5rem' }).hide();
+            self._elWater = sec;
+            $('<div></div>').appendTo(sec).css({ fontWeight: 'bold' }).text('Water Changes (kept in njsPC until PoolMath can log them)');
+            $('<div></div>').appendTo(sec).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0 .35rem 0' })
+                .text('Inches of depth, roughly. Added water (a hose, a fill, an exchange to lower CH) dilutes salt, CYA, CH, TA and FC; water pumped out only lowers the level. Rain and evaporation are worked out from the weather station.');
+            self._elWaterLevel = $('<div></div>').appendTo(sec).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0 .35rem 0' });
+            var line = $('<div></div>').appendTo(sec).css({ display: 'flex', flexWrap: 'wrap', gap: '.4rem', alignItems: 'center' });
+            var now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+            var inWhen = $('<input type="datetime-local"></input>').appendTo(line).val(now).attr('title', 'When the water was added or removed (roughly).');
+            var selKind = $('<select></select>').appendTo(line);
+            $('<option value="add"></option>').text('Added').appendTo(selKind);
+            $('<option value="remove"></option>').text('Removed').appendTo(selKind);
+            var inInches = $('<input type="number" min="0.1" max="60" step="0.1"></input>').appendTo(line).css({ width: '4.5rem' }).attr('placeholder', 'inches');
+            $('<span></span>').appendTo(line).text('in');
+            var inNote = $('<input type="text" maxlength="200"></input>').appendTo(line).css({ width: '12rem' }).attr('placeholder', 'note (optional)');
+            var btnAdd = $('<div></div>').appendTo(line).actionButton({ text: 'Log It', icon: '<i class="fas fa-plus"></i>' });
+            btnAdd.on('click', function () {
+                var inches = parseFloat(inInches.val());
+                var t = new Date(inWhen.val());
+                elErr.hide();
+                if (!(inches > 0) || inches > 60 || isNaN(t.getTime())) { elErr.text('Give the date and time and the inches (above 0, at most 60).').show(); return; }
+                $.postApiService('/state/autoSwg/bench/water', { t: t.toISOString(), kind: selKind.val(), inches: inches, note: inNote.val() || undefined }, 'Logging the water change...', function () {
+                    inInches.val(''); inNote.val('');
+                    self._loadWater();
+                });
+            });
+            var elErr = $('<div></div>').appendTo(sec).css({ color: '#c0392b', fontSize: '.85em' }).hide();
+            self._elWaterList = $('<div></div>').appendTo(sec).css({ margin: '.35rem 0', fontSize: '.9em' });
+            self._loadWater();
+        },
+        _loadWater: function () {
+            var self = this;
+            if (!self._elWater) return;
+            // a GET with no error popup: an njsPC without the bench has no such route, and the section then stays hidden
+            var useProxy = makeBool($('body').attr('data-apiproxy'));
+            var url = (useProxy ? '/njsPC' : $('body').attr('data-apiserviceurl')) + '/state/autoSwg/bench/water?days=14';
+            if (url.startsWith('/')) url = url.substring(1);
+            jQuery.ajax({ url: url, type: 'GET', dataType: 'json', error: function () { self._elWater.hide(); }, success: function (w) {
+                if (!w || typeof w !== 'object') return;
+                self._elWater.show();
+                var r2 = function (x) { return typeof x === 'number' ? (Math.round(x * 10) / 10).toFixed(1) : '--'; };
+                if (w.note) self._elWaterLevel.text(w.note);
+                else {
+                    var evap = 0, rain = 0;
+                    (w.days || []).slice(-7).forEach(function (d) { evap += d.evap || 0; rain += d.rain || 0; });
+                    var txt = 'Last 7 days: rain ' + r2(rain) + ' in, evaporation ' + r2(evap) + ' in. Level now ' + (w.levelNow >= 0 ? '+' : '') + r2(w.levelNow) + ' in against where the record starts'
+                        + (typeof w.spillInches === 'number' ? ' (water goes over the deck at +' + r2(w.spillInches) + ')' : '') + '.';
+                    if (w.forecastAt) txt += ' Next 7 days from the forecast: highest ' + (w.aheadMax >= 0 ? '+' : '') + r2(w.aheadMax) + ' in' + (w.spillAhead ? ', OVER THE DECK from ' + new Date(w.spillAhead).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '') + '.';
+                    txt += ' Mean depth ' + r2(w.depth) + ' in.';
+                    self._elWaterLevel.text(txt).css({ color: w.spillAhead ? '#b35900' : '#666', fontWeight: w.spillAhead ? 'bold' : '' });
+                }
+                var list = self._elWaterList.empty();
+                var log = (w.log || []).slice().reverse();
+                if (!log.length) { $('<div></div>').appendTo(list).css({ color: '#888' }).text('No water changes logged.'); return; }
+                log.forEach(function (e) {
+                    var row = $('<div></div>').appendTo(list).css({ display: 'flex', gap: '.6rem', alignItems: 'center', padding: '.1rem 0' });
+                    $('<span></span>').appendTo(row).css({ minWidth: '9rem' }).text(new Date(e.t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }));
+                    $('<span></span>').appendTo(row).css({ minWidth: '9rem' }).text((e.kind === 'add' ? 'Added ' : 'Removed ') + e.inches + ' in');
+                    $('<span></span>').appendTo(row).css({ color: '#666', flex: '1' }).text(e.note || '');
+                    $('<i class="fas fa-trash" style="cursor:pointer"></i>').appendTo(row).attr('title', 'Delete this entry').on('click', function () {
+                        $.deleteApiService('/state/autoSwg/bench/water/' + encodeURIComponent(e.id), {}, 'Deleting...', function () { self._loadWater(); });
+                    });
+                });
+            } });
         },
         dataBind: function (obj) {
             var self = this, el = self.element;

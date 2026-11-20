@@ -1753,6 +1753,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             self._elBenchStatus = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
             self._elBenchCoverage = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
             self._elBenchCya = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' });
+            self._elBenchWater = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' }).hide();
             self._elBenchAdvice = $('<div></div>').appendTo(pnl).css({ color: '#0b3d5c', background: '#d6ecfa', padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).hide();
             self._elBenchChem = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', color: '#666', margin: '.15rem 0' }).hide();
             self._elBenchAcid = $('<div></div>').appendTo(pnl).css({ padding: '.4rem .6rem', borderRadius: '.25rem', margin: '.3rem 0' }).hide();
@@ -1848,6 +1849,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 }
                 else self._elBenchCoverage.text('');
                 self._renderBenchCyaLine(b.cya);
+                self._loadBenchWater();
                 self._renderBenchChemLine(b.chem);
                 var sc = b.scoring;
                 self._elBenchFlagsNote.text(sc ? 'Flagged pairs are kept but left out of the bands and the comparison with live: a long gap (over ' + sc.maxGapDays + ' days), thin inputs (under ' + Math.round(sc.minCoverage * 100)
@@ -1859,6 +1861,22 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     if (self.element.closest('body').length && makeBool(self._benchAcc.attr('data-expanded'))) self._loadBench();
                 }, 5000);
             });
+        },
+        // The water balance (read only): rain and evaporation lately, the concentration change, the level, the forecast's level ahead. Water changes
+        // are logged under PoolMath History.
+        _loadBenchWater: function () {
+            var self = this;
+            self._benchGet('/state/autoSwg/bench/water?days=14', function (w) {
+                if (!w || w.note) { self._elBenchWater.text(w && w.note ? 'Water balance: ' + w.note : '').toggle(!!(w && w.note)); return; }
+                var r1 = function (x) { return typeof x === 'number' ? (Math.round(x * 10) / 10).toFixed(1) : '--'; };
+                var pc = function (x) { return typeof x === 'number' ? ((x - 1) * 100 >= 0 ? '+' : '') + ((x - 1) * 100).toFixed(1) + '%' : '--'; };
+                var evap = 0, rain = 0, n = (w.log || []).length;
+                (w.days || []).slice(-7).forEach(function (d) { evap += d.evap || 0; rain += d.rain || 0; });
+                self._elBenchWater.text('Water balance (mean depth ' + r1(w.depth) + ' in): last 7 days rain ' + r1(rain) + ' in, evaporation ' + r1(evap) + ' in, concentration ' + pc(w.factor && w.factor.days7)
+                    + ' (30 days ' + pc(w.factor && w.factor.days30) + '); level ' + (w.levelNow >= 0 ? '+' : '') + r1(w.levelNow) + ' in'
+                    + (w.forecastAt ? ', highest in the forecast ' + (w.aheadMax >= 0 ? '+' : '') + r1(w.aheadMax) + ' in' + (w.spillAhead ? ' (over the deck from ' + self._benchFmt.when(w.spillAhead) + ')' : '') : ', no saved forecast yet')
+                    + '; ' + n + ' water change' + (n === 1 ? '' : 's') + ' logged (under PoolMath History).').show();
+            }, function () { self._elBenchWater.hide(); });
         },
         _renderBenchCyaLine: function (cya) {
             var self = this, f = self._benchFmt;
