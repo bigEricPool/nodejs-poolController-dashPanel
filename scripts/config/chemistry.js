@@ -338,6 +338,12 @@
                     self.dataBind(c);
                 });
             });
+            // The PoolMath history as a list (FC, water temperature, CYA, liquid chlorine, SWG %), with CSV/JSON export; see $.pic.autoSwgHistory in autoSwg.js.
+            if ($.pic.autoSwgHistory) {
+                var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' })
+                    .attr('title', 'Lists the PoolMath history read from the share code (FC, water temperature, CYA, liquid chlorine and SWG %), with the local SWG % log when SWG Assist is used, and exports it as CSV or JSON.');
+                btnHistory.on('click', function (e) { $.pic.autoSwgHistory.show(); });
+            }
         },
         dataBind: function (obj) {
             var self = this, el = self.element;

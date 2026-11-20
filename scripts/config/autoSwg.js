@@ -334,8 +334,6 @@
                 .attr('title', 'Re-fetches your PoolMath data and recalculates the SWG % needed to reach the SAME target FC by the SAME target date/time as your last apply -- does not change the target or restart the countdown. Use this to correct a glide already in progress with fresher data.')
                 .hide();
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
-            var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
-            btnHistory.on('click', function (e) { self._showHistory(); });
             var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
                 .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
             btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
@@ -1104,23 +1102,8 @@
             if (days === 0) parts.push(mins + 'm');
             return parts.join(' ');
         },
-        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
-        // given and valid, otherwise in this browser's time zone.
-        _fmtDateTime: function (iso, tz) {
-            var d = new Date(iso);
-            if (isNaN(d.getTime())) return '';
-            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-            if (tz) {
-                try {
-                    var parts = {};
-                    new Intl.DateTimeFormat('en-US', {
-                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
-                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
-                } catch (err) { /* unknown zone -- fall through to browser time */ }
-            }
-            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-        },
+        // 'YYYY-MM-DD HH:mm' (see $.pic.autoSwgHistory._fmtDateTime, shared with the history dialog).
+        _fmtDateTime: function (iso, tz) { return $.pic.autoSwgHistory._fmtDateTime(iso, tz); },
         // The start/end of the running-average window the server actually used, and
         // whether it had to be extended back to include enough FC readings.
         _describeAvgWindow: function (result) {
@@ -1132,58 +1115,6 @@
             var text = 'Averaging window: ' + self._fmtDateTime(result.avgWindowStart, tz) + ' to ' + self._fmtDateTime(result.avgWindowEnd, tz) + (tz ? ' ' + tz : '');
             if (details.avgWindowExtended) text += ' (extended back from ' + inputs.windowDays + ' days to include at least 3 FC readings)';
             return text;
-        },
-        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
-        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
-        _settingsChangeText: function (e) {
-            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', bandPeakCap: 'Keep the Afternoon Peak Under FC High', bandIntegral: 'Correct the Hold from the Last Readings', bandScaledBias: 'Scale the Old-Test Raise by the Last Reading', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', awayMaintMultiplier: 'Trip Maintenance Multiplier', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
-            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
-            return (e.changes || []).map(function (c) {
-                var name = labels[c.setting] || c.setting;
-                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
-            }).join('; ');
-        },
-        _historyTypeLabel: function (e) {
-            if (e.type === 'SETTINGS') return 'Settings change';
-            if (e.type === 'FC') return 'FC reading';
-            if (e.type === 'CYA') return 'CYA change';
-            if (e.type === 'CL') return 'Liquid chlorine';
-            return 'SWG %';
-        },
-        _historyValueLabel: function (e) {
-            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
-            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
-            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
-            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
-            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
-            return n(e.pct, 2) + '%';
-        },
-        // Human-readable source of a combined-history entry: PoolMath, or the local
-        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
-        _historySourceLabel: function (e) {
-            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
-            if (e.source === 'poolmath') return 'PoolMath';
-            if (e.source === 'local-manual') return 'Local - manual change';
-            var rec = e.record || {};
-            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
-            // What caused it (records written before this was kept have no trigger and keep the plain label).
-            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
-            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
-            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
-        },
-        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
-        // new one, or started one and moved it out to when consumption alone reaches the target.
-        _historyTargetLabel: function (e) {
-            var rec = e.record || {};
-            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
-            var d = this._fmtDateTime(rec.targetDate);
-            // How far FC was from the target against the threshold, when the check compared them.
-            var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
-            // A change of the run window since the previous apply.
-            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
-            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
-            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
-            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
         },
         // Pressing Tune: if it was run recently and too few FC readings have come in since to tell whether its change
         // helped, ask first (with a Cancel). If the tuning settings were changed by hand since the last Tune, tuning again
@@ -1562,6 +1493,133 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             $(link).remove();
             setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
         },
+        _confirmApply: function () {
+            var self = this;
+            if (!self._lastResult) return;
+            var pct = self._lastResult.recommendedPct;
+            // When FC is too far above target to burn down by the original deadline, the
+            // calculation moved the target date out -- say so before it's applied.
+            var infoNote = self._lastResult.targetInfo ? ' Note: ' + self._lastResult.targetInfo : '';
+            $.pic.modalDialog.createConfirm('dlgConfirmApplyAutoSwg', {
+                message: 'Set the SWG pool setpoint to ' + pct + '%?' + infoNote + ' This changes the same setting as the Chlorinator panel above -- you can still edit it manually there at any time afterward. The change and the calculation behind it are logged locally and used by future checks.',
+                width: '420px',
+                height: 'auto',
+                title: 'Confirm Apply SWG %',
+                buttons: [{
+                    text: 'Yes', icon: '<i class="fas fa-check"></i>',
+                    click: function () {
+                        $.pic.modalDialog.closeDialog(this);
+                        self._setResultButtonsEnabled(false);
+                        $.putApiService('/state/autoSwg/apply', { poolSetpoint: pct }, 'Applying SWG %...', function (result) {
+                            self._renderResult(result.autoSwg, true);
+                            self._remindPoolMathLog(pct);
+                        });
+                    }
+                },
+                {
+                    text: 'No', icon: '<i class="far fa-window-close"></i>',
+                    click: function () {
+                        $.pic.modalDialog.closeDialog(this);
+                        self._setResultButtonsEnabled(false);
+                    }
+                }]
+            });
+        },
+        // The FC readings still come from PoolMath, but SWG % changes made here (or
+        // manually on the Chlorinator panel) are logged locally and take precedence
+        // over PoolMath's own SWG entries, so a missing PoolMath entry no longer
+        // skews future checks. Logging it there is still worthwhile for PoolMath's
+        // own charts and history. This is a one-button note, not a confirmation --
+        // the setpoint change has already been applied at this point either way.
+        _remindPoolMathLog: function (pct) {
+            $.pic.modalDialog.createConfirm('dlgAutoSwgLogPoolMathReminder', {
+                message: 'The SWG pool setpoint was changed to ' + pct + '%. This change is logged locally and will be used by future Check Now results, so logging it in PoolMath is optional. You may still want to log it there to keep your PoolMath history and charts complete.',
+                width: '420px',
+                height: 'auto',
+                title: 'SWG % Change Logged',
+                buttons: [
+                    { text: 'Got It', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
+                ]
+            });
+        }
+    });
+    // The PoolMath history dialog ("SWG % and FC History") and its export. It opens from the PoolMath History settings
+    // (pnlPoolMathConfig in chemistry.js), so it works for any pool with a PoolMath share code, SWG Assist set up or not;
+    // the SWG Assist panel uses its date format. One copy: $.pic.autoSwgHistory.show().
+    $.pic.autoSwgHistory = {
+        show: function () { this._showHistory(); },
+        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
+        // given and valid, otherwise in this browser's time zone.
+        _fmtDateTime: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', {
+                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        },
+        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
+        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
+        _settingsChangeText: function (e) {
+            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', bandPeakCap: 'Keep the Afternoon Peak Under FC High', bandIntegral: 'Correct the Hold from the Last Readings', bandScaledBias: 'Scale the Old-Test Raise by the Last Reading', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', awayMaintMultiplier: 'Trip Maintenance Multiplier', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
+            return (e.changes || []).map(function (c) {
+                var name = labels[c.setting] || c.setting;
+                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
+            }).join('; ');
+        },
+        _historyTypeLabel: function (e) {
+            if (e.type === 'SETTINGS') return 'Settings change';
+            if (e.type === 'FC') return 'FC reading';
+            if (e.type === 'CYA') return 'CYA change';
+            if (e.type === 'CL') return 'Liquid chlorine';
+            if (e.type === 'TEMP') return 'Water temp';
+            return 'SWG %';
+        },
+        _historyValueLabel: function (e) {
+            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
+            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
+            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
+            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
+            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
+            // In the units PoolMath logged it in ('°F' or '°C'; left off when not known).
+            if (e.type === 'TEMP') return n(e.value, 1) + (e.unit ? ' ' + e.unit : '');
+            return n(e.pct, 2) + '%';
+        },
+        // Human-readable source of a combined-history entry: PoolMath, or the local
+        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
+        _historySourceLabel: function (e) {
+            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
+            if (e.source === 'poolmath') return 'PoolMath';
+            if (e.source === 'local-manual') return 'Local - manual change';
+            var rec = e.record || {};
+            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
+            // What caused it (records written before this was kept have no trigger and keep the plain label).
+            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
+            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
+            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
+        },
+        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
+        // new one, or started one and moved it out to when consumption alone reaches the target.
+        _historyTargetLabel: function (e) {
+            var rec = e.record || {};
+            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
+            var d = this._fmtDateTime(rec.targetDate);
+            // How far FC was from the target against the threshold, when the check compared them.
+            var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
+            // A change of the run window since the previous apply.
+            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
+            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
+            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
+            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
+        },
         // Minutes after local midnight of an ISO time in `tz` (an IANA zone name) when given and valid, otherwise in this browser's time zone; NaN if unreadable.
         _minutesOfDay: function (iso, tz) {
             var d = new Date(iso);
@@ -1662,24 +1720,30 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                 }
                 if (entries.length === 0) {
                     $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
-                        .text('Nothing to show yet. SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way, and FC readings come from PoolMath.')
+                        .text('Nothing to show yet. FC readings, water temperatures and the other PoolMath rows come from the PoolMath share code in the PoolMath History settings; SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way.')
                         .appendTo(wrap);
                     return;
                 }
                 var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
-                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
+                // Without SWG Assist (no local SWG % or settings rows) the notes about its local log are left out.
+                var hasLocal = h.localSwgEntriesUsed > 0 || countOf('SETTINGS') > 0;
+                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('TEMP') + ' water temperature, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
                     + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
                     + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
                     + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
                     + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
-                    + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
-                    + 'The local SWG % log is kept for 48 months. '
+                    + 'Water temperature rows are the temperature logged with a test, in the units it was logged in PoolMath. '
+                    + (hasLocal ? 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
+                        + 'The local SWG % log is kept for 48 months. ' : '')
                     + 'Grey SWG % rows are automatic checks that repeated the % already in force. A change applied outside the SWG\'s run window only takes effect when the window opens, which the row says. '
                     + '"Ran" is how long the cell was actually making chlorine while that % was in force (until the next SWG % row), from the chlorinator output log; it is blank for rows from before the log began.';
                 $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
                 var hideLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem .25rem', cursor: 'pointer' }).appendTo(wrap);
                 var hideChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideLabel);
                 $('<span></span>').text('Hide automatic checks that repeated the previous %').appendTo(hideLabel);
+                var hideTempLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem 1rem', cursor: 'pointer' }).appendTo(wrap);
+                var hideTempChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideTempLabel);
+                $('<span></span>').text('Hide water temperature rows').appendTo(hideTempLabel);
                 var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
                 var cols = [
                     { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
@@ -1691,6 +1755,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     if (c.text === 'Ran') th.attr('title', 'How long the cell was actually making chlorine while this SWG % was in force (until the next SWG % row), from the chlorinator output log.');
                 });
                 hideChk.on('change', function () { $('tr.autoSwgUnchanged', tbl).toggle(!hideChk.is(':checked')); });
+                hideTempChk.on('change', function () { $('tr.autoSwgTemp', tbl).toggle(!hideTempChk.is(':checked')); });
                 var body = $('<tbody></tbody>').appendTo(tbl);
                 var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
                 var ranCells = [];
@@ -1699,6 +1764,7 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     var note = swgNotes[i] || {};
                     var row = $('<tr></tr>').appendTo(body);
                     if (note.unchanged) row.addClass('autoSwgUnchanged').css({ opacity: 0.55 });
+                    if (e.type === 'TEMP') row.addClass('autoSwgTemp');
                     var valueText = self._historyValueLabel(e) + (note.unchanged ? ' (unchanged)' : '') + (note.starts ? ' (starts ' + note.starts + ')' : '');
                     var tds = [];
                     [
@@ -1747,6 +1813,8 @@ note('Projected FC is what the algorithm said FC would be just before each readi
                     ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
                     ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
                     ['Previous CYA (ppm)', function (e) { return e.type === 'CYA' ? e.previous : undefined; }],
+                    ['Water temp', function (e) { return e.type === 'TEMP' ? e.value : undefined; }],
+                    ['Water temp unit', function (e) { return e.type === 'TEMP' ? e.unit : undefined; }],
                     ['Liquid chlorine strength (%)', function (e) { return e.type === 'CL' ? e.percent : undefined; }],
                     ['Liquid chlorine volume (mL)', function (e) { return e.type === 'CL' ? e.ml : undefined; }],
                     ['Liquid chlorine adds (ppm FC)', function (e) { return e.type === 'CL' ? e.ppm : undefined; }],
@@ -1791,55 +1859,6 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             link.click();
             $(link).remove();
             setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
-        },
-        _confirmApply: function () {
-            var self = this;
-            if (!self._lastResult) return;
-            var pct = self._lastResult.recommendedPct;
-            // When FC is too far above target to burn down by the original deadline, the
-            // calculation moved the target date out -- say so before it's applied.
-            var infoNote = self._lastResult.targetInfo ? ' Note: ' + self._lastResult.targetInfo : '';
-            $.pic.modalDialog.createConfirm('dlgConfirmApplyAutoSwg', {
-                message: 'Set the SWG pool setpoint to ' + pct + '%?' + infoNote + ' This changes the same setting as the Chlorinator panel above -- you can still edit it manually there at any time afterward. The change and the calculation behind it are logged locally and used by future checks.',
-                width: '420px',
-                height: 'auto',
-                title: 'Confirm Apply SWG %',
-                buttons: [{
-                    text: 'Yes', icon: '<i class="fas fa-check"></i>',
-                    click: function () {
-                        $.pic.modalDialog.closeDialog(this);
-                        self._setResultButtonsEnabled(false);
-                        $.putApiService('/state/autoSwg/apply', { poolSetpoint: pct }, 'Applying SWG %...', function (result) {
-                            self._renderResult(result.autoSwg, true);
-                            self._remindPoolMathLog(pct);
-                        });
-                    }
-                },
-                {
-                    text: 'No', icon: '<i class="far fa-window-close"></i>',
-                    click: function () {
-                        $.pic.modalDialog.closeDialog(this);
-                        self._setResultButtonsEnabled(false);
-                    }
-                }]
-            });
-        },
-        // The FC readings still come from PoolMath, but SWG % changes made here (or
-        // manually on the Chlorinator panel) are logged locally and take precedence
-        // over PoolMath's own SWG entries, so a missing PoolMath entry no longer
-        // skews future checks. Logging it there is still worthwhile for PoolMath's
-        // own charts and history. This is a one-button note, not a confirmation --
-        // the setpoint change has already been applied at this point either way.
-        _remindPoolMathLog: function (pct) {
-            $.pic.modalDialog.createConfirm('dlgAutoSwgLogPoolMathReminder', {
-                message: 'The SWG pool setpoint was changed to ' + pct + '%. This change is logged locally and will be used by future Check Now results, so logging it in PoolMath is optional. You may still want to log it there to keep your PoolMath history and charts complete.',
-                width: '420px',
-                height: 'auto',
-                title: 'SWG % Change Logged',
-                buttons: [
-                    { text: 'Got It', icon: '<i class="fas fa-check"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } }
-                ]
-            });
         }
-    });
+    };
 })(jQuery);
