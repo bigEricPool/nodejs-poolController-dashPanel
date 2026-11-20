@@ -157,27 +157,46 @@
             line = $('<div></div>').appendTo(pnl).css({ marginTop: '.8rem' });
             $('<div></div>').appendTo(line).css({ fontWeight: 'bold' }).text('Vacation: Away protection');
             line = $('<div></div>').appendTo(pnl);
-            $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Vacation Target FC', binding: 'awayTargetFc', min: 0, max: 30, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
-                .attr('title', 'The FC to aim for while Away protection is on (higher than your normal FC range, so FC is a little high when you are back). Your FC Low and FC High above are not changed, and range control takes over again when Away protection ends.');
+            self._elAwayTarget = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Vacation Target FC', binding: 'awayTargetFc', min: 0, max: 30, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
+                .attr('title', 'The FC to aim for while Away protection is on (higher than your normal FC range, so FC is a little high when you are back). Your FC Low and FC High above are not changed, and range control takes over again when Away protection ends. Not used while the Trip Maintenance Multiplier is on (above 0).');
+            self._awayTargetTip = self._elAwayTarget.attr('title');
+            // Trip Maintenance Multiplier: while Away protection is on, the SWG runs at the maintenance % times this, held flat (plus the storm or outage extra), and the
+            // Vacation Target FC is not used, so it is grayed out. 0 = the glide to the Vacation Target FC.
+            self._elAwayMult = $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Trip Maintenance Multiplier', binding: 'awayMaintMultiplier', min: 0, max: 3, step: 0.25, units: 'x', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
+                .attr('title', 'While Away is on, the SWG runs at the maintenance % from the last 14 days times this, held flat. 2.0 covers a burn twice today\'s. The maintenance % is taken as of your last FC test, so it does not drift while no one tests; a storm or outage still adds its extra on top (at most the points below). 1 to 3; 0 turns it off and Away protection glides to the Vacation Target FC instead.');
+            self._elAwayMult.on('change', function () { self._applyAwayMultiplier(self._elAwayMult.valueSpinner('val')); });
             line = $('<div></div>').appendTo(pnl);
             self._cbAway = $('<div></div>').appendTo(line).checkbox({ labelText: 'Away protection: keep FC safe while I am away', binding: 'awayEnabled' })
                 .attr('title', 'Set the Vacation Target FC, check this and save the settings to start. SWG Assist then checks PoolMath every 12 hours and may raise the SWG % to make up for FC lost to dilution (a sharp fall in the chlorinator\'s salt reading, from rain) or to an outage (njsPC was not running, so the equipment was off). It can only add chlorine: it applies the glide up to the Vacation Target FC you set (not limited), it never goes below the maintenance %, a storm or outage adds at most the points at right to that, one event acts for at most 3 days, and each boost ends by itself (it needs "Return to the maintenance % when the target period ends"). While it is on, Auto-Apply, the automatic check and auto tune are paused (their settings are kept, shown grayed out). At each check it also looks in PoolMath for a new FC reading: when one has been logged since you turned this on, Away protection turns itself off, this box clears, and Auto-Apply, the automatic check and auto tune go back to the settings you had, working from the new reading. Your FC range (FC Low and FC High) is never changed: range control takes over again as soon as Away protection ends. It also ends when you uncheck it and save. Log your last test before you turn it on, since a test logged afterward ends it.');
             self._awayTipBase = self._cbAway.attr('title');
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Storm or outage adds at most', binding: 'stormMaxExtraPct', min: 0, max: 50, step: 5, units: 'points', inputAttrs: { style: { width: '3rem' } }, labelAttrs: { style: { marginLeft: '1rem' } } })
                 .attr('title', 'How many points a storm (a sharp fall in the salt reading) or an outage may add to the SWG % your plan would have used without it. It does not limit the glide up to the vacation target you set. The SWG % never goes below the maintenance %.');
+            // While the Away box is ticked: the burn and maintenance % as of the last FC test and a suggested Trip Maintenance Multiplier (from the last check; see
+            // /state/autoSwg awaySuggestedMultiplier), with a button that puts the suggestion in the multiplier field (saved with the settings, like any edit).
+            self._elAwaySuggest = $('<div></div>').appendTo(pnl).css({ fontSize: '.85em', margin: '.2rem 0' }).hide();
+            self._elAwaySuggestText = $('<span></span>').appendTo(self._elAwaySuggest);
+            self._btnAwaySuggest = $('<button type="button"></button>').appendTo(self._elAwaySuggest).text('Use suggested').css({ marginLeft: '.5rem', fontSize: '.95em' })
+                .attr('title', 'Put the suggested multiplier in the Trip Maintenance Multiplier field. Save the settings to keep it.')
+                .on('click', function () {
+                    var m = self._awaySuggested;
+                    if (!(m > 0) || !self._elAwayMult) return;
+                    self._elAwayMult.valueSpinner('val', m);
+                    self._applyAwayMultiplier(m);
+                });
+            self._cbAway.on('change', function () { self._refreshAwaySuggest(); });
             // These steer Away protection's glide to the vacation target (normal operation keeps FC inside the range, so they have no effect outside Away). Which window applies depends on which side of the
             // vacation target the projected FC is on -- the above one is listed first. Same label width so the two spinners line up.
             var daysLabel = { style: { width: '22rem' } };   // wide enough for 'Run Periods (days) to Target (FC above target)' (about 21 rem)
-            line = $('<div></div>').appendTo(pnl);
+            line = self._elRowPeriodsAbove = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC above target)', binding: 'targetPeriodsAbove', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take bringing FC down to the vacation target when the projected FC is currently ABOVE it. This is the gentle direction -- consumption does most of the work, so a longer window means a smaller cutback from the maintenance %. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now, so 0.5 ends partway through a run and 1 about a day on.');
             line = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'Run Periods (days) to Target (FC below target)', binding: 'targetPeriodsBelow', min: 0.5, max: 30, step: 0.5, units: 'run periods', inputAttrs: { style: { width: '3rem' } }, labelAttrs: daysLabel })
                 .attr('title', 'How many SWG run periods (one period is one run window of the SWG, counted in on-time only) to take building FC back up to the vacation target when the projected FC is currently AT OR BELOW it. A shorter window means a harder push above the maintenance %, so you recover sooner. Half periods are allowed (0.5 at least). The deadline is when the SWG has been on for that many run windows from now.');
-            line = $('<div></div>').appendTo(pnl);
+            line = self._elRowOvernight = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).checkbox({ labelText: 'Keep FC at the target through the night', binding: 'protectOvernightLow' })
                 .attr('title', 'FC is lowest just before the SWG starts in the morning. With this on, the plan aims a little higher at the deadline whenever FC would otherwise fall below the target before the SWG starts again, so the overnight low stays at the target. Turn it off to aim at the target only at the deadline.');
-            line = $('<div></div>').appendTo(pnl);
+            line = self._elRowNewTargetThreshold = $('<div></div>').appendTo(pnl);
             $('<div></div>').appendTo(line).valueSpinner({ canEdit: true, labelText: 'New Target Date Threshold', binding: 'newTargetDateThresholdPpm', min: 0, max: 10, step: 0.5, units: 'ppm', inputAttrs: { style: { width: '3rem' } } })
                 .attr('title', 'If the projected FC is MORE than this many ppm above or below the Vacation Target FC, it starts a new target date -- a new deadline in the Run Periods to Target window that applies, like Check Now. If it is within this many ppm, it keeps the existing target date and just refreshes the SWG % against it.');
 
@@ -291,7 +310,7 @@
                         // Saving re-arms the automatic check, so pick up its new due time -- just that
                         // line, not a full re-render, which would disable Apply on a pending result.
                         $.getApiService('/state/autoSwg', null, function (result) {
-                            if (result && result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+                            if (result && result.nextAutoCheckAt) self._elNextAutoCheck.text('Next auto check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
                             else self._elNextAutoCheck.hide();
                         });
                     });
@@ -315,8 +334,6 @@
                 .attr('title', 'Re-fetches your PoolMath data and recalculates the SWG % needed to reach the SAME target FC by the SAME target date/time as your last apply -- does not change the target or restart the countdown. Use this to correct a glide already in progress with fresher data.')
                 .hide();
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
-            var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
-            btnHistory.on('click', function (e) { self._showHistory(); });
             var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
                 .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
             btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
@@ -343,6 +360,7 @@
             // them (what the applied % was based on, and the latest calculation) are the footnote below these lines.
             self._elRunningNow = $('<div></div>').appendTo(results).css({ fontWeight: 'bold' }).hide();
             self._elLastApplied = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
+            self._elHolding = $('<div></div>').appendTo(results).css({ margin: '.2rem 0' }).hide();
             self._elPendingStep = $('<div></div>').appendTo(results).css({ fontWeight: 'bold', color: '#a60', margin: '.2rem 0' }).hide();
             self._elNextAutoCheck = $('<div></div>').appendTo(results).css({ fontSize: '.85em', color: '#666' }).hide();
             // The background PoolMath history archive (up to 48 months of logs, pulled from PoolMath's
@@ -445,7 +463,7 @@
             // was applied, the pending step (what happens next), the next automatic check and the archive line, and last the long description the applied % was
             // based on, which is the footnote. The elements are created in a different order above; appending an existing element moves it.
             results.append(self._elResultDivider);
-            [self._elRunningNow, self._elLastApplied, self._elPendingStep, self._elNextAutoCheck, self._elArchiveStatus, self._elAppliedRationaleHeader, self._elAppliedRationale]
+            [self._elRunningNow, self._elLastApplied, self._elHolding, self._elPendingStep, self._elNextAutoCheck, self._elArchiveStatus, self._elAppliedRationaleHeader, self._elAppliedRationale]
                 .forEach(function (el) { results.append(el); });
             self._buildBench();
         },
@@ -494,14 +512,54 @@
             self._elSwgCapacity.text('The SWG can make up to ' + ppm.toFixed(2) + ' ppm/day of FC at its 100% setting over ' + (Math.round(w.hours * 100) / 100) + ' h (' + w.start + '-' + w.stop + src + ').')
                 .attr('title', 'The rated lbs/day scaled to the run window, for this pool volume. The recommended SWG % is the share of this that is needed.').show();
         },
+        // The Vacation Target FC is not used while the Trip Maintenance Multiplier is on (above 0): gray it out.
+        // These rows only steer the glide to the Vacation Target FC (and the single-target mode), so they are hidden while the multiplier is on under range
+        // control. The settings stay in the config for now (multiplier 0 brings the glide back); they are to be removed once the glide is retired.
+        _applyAwayMultiplier: function (mult) {
+            var self = this;
+            if (!self._elAwayTarget) return;
+            var on = parseFloat(mult) > 0;
+            var hideGlide = on && self._awayControlMode !== 'target';
+            [self._elRowPeriodsAbove, self._elRowOvernight, self._elRowNewTargetThreshold].forEach(function (el) { if (el) el.toggle(!hideGlide); });
+            self._elAwayTarget.css({ opacity: on ? 0.45 : '', pointerEvents: on ? 'none' : '' })
+                .attr('title', on ? 'Not used while the Trip Maintenance Multiplier is on: Away protection holds the maintenance % times the multiplier instead. Set the multiplier to 0 to use the Vacation Target FC.' : self._awayTargetTip);
+        },
+        // The burn line and suggested multiplier, shown while the Away box is ticked (saved or not).
+        _refreshAwaySuggest: function () {
+            var self = this;
+            if (!self._elAwaySuggest || !self._cbAway) return;
+            var ticked = self._cbAway.find('input[type=checkbox]').is(':checked');
+            if (!ticked) { self._elAwaySuggest.hide(); return; }
+            $.getApiService('/state/autoSwg', null, function (st) {
+                if (!st || typeof st.awayBurnPpmPerDay !== 'number' || typeof st.awaySuggestedMultiplier !== 'number') {
+                    self._awaySuggested = null;
+                    self._elAwaySuggestText.text('No burn yet: run Check Now (or wait for the next check) to see the burn and a suggested multiplier.');
+                    self._btnAwaySuggest.hide();
+                    self._elAwaySuggest.show();
+                    return;
+                }
+                var fmtDate = function (iso) { return iso ? new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '?'; };
+                self._awaySuggested = st.awaySuggestedMultiplier;
+                self._elAwaySuggestText.text('As of the last FC test (' + fmtDate(st.awayBasisAt) + '): burn ' + st.awayBurnPpmPerDay.toFixed(2) + ' ppm/day, maintenance ' + st.awayMaintenancePct + '%. Suggested multiplier ' + st.awaySuggestedMultiplier
+                    + ' (peak 14-day burn ' + (typeof st.awayPeakBurnPpmPerDay === 'number' ? st.awayPeakBurnPpmPerDay.toFixed(2) : '?') + ' ppm/day on ' + fmtDate(st.awayPeakBurnAt) + ', the highest in the last 30 days).');
+                self._elAwaySuggest.attr('title', 'The suggestion is the highest 14-day burn in the last 30 days divided by the burn at your last test, rounded up to the next 0.5 (1 to 3). With it, the flat % covers a return to that burn. It comes from the last check.');
+                self._btnAwaySuggest.show();
+                self._elAwaySuggest.show();
+            });
+        },
         // The Away protection status line under its settings; while it is on, the settings it pauses are grayed out.
         _applyAwayStatus: function (cfg) {
             var self = this;
             if (!self._elAwayStatus) return;
+            var mult = cfg && typeof cfg.awayMaintMultiplier === 'number' ? cfg.awayMaintMultiplier : 0;
+            self._awayControlMode = cfg && cfg.controlMode;
+            self._applyAwayMultiplier(mult);
+            self._refreshAwaySuggest();
             var status = cfg && cfg.awayStatus, text = '', color = '#666';
             if (status === 'active') {
                 var since = cfg.awayStartedAt ? new Date(cfg.awayStartedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '';
                 text = 'Away protection is ON' + (since ? ' (since ' + since + ')' : '') + '. It checks PoolMath every 12 hours and may raise the SWG % to make up for dilution or an outage, never below the maintenance %. A storm or outage adds at most ' + (cfg.stormMaxExtraPct) + ' points to the plan; the glide to your vacation target is not limited. Auto-Apply, the automatic check and auto tune are paused (their settings are kept). It ends when you uncheck it and save, or by itself when a new FC reading is logged in PoolMath. The target in use is the Vacation Target FC (' + cfg.awayTargetFc + ' ppm); your normal ' + (cfg.controlMode === 'target' ? 'Target FC (' + cfg.targetFc + ' ppm)' : 'FC range (' + cfg.fcLow + ' to ' + cfg.fcHigh + ' ppm)') + ' applies again when it ends.';
+                if (mult > 0) text = 'Away protection is ON' + (since ? ' (since ' + since + ')' : '') + '. It checks PoolMath every 12 hours and holds the SWG at the maintenance % (as of your last FC test) x ' + mult + ', flat, plus at most ' + (cfg.stormMaxExtraPct) + ' points for a storm or outage; the Vacation Target FC is not used. Auto-Apply, the automatic check and auto tune are paused (their settings are kept). It ends when you uncheck it and save, or by itself when a new FC reading is logged in PoolMath; your normal ' + (cfg.controlMode === 'target' ? 'Target FC (' + cfg.targetFc + ' ppm)' : 'FC range (' + cfg.fcLow + ' to ' + cfg.fcHigh + ' ppm)') + ' applies again then.';
                 color = '#2a7';
             }
             else if (status === 'needs-step') { text = 'Turn on "Return to the maintenance % when the target period ends" so each boost ends by itself. Away protection is off until then.'; color = '#b36b00'; }
@@ -918,19 +976,83 @@
                 if (p[0][0].style.display !== 'none') p[1].toggle(open);
             });
         },
-        // The applied status at the top of the results: what is running now, when it was last applied and when the next automatic check is due, plus the pending
-        // step, which comes right after the last applied line because it is what happens next. Redrawn by every result and, so the countdown and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
+        // The applied status at the top of the results. Under range control (the usual mode): what was applied and when, what that means now (held at 0% above the range, holding
+        // the maintenance %, raised below the range), when the next automatic check is due, and last, small, the fallback step (what the SWG does if nothing is applied by then: it is no
+        // forecast, every apply sets it a day ahead again). With a target: what is running now, when it was last applied, the pending step (what happens next) and the next check.
+        // Redrawn by every result and, so the countdowns and the step follow changes made elsewhere (the automatic check, another tab), once a minute.
         _renderSectionA: function (result) {
             var self = this;
+            var fmt = function (d) { return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); };
+            var inRange = result.controlMode === 'band' && result.awayStatus !== 'active' && typeof result.fcLow === 'number' && typeof result.fcHigh === 'number';
+            if (inRange) {
+                self._elRunningNow.hide();
+                if (result.lastAppliedAt) self._elLastApplied.text('SWG Assist applied ' + result.lastAppliedPct + '% on ' + fmt(new Date(result.lastAppliedAt))).css({ fontSize: '', color: '' }).show();
+                else self._elLastApplied.hide();
+                var holding = self._describeBandHold(result);
+                if (holding) self._elHolding.text(holding).show();
+                else self._elHolding.hide();
+                if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next auto check: ' + fmt(new Date(result.nextAutoCheckAt))).show();
+                else self._elNextAutoCheck.hide();
+                var fallback = result.stepAt && typeof result.stepPct === 'number' ? self._describeFallbackStep(result) : '';
+                if (fallback) self._elPendingStep.text(fallback).css({ fontWeight: 'normal', color: '#888', fontSize: '.8em', margin: 0 }).show();
+                else self._elPendingStep.hide();
+                self._elHolding.insertAfter(self._elLastApplied);
+                self._elNextAutoCheck.insertAfter(self._elHolding);
+                self._elPendingStep.insertAfter(self._elNextAutoCheck);
+                return;
+            }
             if (typeof result.lastAppliedPct === 'number') self._elRunningNow.text('Current SWG %: ' + result.lastAppliedPct + '%').show();
             else self._elRunningNow.hide();
-            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).show();
+            self._elHolding.hide();
+            if (result.stepAt) self._elPendingStep.text('Pending step: ' + self._describePendingStep(result)).css({ fontWeight: 'bold', color: '#a60', fontSize: '', margin: '.2rem 0' }).show();
             else self._elPendingStep.hide();
-            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + new Date(result.lastAppliedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            if (result.lastAppliedAt) self._elLastApplied.text('Last applied: ' + result.lastAppliedPct + '% on ' + fmt(new Date(result.lastAppliedAt))).css({ fontSize: '.85em', color: '#666' }).show();
             else self._elLastApplied.hide();
             // When the periodic automatic check is next due (only present while it's running).
-            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next automatic check: ' + new Date(result.nextAutoCheckAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })).show();
+            if (result.nextAutoCheckAt) self._elNextAutoCheck.text('Next auto check: ' + fmt(new Date(result.nextAutoCheckAt))).show();
             else self._elNextAutoCheck.hide();
+            self._elPendingStep.insertAfter(self._elLastApplied);
+            self._elNextAutoCheck.insertAfter(self._elPendingStep);
+        },
+        // What range control did in the applied calculation, in a sentence or two (the server keeps the numbers with the applied %; none until the first apply after an update).
+        // The hold at 0% above the range ends when the projection (no more chlorine made) is half a ppm under the top (BAND_RELEASE_PPM on the server), or when the last reading is
+        // 3 days old, whichever is first; the server works out both times.
+        _describeBandHold: function (result) {
+            var self = this;
+            var mode = result.lastAppliedBandMode, proj = result.lastAppliedProjectedFc;
+            if (!mode || typeof proj !== 'number' || typeof result.lastAppliedPct !== 'number') return '';
+            var hi = result.fcHigh, rng = result.fcLow + '-' + hi + ' ppm range', pct = result.lastAppliedPct;
+            var fmt = function (d) { return d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }); };
+            var away = function (ms) {
+                if (ms <= 3600000) return 'less than an hour';
+                var h = ms / 3600000;
+                return h < 36 ? Math.round(h) + ' hours' : Math.round(h / 24) + ' days';
+            };
+            if (mode === 'coast') {
+                var s = 'Holding at ' + pct + '%: FC is projected at ' + proj.toFixed(1) + ' ppm, above the ' + rng + '. ';
+                var release = (hi - 0.5).toFixed(1);
+                var reach = result.lastAppliedBandReachAt ? new Date(result.lastAppliedBandReachAt) : null;
+                var stale = result.lastAppliedBandStaleAt ? new Date(result.lastAppliedBandStaleAt) : null;
+                var avg = typeof result.lastAppliedAvgConsumption === 'number' ? ' at the current ' + result.lastAppliedAvgConsumption + ' ppm/day' : '';
+                var now = Date.now();
+                if (reach && !isNaN(reach.getTime()) && (!stale || reach.getTime() <= stale.getTime()))
+                    return s + 'The SWG comes back on when the projection reaches ' + release + ' ppm, about ' + away(reach.getTime() - now) + ' away' + avg + '.';
+                if (stale && !isNaN(stale.getTime()))
+                    return s + 'The SWG comes back on by ' + fmt(stale) + ', when the last FC reading is 3 days old, at about the maintenance %' + (reach && !isNaN(reach.getTime()) ? ' (the projection would not reach ' + release + ' ppm until about ' + away(reach.getTime() - now) + ' from now' + avg + ')' : '') + '.';
+                return s + 'The SWG comes back on when the projection reaches ' + release + ' ppm.';
+            }
+            if (mode === 'boost') return 'Raised to ' + pct + '%: FC is projected at ' + proj.toFixed(1) + ' ppm, below the ' + rng + ', so the SWG is set to bring it back toward the middle.';
+            return 'Holding at ' + pct + '%: FC is projected at ' + proj.toFixed(1) + ' ppm, inside the ' + rng + '.';
+        },
+        // The fallback step under range control, as a clock time: if nothing is applied (an automatic check, or by hand) before then, the SWG goes to the maintenance %.
+        _describeFallbackStep: function (result) {
+            var at = new Date(result.stepAt), now = new Date();
+            if (isNaN(at.getTime())) return '';
+            if (at.getTime() <= now.getTime()) return 'Fallback: the SWG goes to the maintenance ' + result.stepPct + '% as soon as the step runs (nothing was applied in time).';
+            var time = at.toLocaleTimeString([], { timeStyle: 'short' });
+            var day = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(), atDay = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+            var when = atDay === day ? time + ' today' : atDay === day + 86400000 ? time + ' tomorrow' : time + ' on ' + at.toLocaleDateString([], { dateStyle: 'short' });
+            return 'Fallback: if nothing is applied (automatic or manual) before ' + when + ', the SWG goes to the maintenance ' + result.stepPct + '%.';
         },
         // Reloads what the server has now: section A (what is applied, the pending step, the next check) always, and the whole calculation and its details
         // when a newer one has been made (an automatic check, or Away protection acting) and there is no unapplied preview here waiting for your Apply.
@@ -967,9 +1089,6 @@
             var verb = result.stepPct > result.lastAppliedPct ? 'rises to ' : 'drops to ';
             var target = new Date(result.stepAt);
             var remaining = self._fmtCountdown(target.getTime() - Date.now());
-            // Under range control the automatic checks decide the %, and every apply sets this step a day ahead again, so it is no forecast of when the SWG resumes: it is what happens if the checks stop.
-            if (result.controlMode === 'band' && result.awayStatus !== 'active' && typeof result.fcLow === 'number' && typeof result.fcHigh === 'number')
-                return 'if no automatic check has run by then (FC range ' + result.fcLow + ' to ' + result.fcHigh + ' ppm), SWG ' + verb + result.stepPct + '% (' + target.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) + ', in ' + remaining + ')';
             // lastAppliedTargetFc is whatever targetFc was in effect at the apply that scheduled
             // this step -- not necessarily today's config, which may have changed since.
             var s = 'at the end of the target period' + (typeof result.lastAppliedTargetFc === 'number' ? ' (target FC ' + result.lastAppliedTargetFc + ' ppm)' : '') + ' SWG ' + verb + result.stepPct + '%';
@@ -993,23 +1112,8 @@
             if (days === 0) parts.push(mins + 'm');
             return parts.join(' ');
         },
-        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
-        // given and valid, otherwise in this browser's time zone.
-        _fmtDateTime: function (iso, tz) {
-            var d = new Date(iso);
-            if (isNaN(d.getTime())) return '';
-            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-            if (tz) {
-                try {
-                    var parts = {};
-                    new Intl.DateTimeFormat('en-US', {
-                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
-                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
-                } catch (err) { /* unknown zone -- fall through to browser time */ }
-            }
-            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-        },
+        // 'YYYY-MM-DD HH:mm' (see $.pic.autoSwgHistory._fmtDateTime, shared with the history dialog).
+        _fmtDateTime: function (iso, tz) { return $.pic.autoSwgHistory._fmtDateTime(iso, tz); },
         // The start/end of the running-average window the server actually used, and
         // whether it had to be extended back to include enough FC readings.
         _describeAvgWindow: function (result) {
@@ -1021,58 +1125,6 @@
             var text = 'Averaging window: ' + self._fmtDateTime(result.avgWindowStart, tz) + ' to ' + self._fmtDateTime(result.avgWindowEnd, tz) + (tz ? ' ' + tz : '');
             if (details.avgWindowExtended) text += ' (extended back from ' + inputs.windowDays + ' days to include at least 3 FC readings)';
             return text;
-        },
-        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
-        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
-        _settingsChangeText: function (e) {
-            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', bandPeakCap: 'Keep the Afternoon Peak Under FC High', bandIntegral: 'Correct the Hold from the Last Readings', bandScaledBias: 'Scale the Old-Test Raise by the Last Reading', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
-            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
-            return (e.changes || []).map(function (c) {
-                var name = labels[c.setting] || c.setting;
-                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
-            }).join('; ');
-        },
-        _historyTypeLabel: function (e) {
-            if (e.type === 'SETTINGS') return 'Settings change';
-            if (e.type === 'FC') return 'FC reading';
-            if (e.type === 'CYA') return 'CYA change';
-            if (e.type === 'CL') return 'Liquid chlorine';
-            return 'SWG %';
-        },
-        _historyValueLabel: function (e) {
-            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
-            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
-            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
-            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
-            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
-            return n(e.pct, 2) + '%';
-        },
-        // Human-readable source of a combined-history entry: PoolMath, or the local
-        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
-        _historySourceLabel: function (e) {
-            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
-            if (e.source === 'poolmath') return 'PoolMath';
-            if (e.source === 'local-manual') return 'Local - manual change';
-            var rec = e.record || {};
-            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
-            // What caused it (records written before this was kept have no trigger and keep the plain label).
-            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
-            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
-            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
-        },
-        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
-        // new one, or started one and moved it out to when consumption alone reaches the target.
-        _historyTargetLabel: function (e) {
-            var rec = e.record || {};
-            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
-            var d = this._fmtDateTime(rec.targetDate);
-            // How far FC was from the target against the threshold, when the check compared them.
-            var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
-            // A change of the run window since the previous apply.
-            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
-            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
-            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
-            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
         },
         // Pressing Tune: if it was run recently and too few FC readings have come in since to tell whether its change
         // helped, ask first (with a Cancel). If the tuning settings were changed by hand since the last Tune, tuning again
@@ -1446,236 +1498,6 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             var link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', 'autoSwgProjectionAccuracy-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv');
-            document.body.appendChild(link);
-            link.click();
-            $(link).remove();
-            setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
-        },
-        // Minutes after local midnight of an ISO time in `tz` (an IANA zone name) when given and valid, otherwise in this browser's time zone; NaN if unreadable.
-        _minutesOfDay: function (iso, tz) {
-            var d = new Date(iso);
-            if (isNaN(d.getTime())) return NaN;
-            if (tz) {
-                try {
-                    var parts = {};
-                    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
-                    return (parseInt(parts.hour, 10) % 24) * 60 + parseInt(parts.minute, 10);
-                } catch (err) { /* unknown zone -- fall through to browser time */ }
-            }
-            return d.getHours() * 60 + d.getMinutes();
-        },
-        // Notes on the SWG % rows of the history (newest first, as shown): an array parallel to `entries` with, for each SWG row,
-        // `unchanged` (an automatic check that repeated the % already in force) and `starts` (a change applied outside the SWG's run window
-        // only takes effect when the window opens: "06:40", or "06:40 tomorrow" when it was applied after the window closed).
-        _historySwgNotes: function (entries) {
-            var self = this;
-            var notes = entries.map(function () { return {}; });
-            var idx = [];
-            entries.forEach(function (e, i) { if (e.type === 'SWG') idx.push(i); });
-            var toMin = function (t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN; };
-            idx.forEach(function (i, k) {
-                var e = entries[i], rec = e.record || {};
-                // The % in force before this row: the local record says it, otherwise the next older SWG row.
-                var prev = typeof rec.previousPct === 'number' ? rec.previousPct : (k + 1 < idx.length ? entries[idx[k + 1]].pct : undefined);
-                if (typeof prev === 'number' && typeof e.pct === 'number' && prev === e.pct && e.source !== 'local-manual') notes[i].unchanged = true;
-                var inp = rec.inputs || {};
-                var a = toMin(inp.swgStartTime), b = toMin(inp.swgStopTime);
-                if (typeof e.pct === 'number' && e.pct > 0 && !isNaN(a) && !isNaN(b) && b > a) {
-                    var now = self._minutesOfDay(e.ts, inp.timezone);
-                    if (!isNaN(now) && (now < a || now >= b)) notes[i].starts = inp.swgStartTime + (now >= b ? ' tomorrow' : '');
-                }
-            });
-            return notes;
-        },
-        // Fills the "Ran" column: how long the cell was actually making chlorine while each SWG % was in force (until the next SWG % row, or now), from the
-        // hourly output log (the share of the hour's samples with an output above 0, weighted by how much of the hour falls in the interval). Rows from before
-        // the log began stay blank. `cells` is [{ entry, td }] for the SWG rows.
-        _fillRanHours: function (entries, cells) {
-            var swg = entries.filter(function (e) { return e.type === 'SWG'; });
-            var locals = swg.filter(function (e) { return e.record; });
-            if (!cells.length || !locals.length) return;
-            var oldest = new Date(locals[locals.length - 1].ts).getTime();
-            var days = Math.min(1461, Math.max(2, Math.ceil((Date.now() - oldest) / 86400000) + 2));
-            $.getApiService('/state/autoSwg/output?days=' + days, null, function (r) {
-                var hours = r && Array.isArray(r.hours) ? r.hours : [];
-                if (!hours.length) return;
-                var lines = hours.map(function (h) { return { t: new Date(h.t).getTime(), frac: h.n > 0 ? h.on / h.n : 0 }; }).filter(function (h) { return !isNaN(h.t); });
-                if (!lines.length) return;
-                var firstLog = lines.reduce(function (m, h) { return Math.min(m, h.t); }, Infinity);
-                // SWG rows oldest first, so a row ends where the next newer one begins.
-                var asc = swg.slice().sort(function (a, b) { return new Date(a.ts) - new Date(b.ts); });
-                var endOf = {};
-                asc.forEach(function (e, k) { endOf[e.ts + '|' + k] = k + 1 < asc.length ? new Date(asc[k + 1].ts).getTime() : Date.now(); });
-                cells.forEach(function (c) {
-                    var k = asc.indexOf(c.entry);
-                    if (k < 0) return;
-                    var from = new Date(c.entry.ts).getTime(), to = endOf[c.entry.ts + '|' + k];
-                    if (from < firstLog) return;
-                    var total = 0;
-                    lines.forEach(function (h) {
-                        var overlap = Math.min(to, h.t + 3600000) - Math.max(from, h.t);
-                        if (overlap > 0) total += (overlap / 3600000) * h.frac;
-                    });
-                    c.td.text((Math.round(total * 10) / 10) + ' h' + (k + 1 === asc.length ? ' so far' : ''));
-                });
-            });
-        },
-        // Shows the SWG % and FC history as a calculation sees it -- FC readings from
-        // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
-        // PoolMath SWG entry within an hour of a local one is left out) -- newest first,
-        // each labeled with its source, and offers it for download as CSV or JSON.
-        _showHistory: function () {
-            var self = this;
-            $.getApiService('/state/autoSwg/history/combined', null, 'Loading SWG % and FC history...', function (h) {
-                h = h || {};
-                var entries = Array.isArray(h.entries) ? h.entries.slice() : [];
-                entries.sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
-                var swgNotes = self._historySwgNotes(entries);
-                var buttons = [];
-                if (entries.length > 0) {
-                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'csv'); } });
-                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'json'); } });
-                }
-                buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
-                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgHistory', {
-                    width: '860px',
-                    height: 'auto',
-                    title: 'SWG % and FC History',
-                    buttons: buttons
-                });
-                var wrap = $('<div></div>').css({ maxHeight: '26rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
-                if (h.poolMathError) {
-                    $('<div></div>').css({ padding: '.25rem .25rem .5rem .25rem', color: '#b00' })
-                        .text('PoolMath could not be read (' + h.poolMathError + '), so only the local SWG % log is shown.')
-                        .appendTo(wrap);
-                }
-                if (entries.length === 0) {
-                    $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
-                        .text('Nothing to show yet. SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way, and FC readings come from PoolMath.')
-                        .appendTo(wrap);
-                    return;
-                }
-                var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
-                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
-                    + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
-                    + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
-                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
-                    + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
-                    + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
-                    + 'The local SWG % log is kept for 48 months. '
-                    + 'Grey SWG % rows are automatic checks that repeated the % already in force. A change applied outside the SWG\'s run window only takes effect when the window opens, which the row says. '
-                    + '"Ran" is how long the cell was actually making chlorine while that % was in force (until the next SWG % row), from the chlorinator output log; it is blank for rows from before the log began.';
-                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
-                var hideLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem .25rem', cursor: 'pointer' }).appendTo(wrap);
-                var hideChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideLabel);
-                $('<span></span>').text('Hide automatic checks that repeated the previous %').appendTo(hideLabel);
-                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
-                var cols = [
-                    { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
-                    { text: 'Ran', align: 'right' }, { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
-                ];
-                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
-                cols.forEach(function (c) {
-                    var th = $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
-                    if (c.text === 'Ran') th.attr('title', 'How long the cell was actually making chlorine while this SWG % was in force (until the next SWG % row), from the chlorinator output log.');
-                });
-                hideChk.on('change', function () { $('tr.autoSwgUnchanged', tbl).toggle(!hideChk.is(':checked')); });
-                var body = $('<tbody></tbody>').appendTo(tbl);
-                var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
-                var ranCells = [];
-                entries.forEach(function (e, i) {
-                    var rec = e.record || {};
-                    var note = swgNotes[i] || {};
-                    var row = $('<tr></tr>').appendTo(body);
-                    if (note.unchanged) row.addClass('autoSwgUnchanged').css({ opacity: 0.55 });
-                    var valueText = self._historyValueLabel(e) + (note.unchanged ? ' (unchanged)' : '') + (note.starts ? ' (starts ' + note.starts + ')' : '');
-                    var tds = [];
-                    [
-                        [self._fmtDateTime(e.ts), 'left'],
-                        [self._historyTypeLabel(e), 'left'],
-                        [valueText, e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
-                        [self._historySourceLabel(e), 'left'],
-                        ['', 'right'],
-                        [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
-                        [blank(rec.previousPct), 'right'],
-                        [blank(rec.recommendedPct), 'right'],
-                        [self._historyTargetLabel(e), 'left']
-                    ].forEach(function (cell) {
-                        tds.push($('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row));
-                    });
-                    if (e.type === 'SWG') ranCells.push({ entry: e, td: tds[4] });
-                });
-                self._fillRanHours(entries, ranCells);
-            });
-        },
-        // Downloads `entries` (newest first, as displayed) as a file, oldest first. JSON
-        // keeps every field (including the full inputs and outputs behind local entries);
-        // CSV is one row per entry with the main values and a few key inputs/outputs
-        // flattened into columns.
-        _exportHistory: function (entries, format) {
-            var self = this;
-            var ordered = entries.slice().reverse();
-            var d = new Date();
-            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-            var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
-            var text, type;
-            if (format === 'json') {
-                // The share code and pool name are private (records saved before they were left out still hold them).
-                text = JSON.stringify(ordered, function (key, value) { return key === 'shareCode' || key === 'poolName' ? undefined : value; }, 2);
-                type = 'application/json';
-            }
-            else {
-                var out = function (e) { return (e.record || {}).outputs || {}; };
-                var inp = function (e) { return (e.record || {}).inputs || {}; };
-                var cols = [
-                    ['Time (ISO)', function (e) { return e.ts; }],
-                    ['Type', function (e) { return e.type; }],
-                    ['Source', function (e) { return self._historySourceLabel(e); }],
-                    ['Settings changed', function (e) { return e.type === 'SETTINGS' ? self._settingsChangeText(e) : undefined; }],
-                    ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
-                    ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
-                    ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
-                    ['Previous CYA (ppm)', function (e) { return e.type === 'CYA' ? e.previous : undefined; }],
-                    ['Liquid chlorine strength (%)', function (e) { return e.type === 'CL' ? e.percent : undefined; }],
-                    ['Liquid chlorine volume (mL)', function (e) { return e.type === 'CL' ? e.ml : undefined; }],
-                    ['Liquid chlorine adds (ppm FC)', function (e) { return e.type === 'CL' ? e.ppm : undefined; }],
-                    ['ppm/day', function (e) { return e.ppmPerDay; }],
-                    ['Run hours', function (e) { return e.hrs; }],
-                    ['Previous %', function (e) { return (e.record || {}).previousPct; }],
-                    ['Recommended %', function (e) { return (e.record || {}).recommendedPct; }],
-                    ['Target outcome', function (e) { return (e.record || {}).targetOutcome; }],
-                    ['Target date (ISO)', function (e) { return (e.record || {}).targetDate; }],
-                    ['Previous target date (ISO)', function (e) { return (e.record || {}).previousTargetDate; }],
-                    ['Target stray (ppm)', function (e) { return (e.record || {}).targetStrayPpm; }],
-                    ['New target date threshold (ppm)', function (e) { return (e.record || {}).targetThresholdPpm; }],
-                    ['Run window change', function (e) { var c = (e.record || {}).runWindowChange; return c ? c.from + ' -> ' + c.to : undefined; }],
-                    ['Maintenance %', function (e) { return out(e).maintenancePct; }],
-                    ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
-                    ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
-                    ['Avg window start (ISO)', function (e) { return out(e).avgWindowStart; }],
-                    ['Avg window end (ISO)', function (e) { return out(e).avgWindowEnd; }],
-                    ['Gallons', function (e) { return inp(e).gallons; }],
-                    ['SWG lbs/day', function (e) { return inp(e).swgLbsPerDay; }],
-                    ['Run start', function (e) { return inp(e).swgStartTime; }],
-                    ['Run stop', function (e) { return inp(e).swgStopTime; }],
-                    ['Window days', function (e) { return inp(e).windowDays; }],
-                    ['Target FC (ppm)', function (e) { return inp(e).targetFc; }],
-                    ['Target period (days on the clock)', function (e) { return inp(e).targetDays; }]
-                ];
-                var esc = function (v) {
-                    if (typeof v === 'undefined' || v === null) return '';
-                    var s = String(v);
-                    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-                };
-                var lines = [cols.map(function (c) { return esc(c[0]); }).join(',')];
-                ordered.forEach(function (e) { lines.push(cols.map(function (c) { return esc(c[1](e)); }).join(',')); });
-                text = lines.join('\r\n') + '\r\n';
-                type = 'text/csv';
-            }
-            var url = window.URL.createObjectURL(new Blob([text], { type: type }));
-            var link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName);
             document.body.appendChild(link);
             link.click();
             $(link).remove();
@@ -2671,4 +2493,322 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             else self._elBenchAcidNote.hide();
         }
     });
+    // The PoolMath history dialog ("SWG % and FC History") and its export. It opens from the PoolMath History settings
+    // (pnlPoolMathConfig in chemistry.js), so it works for any pool with a PoolMath share code, SWG Assist set up or not;
+    // the SWG Assist panel uses its date format. One copy: $.pic.autoSwgHistory.show().
+    $.pic.autoSwgHistory = {
+        show: function () { this._showHistory(); },
+        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
+        // given and valid, otherwise in this browser's time zone.
+        _fmtDateTime: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', {
+                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        },
+        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
+        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
+        _settingsChangeText: function (e) {
+            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', bandPeakCap: 'Keep the Afternoon Peak Under FC High', bandIntegral: 'Correct the Hold from the Last Readings', bandScaledBias: 'Scale the Old-Test Raise by the Last Reading', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', awayMaintMultiplier: 'Trip Maintenance Multiplier', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
+            return (e.changes || []).map(function (c) {
+                var name = labels[c.setting] || c.setting;
+                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
+            }).join('; ');
+        },
+        _historyTypeLabel: function (e) {
+            if (e.type === 'SETTINGS') return 'Settings change';
+            if (e.type === 'FC') return 'FC reading';
+            if (e.type === 'CYA') return 'CYA change';
+            if (e.type === 'CL') return 'Liquid chlorine';
+            if (e.type === 'TEMP') return 'Water temp';
+            return 'SWG %';
+        },
+        _historyValueLabel: function (e) {
+            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
+            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
+            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
+            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
+            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
+            // In the units PoolMath logged it in ('°F' or '°C'; left off when not known).
+            if (e.type === 'TEMP') return n(e.value, 1) + (e.unit ? ' ' + e.unit : '');
+            return n(e.pct, 2) + '%';
+        },
+        // Human-readable source of a combined-history entry: PoolMath, or the local
+        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
+        _historySourceLabel: function (e) {
+            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
+            if (e.source === 'poolmath') return 'PoolMath';
+            if (e.source === 'local-manual') return 'Local - manual change';
+            var rec = e.record || {};
+            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
+            // What caused it (records written before this was kept have no trigger and keep the plain label).
+            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
+            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
+            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
+        },
+        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
+        // new one, or started one and moved it out to when consumption alone reaches the target.
+        _historyTargetLabel: function (e) {
+            var rec = e.record || {};
+            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
+            var d = this._fmtDateTime(rec.targetDate);
+            // How far FC was from the target against the threshold, when the check compared them.
+            var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
+            // A change of the run window since the previous apply.
+            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
+            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
+            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
+            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
+        },
+        // Minutes after local midnight of an ISO time in `tz` (an IANA zone name) when given and valid, otherwise in this browser's time zone; NaN if unreadable.
+        _minutesOfDay: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return NaN;
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return (parseInt(parts.hour, 10) % 24) * 60 + parseInt(parts.minute, 10);
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getHours() * 60 + d.getMinutes();
+        },
+        // Notes on the SWG % rows of the history (newest first, as shown): an array parallel to `entries` with, for each SWG row,
+        // `unchanged` (an automatic check that repeated the % already in force) and `starts` (a change applied outside the SWG's run window
+        // only takes effect when the window opens: "06:40", or "06:40 tomorrow" when it was applied after the window closed).
+        _historySwgNotes: function (entries) {
+            var self = this;
+            var notes = entries.map(function () { return {}; });
+            var idx = [];
+            entries.forEach(function (e, i) { if (e.type === 'SWG') idx.push(i); });
+            var toMin = function (t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN; };
+            idx.forEach(function (i, k) {
+                var e = entries[i], rec = e.record || {};
+                // The % in force before this row: the local record says it, otherwise the next older SWG row.
+                var prev = typeof rec.previousPct === 'number' ? rec.previousPct : (k + 1 < idx.length ? entries[idx[k + 1]].pct : undefined);
+                if (typeof prev === 'number' && typeof e.pct === 'number' && prev === e.pct && e.source !== 'local-manual') notes[i].unchanged = true;
+                var inp = rec.inputs || {};
+                var a = toMin(inp.swgStartTime), b = toMin(inp.swgStopTime);
+                if (typeof e.pct === 'number' && e.pct > 0 && !isNaN(a) && !isNaN(b) && b > a) {
+                    var now = self._minutesOfDay(e.ts, inp.timezone);
+                    if (!isNaN(now) && (now < a || now >= b)) notes[i].starts = inp.swgStartTime + (now >= b ? ' tomorrow' : '');
+                }
+            });
+            return notes;
+        },
+        // Fills the "Ran" column: how long the cell was actually making chlorine while each SWG % was in force (until the next SWG % row, or now), from the
+        // hourly output log (the share of the hour's samples with an output above 0, weighted by how much of the hour falls in the interval). Rows from before
+        // the log began stay blank. `cells` is [{ entry, td }] for the SWG rows.
+        _fillRanHours: function (entries, cells) {
+            var swg = entries.filter(function (e) { return e.type === 'SWG'; });
+            var locals = swg.filter(function (e) { return e.record; });
+            if (!cells.length || !locals.length) return;
+            var oldest = new Date(locals[locals.length - 1].ts).getTime();
+            var days = Math.min(1461, Math.max(2, Math.ceil((Date.now() - oldest) / 86400000) + 2));
+            $.getApiService('/state/autoSwg/output?days=' + days, null, function (r) {
+                var hours = r && Array.isArray(r.hours) ? r.hours : [];
+                if (!hours.length) return;
+                var lines = hours.map(function (h) { return { t: new Date(h.t).getTime(), frac: h.n > 0 ? h.on / h.n : 0 }; }).filter(function (h) { return !isNaN(h.t); });
+                if (!lines.length) return;
+                var firstLog = lines.reduce(function (m, h) { return Math.min(m, h.t); }, Infinity);
+                // SWG rows oldest first, so a row ends where the next newer one begins.
+                var asc = swg.slice().sort(function (a, b) { return new Date(a.ts) - new Date(b.ts); });
+                var endOf = {};
+                asc.forEach(function (e, k) { endOf[e.ts + '|' + k] = k + 1 < asc.length ? new Date(asc[k + 1].ts).getTime() : Date.now(); });
+                cells.forEach(function (c) {
+                    var k = asc.indexOf(c.entry);
+                    if (k < 0) return;
+                    var from = new Date(c.entry.ts).getTime(), to = endOf[c.entry.ts + '|' + k];
+                    if (from < firstLog) return;
+                    var total = 0;
+                    lines.forEach(function (h) {
+                        var overlap = Math.min(to, h.t + 3600000) - Math.max(from, h.t);
+                        if (overlap > 0) total += (overlap / 3600000) * h.frac;
+                    });
+                    c.td.text((Math.round(total * 10) / 10) + ' h' + (k + 1 === asc.length ? ' so far' : ''));
+                });
+            });
+        },
+        // Shows the SWG % and FC history as a calculation sees it -- FC readings from
+        // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
+        // PoolMath SWG entry within an hour of a local one is left out) -- newest first,
+        // each labeled with its source, and offers it for download as CSV or JSON.
+        _showHistory: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/history/combined', null, 'Loading SWG % and FC history...', function (h) {
+                h = h || {};
+                var entries = Array.isArray(h.entries) ? h.entries.slice() : [];
+                entries.sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
+                var swgNotes = self._historySwgNotes(entries);
+                var buttons = [];
+                if (entries.length > 0) {
+                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'csv'); } });
+                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'json'); } });
+                }
+                buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgHistory', {
+                    width: '860px',
+                    height: 'auto',
+                    title: 'SWG % and FC History',
+                    buttons: buttons
+                });
+                var wrap = $('<div></div>').css({ maxHeight: '26rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                if (h.poolMathError) {
+                    $('<div></div>').css({ padding: '.25rem .25rem .5rem .25rem', color: '#b00' })
+                        .text('PoolMath could not be read (' + h.poolMathError + '), so only the local SWG % log is shown.')
+                        .appendTo(wrap);
+                }
+                if (entries.length === 0) {
+                    $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
+                        .text('Nothing to show yet. FC readings, water temperatures and the other PoolMath rows come from the PoolMath share code in the PoolMath History settings; SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way.')
+                        .appendTo(wrap);
+                    return;
+                }
+                var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
+                // Without SWG Assist (no local SWG % or settings rows) the notes about its local log are left out.
+                var hasLocal = h.localSwgEntriesUsed > 0 || countOf('SETTINGS') > 0;
+                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('TEMP') + ' water temperature, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
+                    + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
+                    + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
+                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
+                    + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
+                    + 'Water temperature rows are the temperature logged with a test, in the units it was logged in PoolMath. '
+                    + (hasLocal ? 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
+                        + 'The local SWG % log is kept for 48 months. ' : '')
+                    + 'Grey SWG % rows are automatic checks that repeated the % already in force. A change applied outside the SWG\'s run window only takes effect when the window opens, which the row says. '
+                    + '"Ran" is how long the cell was actually making chlorine while that % was in force (until the next SWG % row), from the chlorinator output log; it is blank for rows from before the log began.';
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
+                var hideLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem .25rem', cursor: 'pointer' }).appendTo(wrap);
+                var hideChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideLabel);
+                $('<span></span>').text('Hide automatic checks that repeated the previous %').appendTo(hideLabel);
+                var hideTempLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem 1rem', cursor: 'pointer' }).appendTo(wrap);
+                var hideTempChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideTempLabel);
+                $('<span></span>').text('Hide water temperature rows').appendTo(hideTempLabel);
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
+                var cols = [
+                    { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
+                    { text: 'Ran', align: 'right' }, { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
+                ];
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                cols.forEach(function (c) {
+                    var th = $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
+                    if (c.text === 'Ran') th.attr('title', 'How long the cell was actually making chlorine while this SWG % was in force (until the next SWG % row), from the chlorinator output log.');
+                });
+                hideChk.on('change', function () { $('tr.autoSwgUnchanged', tbl).toggle(!hideChk.is(':checked')); });
+                hideTempChk.on('change', function () { $('tr.autoSwgTemp', tbl).toggle(!hideTempChk.is(':checked')); });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
+                var ranCells = [];
+                entries.forEach(function (e, i) {
+                    var rec = e.record || {};
+                    var note = swgNotes[i] || {};
+                    var row = $('<tr></tr>').appendTo(body);
+                    if (note.unchanged) row.addClass('autoSwgUnchanged').css({ opacity: 0.55 });
+                    if (e.type === 'TEMP') row.addClass('autoSwgTemp');
+                    var valueText = self._historyValueLabel(e) + (note.unchanged ? ' (unchanged)' : '') + (note.starts ? ' (starts ' + note.starts + ')' : '');
+                    var tds = [];
+                    [
+                        [self._fmtDateTime(e.ts), 'left'],
+                        [self._historyTypeLabel(e), 'left'],
+                        [valueText, e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
+                        [self._historySourceLabel(e), 'left'],
+                        ['', 'right'],
+                        [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
+                        [blank(rec.previousPct), 'right'],
+                        [blank(rec.recommendedPct), 'right'],
+                        [self._historyTargetLabel(e), 'left']
+                    ].forEach(function (cell) {
+                        tds.push($('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row));
+                    });
+                    if (e.type === 'SWG') ranCells.push({ entry: e, td: tds[4] });
+                });
+                self._fillRanHours(entries, ranCells);
+            });
+        },
+        // Downloads `entries` (newest first, as displayed) as a file, oldest first. JSON
+        // keeps every field (including the full inputs and outputs behind local entries);
+        // CSV is one row per entry with the main values and a few key inputs/outputs
+        // flattened into columns.
+        _exportHistory: function (entries, format) {
+            var self = this;
+            var ordered = entries.slice().reverse();
+            var d = new Date();
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
+            var text, type;
+            if (format === 'json') {
+                // The share code and pool name are private (records saved before they were left out still hold them).
+                text = JSON.stringify(ordered, function (key, value) { return key === 'shareCode' || key === 'poolName' ? undefined : value; }, 2);
+                type = 'application/json';
+            }
+            else {
+                var out = function (e) { return (e.record || {}).outputs || {}; };
+                var inp = function (e) { return (e.record || {}).inputs || {}; };
+                var cols = [
+                    ['Time (ISO)', function (e) { return e.ts; }],
+                    ['Type', function (e) { return e.type; }],
+                    ['Source', function (e) { return self._historySourceLabel(e); }],
+                    ['Settings changed', function (e) { return e.type === 'SETTINGS' ? self._settingsChangeText(e) : undefined; }],
+                    ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
+                    ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
+                    ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
+                    ['Previous CYA (ppm)', function (e) { return e.type === 'CYA' ? e.previous : undefined; }],
+                    ['Water temp', function (e) { return e.type === 'TEMP' ? e.value : undefined; }],
+                    ['Water temp unit', function (e) { return e.type === 'TEMP' ? e.unit : undefined; }],
+                    ['Liquid chlorine strength (%)', function (e) { return e.type === 'CL' ? e.percent : undefined; }],
+                    ['Liquid chlorine volume (mL)', function (e) { return e.type === 'CL' ? e.ml : undefined; }],
+                    ['Liquid chlorine adds (ppm FC)', function (e) { return e.type === 'CL' ? e.ppm : undefined; }],
+                    ['ppm/day', function (e) { return e.ppmPerDay; }],
+                    ['Run hours', function (e) { return e.hrs; }],
+                    ['Previous %', function (e) { return (e.record || {}).previousPct; }],
+                    ['Recommended %', function (e) { return (e.record || {}).recommendedPct; }],
+                    ['Target outcome', function (e) { return (e.record || {}).targetOutcome; }],
+                    ['Target date (ISO)', function (e) { return (e.record || {}).targetDate; }],
+                    ['Previous target date (ISO)', function (e) { return (e.record || {}).previousTargetDate; }],
+                    ['Target stray (ppm)', function (e) { return (e.record || {}).targetStrayPpm; }],
+                    ['New target date threshold (ppm)', function (e) { return (e.record || {}).targetThresholdPpm; }],
+                    ['Run window change', function (e) { var c = (e.record || {}).runWindowChange; return c ? c.from + ' -> ' + c.to : undefined; }],
+                    ['Maintenance %', function (e) { return out(e).maintenancePct; }],
+                    ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
+                    ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
+                    ['Avg window start (ISO)', function (e) { return out(e).avgWindowStart; }],
+                    ['Avg window end (ISO)', function (e) { return out(e).avgWindowEnd; }],
+                    ['Gallons', function (e) { return inp(e).gallons; }],
+                    ['SWG lbs/day', function (e) { return inp(e).swgLbsPerDay; }],
+                    ['Run start', function (e) { return inp(e).swgStartTime; }],
+                    ['Run stop', function (e) { return inp(e).swgStopTime; }],
+                    ['Window days', function (e) { return inp(e).windowDays; }],
+                    ['Target FC (ppm)', function (e) { return inp(e).targetFc; }],
+                    ['Target period (days on the clock)', function (e) { return inp(e).targetDays; }]
+                ];
+                var esc = function (v) {
+                    if (typeof v === 'undefined' || v === null) return '';
+                    var s = String(v);
+                    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+                };
+                var lines = [cols.map(function (c) { return esc(c[0]); }).join(',')];
+                ordered.forEach(function (e) { lines.push(cols.map(function (c) { return esc(c[1](e)); }).join(',')); });
+                text = lines.join('\r\n') + '\r\n';
+                type = 'text/csv';
+            }
+            var url = window.URL.createObjectURL(new Blob([text], { type: type }));
+            var link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            $(link).remove();
+            setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
+        }
+    };
 })(jQuery);
