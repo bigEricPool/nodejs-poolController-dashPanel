@@ -334,8 +334,6 @@
                 .attr('title', 'Re-fetches your PoolMath data and recalculates the SWG % needed to reach the SAME target FC by the SAME target date/time as your last apply -- does not change the target or restart the countdown. Use this to correct a glide already in progress with fresher data.')
                 .hide();
             self._btnRefine.on('click', function (e) { self._refineToTarget(); });
-            var btnHistory = $('<div></div>').appendTo(btnPnl).actionButton({ text: 'Display History', icon: '<i class="fas fa-history"></i>' });
-            btnHistory.on('click', function (e) { self._showHistory(); });
             var btnTuneHelp = $('<div></div>').appendTo(self._elTuningBtns).actionButton({ text: 'How to Tune', icon: '<i class="fas fa-circle-question"></i>' })
                 .attr('title', 'A short guide to tuning with the Projection Accuracy and What-If Sweep reports.');
             btnTuneHelp.on('click', function (e) { self._showTuningHelp(); });
@@ -1114,23 +1112,8 @@
             if (days === 0) parts.push(mins + 'm');
             return parts.join(' ');
         },
-        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
-        // given and valid, otherwise in this browser's time zone.
-        _fmtDateTime: function (iso, tz) {
-            var d = new Date(iso);
-            if (isNaN(d.getTime())) return '';
-            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-            if (tz) {
-                try {
-                    var parts = {};
-                    new Intl.DateTimeFormat('en-US', {
-                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
-                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
-                } catch (err) { /* unknown zone -- fall through to browser time */ }
-            }
-            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-        },
+        // 'YYYY-MM-DD HH:mm' (see $.pic.autoSwgHistory._fmtDateTime, shared with the history dialog).
+        _fmtDateTime: function (iso, tz) { return $.pic.autoSwgHistory._fmtDateTime(iso, tz); },
         // The start/end of the running-average window the server actually used, and
         // whether it had to be extended back to include enough FC readings.
         _describeAvgWindow: function (result) {
@@ -1142,58 +1125,6 @@
             var text = 'Averaging window: ' + self._fmtDateTime(result.avgWindowStart, tz) + ' to ' + self._fmtDateTime(result.avgWindowEnd, tz) + (tz ? ' ' + tz : '');
             if (details.avgWindowExtended) text += ' (extended back from ' + inputs.windowDays + ' days to include at least 3 FC readings)';
             return text;
-        },
-        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
-        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
-        _settingsChangeText: function (e) {
-            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', bandPeakCap: 'Keep the Afternoon Peak Under FC High', bandIntegral: 'Correct the Hold from the Last Readings', bandScaledBias: 'Scale the Old-Test Raise by the Last Reading', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', awayMaintMultiplier: 'Trip Maintenance Multiplier', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
-            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
-            return (e.changes || []).map(function (c) {
-                var name = labels[c.setting] || c.setting;
-                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
-            }).join('; ');
-        },
-        _historyTypeLabel: function (e) {
-            if (e.type === 'SETTINGS') return 'Settings change';
-            if (e.type === 'FC') return 'FC reading';
-            if (e.type === 'CYA') return 'CYA change';
-            if (e.type === 'CL') return 'Liquid chlorine';
-            return 'SWG %';
-        },
-        _historyValueLabel: function (e) {
-            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
-            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
-            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
-            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
-            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
-            return n(e.pct, 2) + '%';
-        },
-        // Human-readable source of a combined-history entry: PoolMath, or the local
-        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
-        _historySourceLabel: function (e) {
-            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
-            if (e.source === 'poolmath') return 'PoolMath';
-            if (e.source === 'local-manual') return 'Local - manual change';
-            var rec = e.record || {};
-            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
-            // What caused it (records written before this was kept have no trigger and keep the plain label).
-            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
-            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
-            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
-        },
-        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
-        // new one, or started one and moved it out to when consumption alone reaches the target.
-        _historyTargetLabel: function (e) {
-            var rec = e.record || {};
-            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
-            var d = this._fmtDateTime(rec.targetDate);
-            // How far FC was from the target against the threshold, when the check compared them.
-            var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
-            // A change of the run window since the previous apply.
-            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
-            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
-            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
-            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
         },
         // Pressing Tune: if it was run recently and too few FC readings have come in since to tell whether its change
         // helped, ask first (with a Cancel). If the tuning settings were changed by hand since the last Tune, tuning again
@@ -1567,236 +1498,6 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             var link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', 'autoSwgProjectionAccuracy-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.csv');
-            document.body.appendChild(link);
-            link.click();
-            $(link).remove();
-            setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
-        },
-        // Minutes after local midnight of an ISO time in `tz` (an IANA zone name) when given and valid, otherwise in this browser's time zone; NaN if unreadable.
-        _minutesOfDay: function (iso, tz) {
-            var d = new Date(iso);
-            if (isNaN(d.getTime())) return NaN;
-            if (tz) {
-                try {
-                    var parts = {};
-                    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
-                    return (parseInt(parts.hour, 10) % 24) * 60 + parseInt(parts.minute, 10);
-                } catch (err) { /* unknown zone -- fall through to browser time */ }
-            }
-            return d.getHours() * 60 + d.getMinutes();
-        },
-        // Notes on the SWG % rows of the history (newest first, as shown): an array parallel to `entries` with, for each SWG row,
-        // `unchanged` (an automatic check that repeated the % already in force) and `starts` (a change applied outside the SWG's run window
-        // only takes effect when the window opens: "06:40", or "06:40 tomorrow" when it was applied after the window closed).
-        _historySwgNotes: function (entries) {
-            var self = this;
-            var notes = entries.map(function () { return {}; });
-            var idx = [];
-            entries.forEach(function (e, i) { if (e.type === 'SWG') idx.push(i); });
-            var toMin = function (t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN; };
-            idx.forEach(function (i, k) {
-                var e = entries[i], rec = e.record || {};
-                // The % in force before this row: the local record says it, otherwise the next older SWG row.
-                var prev = typeof rec.previousPct === 'number' ? rec.previousPct : (k + 1 < idx.length ? entries[idx[k + 1]].pct : undefined);
-                if (typeof prev === 'number' && typeof e.pct === 'number' && prev === e.pct && e.source !== 'local-manual') notes[i].unchanged = true;
-                var inp = rec.inputs || {};
-                var a = toMin(inp.swgStartTime), b = toMin(inp.swgStopTime);
-                if (typeof e.pct === 'number' && e.pct > 0 && !isNaN(a) && !isNaN(b) && b > a) {
-                    var now = self._minutesOfDay(e.ts, inp.timezone);
-                    if (!isNaN(now) && (now < a || now >= b)) notes[i].starts = inp.swgStartTime + (now >= b ? ' tomorrow' : '');
-                }
-            });
-            return notes;
-        },
-        // Fills the "Ran" column: how long the cell was actually making chlorine while each SWG % was in force (until the next SWG % row, or now), from the
-        // hourly output log (the share of the hour's samples with an output above 0, weighted by how much of the hour falls in the interval). Rows from before
-        // the log began stay blank. `cells` is [{ entry, td }] for the SWG rows.
-        _fillRanHours: function (entries, cells) {
-            var swg = entries.filter(function (e) { return e.type === 'SWG'; });
-            var locals = swg.filter(function (e) { return e.record; });
-            if (!cells.length || !locals.length) return;
-            var oldest = new Date(locals[locals.length - 1].ts).getTime();
-            var days = Math.min(1461, Math.max(2, Math.ceil((Date.now() - oldest) / 86400000) + 2));
-            $.getApiService('/state/autoSwg/output?days=' + days, null, function (r) {
-                var hours = r && Array.isArray(r.hours) ? r.hours : [];
-                if (!hours.length) return;
-                var lines = hours.map(function (h) { return { t: new Date(h.t).getTime(), frac: h.n > 0 ? h.on / h.n : 0 }; }).filter(function (h) { return !isNaN(h.t); });
-                if (!lines.length) return;
-                var firstLog = lines.reduce(function (m, h) { return Math.min(m, h.t); }, Infinity);
-                // SWG rows oldest first, so a row ends where the next newer one begins.
-                var asc = swg.slice().sort(function (a, b) { return new Date(a.ts) - new Date(b.ts); });
-                var endOf = {};
-                asc.forEach(function (e, k) { endOf[e.ts + '|' + k] = k + 1 < asc.length ? new Date(asc[k + 1].ts).getTime() : Date.now(); });
-                cells.forEach(function (c) {
-                    var k = asc.indexOf(c.entry);
-                    if (k < 0) return;
-                    var from = new Date(c.entry.ts).getTime(), to = endOf[c.entry.ts + '|' + k];
-                    if (from < firstLog) return;
-                    var total = 0;
-                    lines.forEach(function (h) {
-                        var overlap = Math.min(to, h.t + 3600000) - Math.max(from, h.t);
-                        if (overlap > 0) total += (overlap / 3600000) * h.frac;
-                    });
-                    c.td.text((Math.round(total * 10) / 10) + ' h' + (k + 1 === asc.length ? ' so far' : ''));
-                });
-            });
-        },
-        // Shows the SWG % and FC history as a calculation sees it -- FC readings from
-        // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
-        // PoolMath SWG entry within an hour of a local one is left out) -- newest first,
-        // each labeled with its source, and offers it for download as CSV or JSON.
-        _showHistory: function () {
-            var self = this;
-            $.getApiService('/state/autoSwg/history/combined', null, 'Loading SWG % and FC history...', function (h) {
-                h = h || {};
-                var entries = Array.isArray(h.entries) ? h.entries.slice() : [];
-                entries.sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
-                var swgNotes = self._historySwgNotes(entries);
-                var buttons = [];
-                if (entries.length > 0) {
-                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'csv'); } });
-                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'json'); } });
-                }
-                buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
-                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgHistory', {
-                    width: '860px',
-                    height: 'auto',
-                    title: 'SWG % and FC History',
-                    buttons: buttons
-                });
-                var wrap = $('<div></div>').css({ maxHeight: '26rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
-                if (h.poolMathError) {
-                    $('<div></div>').css({ padding: '.25rem .25rem .5rem .25rem', color: '#b00' })
-                        .text('PoolMath could not be read (' + h.poolMathError + '), so only the local SWG % log is shown.')
-                        .appendTo(wrap);
-                }
-                if (entries.length === 0) {
-                    $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
-                        .text('Nothing to show yet. SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way, and FC readings come from PoolMath.')
-                        .appendTo(wrap);
-                    return;
-                }
-                var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
-                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
-                    + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
-                    + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
-                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
-                    + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
-                    + 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
-                    + 'The local SWG % log is kept for 48 months. '
-                    + 'Grey SWG % rows are automatic checks that repeated the % already in force. A change applied outside the SWG\'s run window only takes effect when the window opens, which the row says. '
-                    + '"Ran" is how long the cell was actually making chlorine while that % was in force (until the next SWG % row), from the chlorinator output log; it is blank for rows from before the log began.';
-                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
-                var hideLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem .25rem', cursor: 'pointer' }).appendTo(wrap);
-                var hideChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideLabel);
-                $('<span></span>').text('Hide automatic checks that repeated the previous %').appendTo(hideLabel);
-                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
-                var cols = [
-                    { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
-                    { text: 'Ran', align: 'right' }, { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
-                ];
-                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
-                cols.forEach(function (c) {
-                    var th = $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
-                    if (c.text === 'Ran') th.attr('title', 'How long the cell was actually making chlorine while this SWG % was in force (until the next SWG % row), from the chlorinator output log.');
-                });
-                hideChk.on('change', function () { $('tr.autoSwgUnchanged', tbl).toggle(!hideChk.is(':checked')); });
-                var body = $('<tbody></tbody>').appendTo(tbl);
-                var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
-                var ranCells = [];
-                entries.forEach(function (e, i) {
-                    var rec = e.record || {};
-                    var note = swgNotes[i] || {};
-                    var row = $('<tr></tr>').appendTo(body);
-                    if (note.unchanged) row.addClass('autoSwgUnchanged').css({ opacity: 0.55 });
-                    var valueText = self._historyValueLabel(e) + (note.unchanged ? ' (unchanged)' : '') + (note.starts ? ' (starts ' + note.starts + ')' : '');
-                    var tds = [];
-                    [
-                        [self._fmtDateTime(e.ts), 'left'],
-                        [self._historyTypeLabel(e), 'left'],
-                        [valueText, e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
-                        [self._historySourceLabel(e), 'left'],
-                        ['', 'right'],
-                        [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
-                        [blank(rec.previousPct), 'right'],
-                        [blank(rec.recommendedPct), 'right'],
-                        [self._historyTargetLabel(e), 'left']
-                    ].forEach(function (cell) {
-                        tds.push($('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row));
-                    });
-                    if (e.type === 'SWG') ranCells.push({ entry: e, td: tds[4] });
-                });
-                self._fillRanHours(entries, ranCells);
-            });
-        },
-        // Downloads `entries` (newest first, as displayed) as a file, oldest first. JSON
-        // keeps every field (including the full inputs and outputs behind local entries);
-        // CSV is one row per entry with the main values and a few key inputs/outputs
-        // flattened into columns.
-        _exportHistory: function (entries, format) {
-            var self = this;
-            var ordered = entries.slice().reverse();
-            var d = new Date();
-            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-            var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
-            var text, type;
-            if (format === 'json') {
-                // The share code and pool name are private (records saved before they were left out still hold them).
-                text = JSON.stringify(ordered, function (key, value) { return key === 'shareCode' || key === 'poolName' ? undefined : value; }, 2);
-                type = 'application/json';
-            }
-            else {
-                var out = function (e) { return (e.record || {}).outputs || {}; };
-                var inp = function (e) { return (e.record || {}).inputs || {}; };
-                var cols = [
-                    ['Time (ISO)', function (e) { return e.ts; }],
-                    ['Type', function (e) { return e.type; }],
-                    ['Source', function (e) { return self._historySourceLabel(e); }],
-                    ['Settings changed', function (e) { return e.type === 'SETTINGS' ? self._settingsChangeText(e) : undefined; }],
-                    ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
-                    ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
-                    ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
-                    ['Previous CYA (ppm)', function (e) { return e.type === 'CYA' ? e.previous : undefined; }],
-                    ['Liquid chlorine strength (%)', function (e) { return e.type === 'CL' ? e.percent : undefined; }],
-                    ['Liquid chlorine volume (mL)', function (e) { return e.type === 'CL' ? e.ml : undefined; }],
-                    ['Liquid chlorine adds (ppm FC)', function (e) { return e.type === 'CL' ? e.ppm : undefined; }],
-                    ['ppm/day', function (e) { return e.ppmPerDay; }],
-                    ['Run hours', function (e) { return e.hrs; }],
-                    ['Previous %', function (e) { return (e.record || {}).previousPct; }],
-                    ['Recommended %', function (e) { return (e.record || {}).recommendedPct; }],
-                    ['Target outcome', function (e) { return (e.record || {}).targetOutcome; }],
-                    ['Target date (ISO)', function (e) { return (e.record || {}).targetDate; }],
-                    ['Previous target date (ISO)', function (e) { return (e.record || {}).previousTargetDate; }],
-                    ['Target stray (ppm)', function (e) { return (e.record || {}).targetStrayPpm; }],
-                    ['New target date threshold (ppm)', function (e) { return (e.record || {}).targetThresholdPpm; }],
-                    ['Run window change', function (e) { var c = (e.record || {}).runWindowChange; return c ? c.from + ' -> ' + c.to : undefined; }],
-                    ['Maintenance %', function (e) { return out(e).maintenancePct; }],
-                    ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
-                    ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
-                    ['Avg window start (ISO)', function (e) { return out(e).avgWindowStart; }],
-                    ['Avg window end (ISO)', function (e) { return out(e).avgWindowEnd; }],
-                    ['Gallons', function (e) { return inp(e).gallons; }],
-                    ['SWG lbs/day', function (e) { return inp(e).swgLbsPerDay; }],
-                    ['Run start', function (e) { return inp(e).swgStartTime; }],
-                    ['Run stop', function (e) { return inp(e).swgStopTime; }],
-                    ['Window days', function (e) { return inp(e).windowDays; }],
-                    ['Target FC (ppm)', function (e) { return inp(e).targetFc; }],
-                    ['Target period (days on the clock)', function (e) { return inp(e).targetDays; }]
-                ];
-                var esc = function (v) {
-                    if (typeof v === 'undefined' || v === null) return '';
-                    var s = String(v);
-                    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-                };
-                var lines = [cols.map(function (c) { return esc(c[0]); }).join(',')];
-                ordered.forEach(function (e) { lines.push(cols.map(function (c) { return esc(c[1](e)); }).join(',')); });
-                text = lines.join('\r\n') + '\r\n';
-                type = 'text/csv';
-            }
-            var url = window.URL.createObjectURL(new Blob([text], { type: type }));
-            var link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', fileName);
             document.body.appendChild(link);
             link.click();
             $(link).remove();
@@ -2774,4 +2475,322 @@ note('Projected FC is what the algorithm said FC would be just before each readi
             else self._elBenchAcidNote.hide();
         }
     });
+    // The PoolMath history dialog ("SWG % and FC History") and its export. It opens from the PoolMath History settings
+    // (pnlPoolMathConfig in chemistry.js), so it works for any pool with a PoolMath share code, SWG Assist set up or not;
+    // the SWG Assist panel uses its date format. One copy: $.pic.autoSwgHistory.show().
+    $.pic.autoSwgHistory = {
+        show: function () { this._showHistory(); },
+        // 'YYYY-MM-DD HH:mm' for an ISO timestamp, in `tz` (an IANA zone name) when
+        // given and valid, otherwise in this browser's time zone.
+        _fmtDateTime: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', {
+                        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                    }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return parts.year + '-' + parts.month + '-' + parts.day + ' ' + parts.hour + ':' + parts.minute;
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        },
+        // What kind of row a combined-history entry is, and its main value as shown in the dialog.
+        // The settings a SETTINGS row changed, as readable text ("Target FC 9 -> 10; ...").
+        _settingsChangeText: function (e) {
+            var labels = { controlMode: 'FC Control', fcLow: 'FC Low', fcHigh: 'FC High', bandBiasPerDay: 'Raise for an Old Test', bandBoostPeriods: 'Boost Over (run periods)', bandPeakCap: 'Keep the Afternoon Peak Under FC High', bandIntegral: 'Correct the Hold from the Last Readings', bandScaledBias: 'Scale the Old-Test Raise by the Last Reading', enabled: 'Enabled', chlorinatorId: 'Chlorinator', gallons: 'Pool Volume', swgLbsPerDay: 'SWG Capacity', swgStartTime: 'SWG Run Start', swgStopTime: 'SWG Run Stop', scheduleId: 'SWG Schedule', timezone: 'Time Zone', targetFc: 'Target FC', awayTargetFc: 'Vacation Target FC', awayMaintMultiplier: 'Trip Maintenance Multiplier', targetPeriodsAbove: 'Run Periods (days) to Target (FC above target)', targetPeriodsBelow: 'Run Periods (days) to Target (FC below target)', targetDaysAbove: 'Days to Target (FC above target)', targetDaysBelow: 'Days to Target (FC below target)', newTargetDateThresholdPpm: 'New Target Date Threshold', autoStepEnabled: 'Step to maintenance %', autoApplyEnabled: 'Auto-Apply Recommendations', autoCheckEnabled: 'Automatic check', autoCheckHours: 'Check Every', autoCheckStartTime: 'Starting At', autoApplyWarnThresholdPct: 'Warning Threshold', windowDays: 'Averaging Window', daytimeLossSharePct: 'Daytime Share of FC Loss', creditChlorineAdditions: 'Credit liquid chlorine', fcAnomalyTolerancePpm: 'FC Anomaly Tolerance', projectionWeight: 'Projection Weighting', projectionTaperStartDays: 'Taper Weighting After', projectionTaperEndDays: 'Down to Zero At', overshootPpmPerDay: 'Aim Above Target as the Last Test Ages', burnTempAdjust: 'Water temperature adjustment', shareCode: 'PoolMath Share Code', poolName: 'Pool/Body Name' };
+            var fmt = function (v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : (v === undefined || v === null || v === '' ? '(none)' : String(v)); };
+            return (e.changes || []).map(function (c) {
+                var name = labels[c.setting] || c.setting;
+                return c.from === '(hidden)' ? name + ' changed' : name + ' ' + fmt(c.from) + ' \u2192 ' + fmt(c.to);
+            }).join('; ');
+        },
+        _historyTypeLabel: function (e) {
+            if (e.type === 'SETTINGS') return 'Settings change';
+            if (e.type === 'FC') return 'FC reading';
+            if (e.type === 'CYA') return 'CYA change';
+            if (e.type === 'CL') return 'Liquid chlorine';
+            if (e.type === 'TEMP') return 'Water temp';
+            return 'SWG %';
+        },
+        _historyValueLabel: function (e) {
+            var n = function (v, d) { return typeof v === 'number' ? String(Math.round(v * Math.pow(10, d)) / Math.pow(10, d)) : ''; };
+            if (e.type === 'SETTINGS') return this._settingsChangeText(e);
+            if (e.type === 'FC') return n(e.value, 2) + ' ppm';
+            if (e.type === 'CYA') return n(e.value, 1) + ' ppm' + (typeof e.previous === 'number' ? ' (was ' + n(e.previous, 1) + ')' : ' (first reading)');
+            if (e.type === 'CL') return n(e.ml / 29.5735295625, 1) + ' oz of ' + n(e.percent, 2) + '%' + (typeof e.ppm === 'number' ? ' (+' + n(e.ppm, 2) + ' ppm FC)' : '');
+            // In the units PoolMath logged it in ('°F' or '°C'; left off when not known).
+            if (e.type === 'TEMP') return n(e.value, 1) + (e.unit ? ' ' + e.unit : '');
+            return n(e.pct, 2) + '%';
+        },
+        // Human-readable source of a combined-history entry: PoolMath, or the local
+        // log (an applied recommendation, an applied-but-overridden one, or a manual change).
+        _historySourceLabel: function (e) {
+            if (e.type === 'SETTINGS') return e.via === 'tune' ? 'Local - settings change (Tune)' : 'Local - settings change';
+            if (e.source === 'poolmath') return 'PoolMath';
+            if (e.source === 'local-manual') return 'Local - manual change';
+            var rec = e.record || {};
+            if (typeof rec.recommendedPct === 'number' && rec.recommendedPct !== e.pct && rec.trigger !== 'step') return 'Local - applied (overridden)';
+            // What caused it (records written before this was kept have no trigger and keep the plain label).
+            var how = { 'automatic-check': 'automatic check', 'refresh-and-apply': 'Refresh and Apply', 'check-now': 'Check Now, auto-apply', 'refine': 'Refresh: Adjust %, auto-apply', 'reviewed': 'reviewed Apply' }[rec.trigger];
+            if (rec.trigger === 'step' || (rec.outputs && rec.outputs.autoStep)) return 'Local - automatic step to maintenance';
+            return how ? 'Local - applied (' + how + ')' : 'Local - applied recommendation';
+        },
+        // What an applied recommendation did with the target date: kept the original deadline (a refresh), started a
+        // new one, or started one and moved it out to when consumption alone reaches the target.
+        _historyTargetLabel: function (e) {
+            var rec = e.record || {};
+            if (e.type !== 'SWG' || !rec.targetOutcome || !rec.targetDate) return '';
+            var d = this._fmtDateTime(rec.targetDate);
+            // How far FC was from the target against the threshold, when the check compared them.
+            var why = typeof rec.targetStrayPpm === 'number' && typeof rec.targetThresholdPpm === 'number' ? ' [off by ' + rec.targetStrayPpm + ', threshold ' + rec.targetThresholdPpm + ']' : '';
+            // A change of the run window since the previous apply.
+            var win = rec.runWindowChange ? ' {run window ' + rec.runWindowChange.from + ' \u2192 ' + rec.runWindowChange.to + '}' : '';
+            if (rec.targetOutcome === 'kept') return 'Kept ' + d + why + win;
+            var was = rec.previousTargetDate ? ' (was ' + this._fmtDateTime(rec.previousTargetDate) + ')' : '';
+            return (rec.targetOutcome === 'new-extended' ? 'New, moved out ' : 'New ') + d + was + why + win;
+        },
+        // Minutes after local midnight of an ISO time in `tz` (an IANA zone name) when given and valid, otherwise in this browser's time zone; NaN if unreadable.
+        _minutesOfDay: function (iso, tz) {
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return NaN;
+            if (tz) {
+                try {
+                    var parts = {};
+                    new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', hour: '2-digit', minute: '2-digit' }).formatToParts(d).forEach(function (p) { parts[p.type] = p.value; });
+                    return (parseInt(parts.hour, 10) % 24) * 60 + parseInt(parts.minute, 10);
+                } catch (err) { /* unknown zone -- fall through to browser time */ }
+            }
+            return d.getHours() * 60 + d.getMinutes();
+        },
+        // Notes on the SWG % rows of the history (newest first, as shown): an array parallel to `entries` with, for each SWG row,
+        // `unchanged` (an automatic check that repeated the % already in force) and `starts` (a change applied outside the SWG's run window
+        // only takes effect when the window opens: "06:40", or "06:40 tomorrow" when it was applied after the window closed).
+        _historySwgNotes: function (entries) {
+            var self = this;
+            var notes = entries.map(function () { return {}; });
+            var idx = [];
+            entries.forEach(function (e, i) { if (e.type === 'SWG') idx.push(i); });
+            var toMin = function (t) { var m = /^(\d{1,2}):(\d{2})/.exec(t || ''); return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : NaN; };
+            idx.forEach(function (i, k) {
+                var e = entries[i], rec = e.record || {};
+                // The % in force before this row: the local record says it, otherwise the next older SWG row.
+                var prev = typeof rec.previousPct === 'number' ? rec.previousPct : (k + 1 < idx.length ? entries[idx[k + 1]].pct : undefined);
+                if (typeof prev === 'number' && typeof e.pct === 'number' && prev === e.pct && e.source !== 'local-manual') notes[i].unchanged = true;
+                var inp = rec.inputs || {};
+                var a = toMin(inp.swgStartTime), b = toMin(inp.swgStopTime);
+                if (typeof e.pct === 'number' && e.pct > 0 && !isNaN(a) && !isNaN(b) && b > a) {
+                    var now = self._minutesOfDay(e.ts, inp.timezone);
+                    if (!isNaN(now) && (now < a || now >= b)) notes[i].starts = inp.swgStartTime + (now >= b ? ' tomorrow' : '');
+                }
+            });
+            return notes;
+        },
+        // Fills the "Ran" column: how long the cell was actually making chlorine while each SWG % was in force (until the next SWG % row, or now), from the
+        // hourly output log (the share of the hour's samples with an output above 0, weighted by how much of the hour falls in the interval). Rows from before
+        // the log began stay blank. `cells` is [{ entry, td }] for the SWG rows.
+        _fillRanHours: function (entries, cells) {
+            var swg = entries.filter(function (e) { return e.type === 'SWG'; });
+            var locals = swg.filter(function (e) { return e.record; });
+            if (!cells.length || !locals.length) return;
+            var oldest = new Date(locals[locals.length - 1].ts).getTime();
+            var days = Math.min(1461, Math.max(2, Math.ceil((Date.now() - oldest) / 86400000) + 2));
+            $.getApiService('/state/autoSwg/output?days=' + days, null, function (r) {
+                var hours = r && Array.isArray(r.hours) ? r.hours : [];
+                if (!hours.length) return;
+                var lines = hours.map(function (h) { return { t: new Date(h.t).getTime(), frac: h.n > 0 ? h.on / h.n : 0 }; }).filter(function (h) { return !isNaN(h.t); });
+                if (!lines.length) return;
+                var firstLog = lines.reduce(function (m, h) { return Math.min(m, h.t); }, Infinity);
+                // SWG rows oldest first, so a row ends where the next newer one begins.
+                var asc = swg.slice().sort(function (a, b) { return new Date(a.ts) - new Date(b.ts); });
+                var endOf = {};
+                asc.forEach(function (e, k) { endOf[e.ts + '|' + k] = k + 1 < asc.length ? new Date(asc[k + 1].ts).getTime() : Date.now(); });
+                cells.forEach(function (c) {
+                    var k = asc.indexOf(c.entry);
+                    if (k < 0) return;
+                    var from = new Date(c.entry.ts).getTime(), to = endOf[c.entry.ts + '|' + k];
+                    if (from < firstLog) return;
+                    var total = 0;
+                    lines.forEach(function (h) {
+                        var overlap = Math.min(to, h.t + 3600000) - Math.max(from, h.t);
+                        if (overlap > 0) total += (overlap / 3600000) * h.frac;
+                    });
+                    c.td.text((Math.round(total * 10) / 10) + ' h' + (k + 1 === asc.length ? ' so far' : ''));
+                });
+            });
+        },
+        // Shows the SWG % and FC history as a calculation sees it -- FC readings from
+        // PoolMath, and SWG % entries from the local change log plus PoolMath's (a
+        // PoolMath SWG entry within an hour of a local one is left out) -- newest first,
+        // each labeled with its source, and offers it for download as CSV or JSON.
+        _showHistory: function () {
+            var self = this;
+            $.getApiService('/state/autoSwg/history/combined', null, 'Loading SWG % and FC history...', function (h) {
+                h = h || {};
+                var entries = Array.isArray(h.entries) ? h.entries.slice() : [];
+                entries.sort(function (a, b) { return new Date(b.ts) - new Date(a.ts); });
+                var swgNotes = self._historySwgNotes(entries);
+                var buttons = [];
+                if (entries.length > 0) {
+                    buttons.push({ text: 'Export CSV', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'csv'); } });
+                    buttons.push({ text: 'Export JSON', icon: '<i class="fas fa-download"></i>', click: function () { self._exportHistory(entries, 'json'); } });
+                }
+                buttons.push({ text: 'Close', icon: '<i class="far fa-window-close"></i>', click: function () { $.pic.modalDialog.closeDialog(this); } });
+                var dlg = $.pic.modalDialog.createDialog('dlgAutoSwgHistory', {
+                    width: '860px',
+                    height: 'auto',
+                    title: 'SWG % and FC History',
+                    buttons: buttons
+                });
+                var wrap = $('<div></div>').css({ maxHeight: '26rem', overflowY: 'auto', padding: '.25rem' }).appendTo(dlg);
+                if (h.poolMathError) {
+                    $('<div></div>').css({ padding: '.25rem .25rem .5rem .25rem', color: '#b00' })
+                        .text('PoolMath could not be read (' + h.poolMathError + '), so only the local SWG % log is shown.')
+                        .appendTo(wrap);
+                }
+                if (entries.length === 0) {
+                    $('<div></div>').css({ padding: '.5rem', fontStyle: 'italic' })
+                        .text('Nothing to show yet. FC readings, water temperatures and the other PoolMath rows come from the PoolMath share code in the PoolMath History settings; SWG % changes are logged locally when a recommendation is applied or the SWG % is changed some other way.')
+                        .appendTo(wrap);
+                    return;
+                }
+                var countOf = function (t) { return entries.filter(function (e) { return e.type === t; }).length; };
+                // Without SWG Assist (no local SWG % or settings rows) the notes about its local log are left out.
+                var hasLocal = h.localSwgEntriesUsed > 0 || countOf('SETTINGS') > 0;
+                var note = entries.length + ' entries (' + countOf('SWG') + ' SWG %, ' + countOf('FC') + ' FC, ' + countOf('TEMP') + ' water temperature, ' + countOf('CL') + ' liquid chlorine, ' + countOf('CYA') + ' CYA changes, ' + countOf('SETTINGS') + ' settings changes), newest first. Times are shown in this browser\'s time zone. '
+                    + 'SWG % entries follow the same rule as the calculation: a local entry is used in place of any PoolMath entry within an hour of it'
+                    + (h.poolMathSwgEntriesReplaced ? ' (' + h.poolMathSwgEntriesReplaced + ' PoolMath ' + (h.poolMathSwgEntriesReplaced === 1 ? 'entry was' : 'entries were') + ' left out for that reason)' : '')
+                    + '. FC readings and SWG % entries from PoolMath are the ones on its share page plus an archive of up to 48 months of earlier ones, pulled once per share code '
+                    + '(the page refreshes the archive for the period it covers). CYA rows show only readings where the value changed, and liquid chlorine rows show the ppm FC each addition adds to your pool volume. '
+                    + 'Water temperature rows are the temperature logged with a test, in the units it was logged in PoolMath. '
+                    + (hasLocal ? 'Changes to the SWG Assist settings (target, run periods to target, tuning ...) are logged locally too, so results can be lined up with the settings in force. '
+                        + 'The local SWG % log is kept for 48 months. ' : '')
+                    + 'Grey SWG % rows are automatic checks that repeated the % already in force. A change applied outside the SWG\'s run window only takes effect when the window opens, which the row says. '
+                    + '"Ran" is how long the cell was actually making chlorine while that % was in force (until the next SWG % row), from the chlorinator output log; it is blank for rows from before the log began.';
+                $('<div></div>').css({ fontSize: '.85em', color: '#666', padding: '0 0 .4rem .25rem' }).text(note).appendTo(wrap);
+                var hideLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem .25rem', cursor: 'pointer' }).appendTo(wrap);
+                var hideChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideLabel);
+                $('<span></span>').text('Hide automatic checks that repeated the previous %').appendTo(hideLabel);
+                var hideTempLabel = $('<label></label>').css({ fontSize: '.85em', display: 'inline-block', padding: '0 0 .4rem 1rem', cursor: 'pointer' }).appendTo(wrap);
+                var hideTempChk = $('<input type="checkbox" />').css({ marginRight: '.4rem', verticalAlign: 'middle' }).appendTo(hideTempLabel);
+                $('<span></span>').text('Hide water temperature rows').appendTo(hideTempLabel);
+                var tbl = $('<table></table>').css({ width: '100%', borderCollapse: 'collapse', fontSize: '.85em' }).appendTo(wrap);
+                var cols = [
+                    { text: 'Time', align: 'left' }, { text: 'Type', align: 'left' }, { text: 'Value', align: 'right' }, { text: 'Source', align: 'left' },
+                    { text: 'Ran', align: 'right' }, { text: 'ppm/day', align: 'right' }, { text: 'Previous %', align: 'right' }, { text: 'Recommended %', align: 'right' }, { text: 'Target date', align: 'left' }
+                ];
+                var head = $('<tr></tr>').appendTo($('<thead></thead>').appendTo(tbl));
+                cols.forEach(function (c) {
+                    var th = $('<th></th>').text(c.text).css({ textAlign: c.align, padding: '.2rem .5rem', borderBottom: '1px solid #999', whiteSpace: 'nowrap' }).appendTo(head);
+                    if (c.text === 'Ran') th.attr('title', 'How long the cell was actually making chlorine while this SWG % was in force (until the next SWG % row), from the chlorinator output log.');
+                });
+                hideChk.on('change', function () { $('tr.autoSwgUnchanged', tbl).toggle(!hideChk.is(':checked')); });
+                hideTempChk.on('change', function () { $('tr.autoSwgTemp', tbl).toggle(!hideTempChk.is(':checked')); });
+                var body = $('<tbody></tbody>').appendTo(tbl);
+                var blank = function (v) { return typeof v === 'undefined' || v === null ? '' : v; };
+                var ranCells = [];
+                entries.forEach(function (e, i) {
+                    var rec = e.record || {};
+                    var note = swgNotes[i] || {};
+                    var row = $('<tr></tr>').appendTo(body);
+                    if (note.unchanged) row.addClass('autoSwgUnchanged').css({ opacity: 0.55 });
+                    if (e.type === 'TEMP') row.addClass('autoSwgTemp');
+                    var valueText = self._historyValueLabel(e) + (note.unchanged ? ' (unchanged)' : '') + (note.starts ? ' (starts ' + note.starts + ')' : '');
+                    var tds = [];
+                    [
+                        [self._fmtDateTime(e.ts), 'left'],
+                        [self._historyTypeLabel(e), 'left'],
+                        [valueText, e.type === 'SETTINGS' ? 'left' : 'right', e.type === 'SETTINGS'],
+                        [self._historySourceLabel(e), 'left'],
+                        ['', 'right'],
+                        [e.type === 'SWG' ? blank(e.ppmPerDay) : '', 'right'],
+                        [blank(rec.previousPct), 'right'],
+                        [blank(rec.recommendedPct), 'right'],
+                        [self._historyTargetLabel(e), 'left']
+                    ].forEach(function (cell) {
+                        tds.push($('<td></td>').text(cell[0]).css({ textAlign: cell[1], padding: '.2rem .5rem', borderBottom: '1px solid #ddd', whiteSpace: cell[2] ? 'normal' : 'nowrap', maxWidth: cell[2] ? '26rem' : '' }).appendTo(row));
+                    });
+                    if (e.type === 'SWG') ranCells.push({ entry: e, td: tds[4] });
+                });
+                self._fillRanHours(entries, ranCells);
+            });
+        },
+        // Downloads `entries` (newest first, as displayed) as a file, oldest first. JSON
+        // keeps every field (including the full inputs and outputs behind local entries);
+        // CSV is one row per entry with the main values and a few key inputs/outputs
+        // flattened into columns.
+        _exportHistory: function (entries, format) {
+            var self = this;
+            var ordered = entries.slice().reverse();
+            var d = new Date();
+            var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+            var fileName = 'autoSwgHistory-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '.' + format;
+            var text, type;
+            if (format === 'json') {
+                // The share code and pool name are private (records saved before they were left out still hold them).
+                text = JSON.stringify(ordered, function (key, value) { return key === 'shareCode' || key === 'poolName' ? undefined : value; }, 2);
+                type = 'application/json';
+            }
+            else {
+                var out = function (e) { return (e.record || {}).outputs || {}; };
+                var inp = function (e) { return (e.record || {}).inputs || {}; };
+                var cols = [
+                    ['Time (ISO)', function (e) { return e.ts; }],
+                    ['Type', function (e) { return e.type; }],
+                    ['Source', function (e) { return self._historySourceLabel(e); }],
+                    ['Settings changed', function (e) { return e.type === 'SETTINGS' ? self._settingsChangeText(e) : undefined; }],
+                    ['SWG %', function (e) { return e.type === 'SWG' ? e.pct : undefined; }],
+                    ['FC (ppm)', function (e) { return e.type === 'FC' ? e.value : undefined; }],
+                    ['CYA (ppm)', function (e) { return e.type === 'CYA' ? e.value : undefined; }],
+                    ['Previous CYA (ppm)', function (e) { return e.type === 'CYA' ? e.previous : undefined; }],
+                    ['Water temp', function (e) { return e.type === 'TEMP' ? e.value : undefined; }],
+                    ['Water temp unit', function (e) { return e.type === 'TEMP' ? e.unit : undefined; }],
+                    ['Liquid chlorine strength (%)', function (e) { return e.type === 'CL' ? e.percent : undefined; }],
+                    ['Liquid chlorine volume (mL)', function (e) { return e.type === 'CL' ? e.ml : undefined; }],
+                    ['Liquid chlorine adds (ppm FC)', function (e) { return e.type === 'CL' ? e.ppm : undefined; }],
+                    ['ppm/day', function (e) { return e.ppmPerDay; }],
+                    ['Run hours', function (e) { return e.hrs; }],
+                    ['Previous %', function (e) { return (e.record || {}).previousPct; }],
+                    ['Recommended %', function (e) { return (e.record || {}).recommendedPct; }],
+                    ['Target outcome', function (e) { return (e.record || {}).targetOutcome; }],
+                    ['Target date (ISO)', function (e) { return (e.record || {}).targetDate; }],
+                    ['Previous target date (ISO)', function (e) { return (e.record || {}).previousTargetDate; }],
+                    ['Target stray (ppm)', function (e) { return (e.record || {}).targetStrayPpm; }],
+                    ['New target date threshold (ppm)', function (e) { return (e.record || {}).targetThresholdPpm; }],
+                    ['Run window change', function (e) { var c = (e.record || {}).runWindowChange; return c ? c.from + ' -> ' + c.to : undefined; }],
+                    ['Maintenance %', function (e) { return out(e).maintenancePct; }],
+                    ['Avg FC consumption (ppm/day)', function (e) { return out(e).avgConsumptionPpmPerDay; }],
+                    ['Projected FC (ppm)', function (e) { return out(e).projectedCurrentFc; }],
+                    ['Avg window start (ISO)', function (e) { return out(e).avgWindowStart; }],
+                    ['Avg window end (ISO)', function (e) { return out(e).avgWindowEnd; }],
+                    ['Gallons', function (e) { return inp(e).gallons; }],
+                    ['SWG lbs/day', function (e) { return inp(e).swgLbsPerDay; }],
+                    ['Run start', function (e) { return inp(e).swgStartTime; }],
+                    ['Run stop', function (e) { return inp(e).swgStopTime; }],
+                    ['Window days', function (e) { return inp(e).windowDays; }],
+                    ['Target FC (ppm)', function (e) { return inp(e).targetFc; }],
+                    ['Target period (days on the clock)', function (e) { return inp(e).targetDays; }]
+                ];
+                var esc = function (v) {
+                    if (typeof v === 'undefined' || v === null) return '';
+                    var s = String(v);
+                    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+                };
+                var lines = [cols.map(function (c) { return esc(c[0]); }).join(',')];
+                ordered.forEach(function (e) { lines.push(cols.map(function (c) { return esc(c[1](e)); }).join(',')); });
+                text = lines.join('\r\n') + '\r\n';
+                type = 'text/csv';
+            }
+            var url = window.URL.createObjectURL(new Blob([text], { type: type }));
+            var link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            $(link).remove();
+            setTimeout(function () { window.URL.revokeObjectURL(url); }, 1000);
+        }
+    };
 })(jQuery);
